@@ -19,7 +19,7 @@ typedef enum {
 
 typedef struct {
     TokenType type;
-    char value[256];
+    char* value;
 } Token;
 
 // Прототипы
@@ -27,6 +27,7 @@ void code(const char* fmt, ...);
 void next_token();
 void expect(TokenType t);
 void execute_block(int compile_mode);
+void execute_if(int compile_mode);
 void execute_statement(int compile_mode);
 void process(const char* filename, int compile_mode, int debug_mode);
 
@@ -85,6 +86,7 @@ void set_var(const char* name, const char* value) {
 
 void print_var(const char* name) {
     Value* v = find_var(name);
+    //fprintf(stderr, "DEBUG: print_var(%s) = %s\n", name, v && v->str_val ? v->str_val : "(undefined)");
     printf("%s\n", v && v->str_val ? v->str_val : "(undefined)");
 }
 
@@ -96,11 +98,22 @@ void free_vars() {
     free(variables);
 }
 
+const char* get_var(const char* name) {
+    Value* v = find_var(name);
+    return v && v->str_val ? v->str_val : "";
+}
+
 // === Лексер ===
 char *source, *pos;
-Token current;
+Token current = {0, NULL}; // Инициализация current.value = NULL
 
 void next_token() {
+    // Освобождаем предыдущее значение
+    if (current.value) {
+        free(current.value);
+        current.value = NULL;
+    }
+    
     while (isspace(*pos)) pos++;
     if (*pos == '\0') { current.type = TOK_EOF; return; }
 
@@ -112,12 +125,17 @@ void next_token() {
 
     if (*pos == '"') {
         pos++;
-        int i = 0;
+        int start = pos - source;
+        int len = 0;
         while (*pos && *pos != '"') {
-            current.value[i++] = *pos++;
+            pos++;
+            len++;
         }
         if (*pos == '"') pos++;
-        current.value[i] = '\0';
+        
+        current.value = malloc(len + 1);
+        strncpy(current.value, source + start, len);
+        current.value[len] = '\0';
         current.type = TOK_STRING;
         return;
     }
@@ -126,8 +144,14 @@ void next_token() {
     if (strncmp(pos, "give", 4) == 0 && !isalnum(pos[4])) { current.type = TOK_GIVE; pos += 4; return; }
     if (strncmp(pos, "function", 8) == 0 && !isalnum(pos[8])) { current.type = TOK_FUNCTION; pos += 8; return; }
     if (strncmp(pos, "Class", 5) == 0 && !isalnum(pos[5])) { current.type = TOK_CLASS; pos += 5; return; }
+    if (strncmp(pos, "if", 2) == 0 && !isalnum(pos[2])) {
+        current.type = TOK_IF; pos += 2; return;
+    }
+    if (strncmp(pos, "else", 4) == 0 && !isalnum(pos[4])) {
+        current.type = TOK_ELSE; pos += 4; return;
+    }
     if (strncmp(pos, "import", 6) == 0 && !isalnum(pos[6])) { current.type = TOK_IMPORT; pos += 6; return; }
-    if (strncmp(pos, "exit::();", 9) == 0) { current.type = TOK_EXIT; pos += 9; return; }
+    if (strncmp(pos, "exit::();", 9) == 0 && !isalnum(pos[9])) { current.type = TOK_EXIT; pos += 9; return; }
 
     if (*pos == '{') { current.type = TOK_LBRACE; pos++; return; }
     if (*pos == '}') { current.type = TOK_RBRACE; pos++; return; }
@@ -137,10 +161,20 @@ void next_token() {
     if (*pos == '=') { pos++; current.type = (*pos == '=') ? (pos++, TOK_EQEQ) : TOK_EQUAL; return; }
     if (strncmp(pos, "::", 2) == 0) { current.type = TOK_COLONCOLON; pos += 2; return; }
 
-    int i = 0;
-    while (isalnum(*pos) || *pos == '_') current.value[i++] = *pos++;
-    current.value[i] = '\0';
-    if (i > 0) { current.type = TOK_ID; return; }
+    int start = pos - source;
+    int len = 0;
+    while (isalnum(*pos) || *pos == '_') {
+        pos++;
+        len++;
+    }
+    
+    if (len > 0) {
+        current.value = malloc(len + 1);
+        strncpy(current.value, source + start, len);
+        current.value[len] = '\0';
+        current.type = TOK_ID;
+        return;
+    }
 
     pos++;
 }
@@ -148,6 +182,7 @@ void next_token() {
 void expect(TokenType t) {
     if (current.type != t) {
         fprintf(stderr, "Ошибка: ожидался токен %d, получен %d ('%s')\n", t, current.type, current.value);
+        fprintf(stderr, "Отладка: позиция в коде: '%.50s'\n", pos);
         exit(1);
     }
     next_token();
@@ -172,18 +207,23 @@ char* escape_c_string(const char* input) {
 
 // === Парсер ===
 void execute_print(int compile_mode) {
+    //fprintf(stderr, "DEBUG: execute_print start\n");
     expect(TOK_PRINT);
     expect(TOK_LPAREN);
     if (current.type == TOK_STRING) {
+        //fprintf(stderr, "DEBUG: print string '%s'\n", current.value);
         if (compile_mode) code("printf(\"%s\\n\");", escape_c_string(current.value));
         else printf("%s\n", current.value);
         next_token();
     } else if (current.type == TOK_ID) {
-        if (compile_mode) code("printf(\"%%s\\n\", %s);", current.value);
+        //fprintf(stderr, "DEBUG: print variable '%s'\n", current.value);
+        if (compile_mode) code("printf(\"%%s\\n\", get_var(\"%s\"));", current.value);
         else print_var(current.value);
         next_token();
     }
+    //fprintf(stderr, "DEBUG: before RPAREN, current.type=%d, value='%s'\n", current.type, current.value);
     expect(TOK_RPAREN);
+    //fprintf(stderr, "DEBUG: execute_print end, current.type=%d, value='%s'\n", current.type, current.value);
 }
 
 void execute_file_call(const char* func_name, const char* assign_var, int compile_mode) {
@@ -217,7 +257,7 @@ void execute_file_call(const char* func_name, const char* assign_var, int compil
 
     // Отладочный вывод для проверки аргументов
     if (compile_mode) {
-        printf("// DEBUG: func=%s, arg1='%s', arg2='%s'\n", func_name, arg1, arg2);
+        //printf("// DEBUG: func=%s, arg1='%s', arg2='%s'\n", func_name, arg1, arg2);
     }
 
     if (strcmp(func_name, "file_open") == 0) {
@@ -292,8 +332,11 @@ void execute_file_call(const char* func_name, const char* assign_var, int compil
 }
 
 void execute_statement(int compile_mode) {
+    //fprintf(stderr, "DEBUG: execute_statement, current.type=%d, value='%s'\n", current.type, current.value);
     if (current.type == TOK_PRINT) {
         execute_print(compile_mode);
+    } else if (current.type == TOK_IF) {
+        execute_if(compile_mode);
     } else if (current.type == TOK_ID) {
         char name[256];
         strcpy(name, current.value);
@@ -306,6 +349,14 @@ void execute_statement(int compile_mode) {
                 strcpy(func_name, current.value);
                 next_token();
                 execute_file_call(func_name, name, compile_mode);
+            } else if (current.type == TOK_STRING) {
+                // Присваивание строкового литерала
+                if (compile_mode) {
+                    code("set_var(\"%s\", \"%s\");", name, escape_c_string(current.value));
+                } else {
+                    set_var(name, current.value);
+                }
+                next_token();
             }
         } else if (current.type == TOK_LPAREN) {
             execute_file_call(name, NULL, compile_mode);
@@ -343,6 +394,119 @@ void execute_statement(int compile_mode) {
     }
 }
 
+void execute_if(int compile_mode) {
+    expect(TOK_IF);
+    expect(TOK_LPAREN);
+    
+    // Получаем левую часть сравнения
+    char left_var[256] = "";
+    if (current.type == TOK_ID) {
+        strcpy(left_var, current.value);
+        next_token();
+    } else {
+        fprintf(stderr, "Ошибка в if: ожидался идентификатор, получен токен %d ('%s')\n", current.type, current.value);
+        exit(1);
+    }
+    
+    // Получаем оператор сравнения
+    if (current.type == TOK_EQEQ) {
+        next_token(); // ==
+        
+        // Получаем правую часть сравнения
+        char right_value[256] = "";
+        if (current.type == TOK_STRING) {
+            strcpy(right_value, current.value);
+            next_token();
+        } else if (current.type == TOK_ID) {
+            strcpy(right_value, current.value);
+            next_token();
+        } else {
+            fprintf(stderr, "Ошибка в if: ожидалась строка или идентификатор, получен токен %d ('%s')\n", current.type, current.value);
+            exit(1);
+        }
+        
+        // Проверяем, что текущий токен - это )
+        if (current.type != TOK_RPAREN) {
+            //fprintf(stderr, "Ошибка: ожидался ')' после условия if, получен токен %d ('%s')\n", current.type, current.value ? current.value : "(null)");
+            exit(1);
+        }
+        next_token(); // пропускаем )
+        //fprintf(stderr, "DEBUG: after RPAREN, current.type=%d, value='%s'\n", current.type, current.value ? current.value : "(null)");
+        
+        if (compile_mode) {
+            code("if (strcmp(get_var(\"%s\"), \"%s\") == 0) {", left_var, escape_c_string(right_value));
+            indent_level++;
+            
+            // Проверяем, что текущий токен - это {
+            if (current.type != TOK_LBRACE) {
+                fprintf(stderr, "Ошибка: ожидался '{' после if условия, получен токен %d ('%s')\n", current.type, current.value ? current.value : "(null)");
+                exit(1);
+            }
+            
+            execute_block(compile_mode);
+            expect(TOK_RBRACE);
+            
+            indent_level--;
+            code("}");
+            
+            // Обработка else
+            if (current.type == TOK_ELSE) {
+                next_token(); // else
+                code("else {");
+                indent_level++;
+                expect(TOK_LBRACE);
+                execute_block(compile_mode);
+                expect(TOK_RBRACE);
+                indent_level--;
+                code("}");
+            }
+        } else {
+            Value* left = find_var(left_var);
+            const char* left_val = left && left->str_val ? left->str_val : "";
+            if (strcmp(left_val, right_value) == 0) {
+                // Условие истинно, выполняем блок if
+                //fprintf(stderr, "DEBUG: if condition true, current token should be {: %d ('%s')\n", current.type, current.value ? current.value : "(null)");
+                if (current.type != TOK_LBRACE) {
+                    fprintf(stderr, "Ошибка: ожидался '{' после if условия\n");
+                    exit(1);
+                }
+                execute_block(compile_mode);
+                expect(TOK_RBRACE);
+                
+                // Пропускаем else если есть
+                if (current.type == TOK_ELSE) {
+                    next_token(); // else
+                    expect(TOK_LBRACE);
+                    // Пропускаем блок else
+                    while (current.type != TOK_RBRACE && current.type != TOK_EOF) {
+                        next_token();
+                    }
+                    expect(TOK_RBRACE);
+                }
+            } else {
+                // Условие ложно, пропускаем блок if
+                //fprintf(stderr, "DEBUG: if condition false, skipping if block, current token: %d ('%s')\n", current.type, current.value ? current.value : "(null)");
+                if (current.type != TOK_LBRACE) {
+                    fprintf(stderr, "Ошибка: ожидался '{' после if условия\n");
+                    exit(1);
+                }
+                while (current.type != TOK_RBRACE && current.type != TOK_EOF) {
+                    next_token();
+                }
+                expect(TOK_RBRACE);
+                
+                // Проверяем есть ли else
+                if (current.type == TOK_ELSE) {
+                    next_token(); // else
+                    expect(TOK_LBRACE);
+                    execute_block(compile_mode);
+                    expect(TOK_RBRACE);
+                }
+            }
+        }
+    }
+}
+
 void execute_block(int compile_mode) {
     while (current.type != TOK_RBRACE && current.type != TOK_EOF) {
         execute_statement(compile_mode);
@@ -367,6 +531,7 @@ void process(const char* filename, int compile_mode, int debug_mode) {
         generated_c[0] = '\0';
         code("#include <stdio.h>");
         code("#include <stdlib.h>");
+        code("#include <string.h>");
         code("#include <unistd.h>");
         if (debug_mode) {
             code("#define DEBUG_MODE 1");
@@ -375,6 +540,39 @@ void process(const char* filename, int compile_mode, int debug_mode) {
             code("#define DEBUG_MODE 0");
             code("#define DEBUG_PRINT(fmt, ...) do {} while(0)");
         }
+        code("");
+        
+        // Добавляем реализацию переменных
+        code("// Хранилище переменных");
+        code("typedef struct { char name[256]; char value[1024]; } Var;");
+        code("static Var vars[100];");
+        code("static int var_count = 0;");
+        code("");
+        code("void set_var(const char* name, const char* value) {");
+        code("    for (int i = 0; i < var_count; i++) {");
+        code("        if (strcmp(vars[i].name, name) == 0) {");
+        code("            strncpy(vars[i].value, value, sizeof(vars[i].value) - 1);");
+        code("            vars[i].value[sizeof(vars[i].value) - 1] = '\\0';");
+        code("            return;");
+        code("        }");
+        code("    }");
+        code("    if (var_count < 100) {");
+        code("        strncpy(vars[var_count].name, name, sizeof(vars[var_count].name) - 1);");
+        code("        vars[var_count].name[sizeof(vars[var_count].name) - 1] = '\\0';");
+        code("        strncpy(vars[var_count].value, value, sizeof(vars[var_count].value) - 1);");
+        code("        vars[var_count].value[sizeof(vars[var_count].value) - 1] = '\\0';");
+        code("        var_count++;");
+        code("    }");
+        code("}");
+        code("");
+        code("const char* get_var(const char* name) {");
+        code("    for (int i = 0; i < var_count; i++) {");
+        code("        if (strcmp(vars[i].name, name) == 0) {");
+        code("            return vars[i].value;");
+        code("        }");
+        code("    }");
+        code("    return \"\";");
+        code("}");
         code("");
     }
 
@@ -414,6 +612,7 @@ void process(const char* filename, int compile_mode, int debug_mode) {
 
     free(source);
     if (!compile_mode) free_vars();
+    if (current.value) free(current.value); // Очистка последнего токена
 }
 
 int main(int argc, char** argv) {

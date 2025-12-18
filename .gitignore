@@ -16,3 +16,7 @@ test_class_simple.pgt
 test_with_import.pgt
 test.pgt
 test2.pgt
+*build/
+main.pgt
+simple_test.pgt
+typed_example.pgt
