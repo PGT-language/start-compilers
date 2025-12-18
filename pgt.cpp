@@ -23,15 +23,19 @@ struct Value {
     Value(std::string v) : type(ValueType::STRING), str_val(std::move(v)) {}
 
     std::string to_string(const std::string& format = "") const {
-        if (!format.empty()) {
-            if (format == "{int}" && type == ValueType::INT) return std::to_string(int_val);
-            if (format == "{string}" && type == ValueType::STRING) return str_val;
-        }
-        switch (type) {
-            case ValueType::INT: return std::to_string(int_val);
-            case ValueType::FLOAT: return std::to_string(float_val);
-            case ValueType::STRING: return str_val;
-            default: return "[none]";
+    // Если формат указан — применяем его, если подходит
+    if (!format.empty()) {
+        if (format == "{int}" && type == ValueType::INT) return std::to_string(int_val);
+        if (format == "{float}" && type == ValueType::FLOAT) return std::to_string(float_val);
+        if (format == "{string}" && type == ValueType::STRING) return str_val;
+        // Если формат не подошёл — просто возвращаем значение без формата
+    }
+    // Без формата или если формат не подошёл — просто значение
+    switch (type) {
+        case ValueType::INT: return std::to_string(int_val);
+        case ValueType::FLOAT: return std::to_string(float_val);
+        case ValueType::STRING: return str_val;
+        default: return "";
         }
     }
 };
@@ -180,38 +184,56 @@ public:
     }
 
 private:
-    std::shared_ptr<FunctionDef> parse_function() {
-        advance(); // function
-        advance(); // (
-        std::string name = current().value; advance(); // имя
-        advance(); // )
+std::shared_ptr<FunctionDef> parse_function() {
+    advance(); // function
+    advance(); // первая (
 
-        auto func = std::make_shared<FunctionDef>();
-        func->name = name;
+    // Имя функции
+    std::string name = current().value;
+    advance(); // add или main
 
-        // Параметры ВСЕГДА в скобках после )
-        advance(); // (
-        while (!is_eof() && current().type != T_RPAREN) {
+    auto func = std::make_shared<FunctionDef>();
+    func->name = name;
+
+    // Если есть вторая ( — значит есть параметры
+    if (current().type == T_LPAREN) {
+        advance(); // вторая (
+
+        while (!is_eof() && current().type == T_IDENTIFIER) {
             std::string param_name = current().value;
-            advance(); // имя параметра
+            advance(); // имя параметра (a)
             advance(); // +
-            advance(); // тип
+            advance(); // тип (int)
+
             func->param_names.push_back(param_name);
-            if (current().type == T_COMMA) advance();
-        }
-        advance(); // )
 
-        advance(); // {
-
-        while (!is_eof() && current().type != T_RBRACE) {
-            auto stmt = parse_statement();
-            if (stmt) func->body.push_back(stmt);
-            else advance();
+            if (current().type == T_COMMA) {
+                advance(); // ,
+            }
         }
 
-        advance(); // }
-        return func;
+        advance(); // вторая )
     }
+
+    advance(); // первая )
+
+    advance(); // {
+
+    while (!is_eof() && current().type != T_RBRACE) {
+        auto stmt = parse_statement();
+        if (stmt) func->body.push_back(stmt);
+        else advance();
+    }
+
+    advance(); // }
+
+    if (DEBUG) {
+        std::cout << "[DEBUG] Defined function: " << func->name 
+                  << " with " << func->param_names.size() << " params" << std::endl;
+    }
+
+    return func;
+}
 
     std::shared_ptr<AstNode> parse_statement() {
         if (current().type == T_IDENTIFIER && pos + 1 < tokens.size() && tokens[pos + 1].type == T_PLUS) {
@@ -357,41 +379,53 @@ public:
 private:
     void execute_function(const std::string& name, const std::vector<Value>& call_args) {
         auto func = functions[name];
-        if (!func) return;
+        if (!func) {
+            std::cerr << "Error: Function not found: " << name << std::endl;
+            return;
+        }
 
         auto saved_globals = globals;
 
-        // Устанавливаем параметры
+        // Устанавливаем параметры как локальные переменные
         for (size_t i = 0; i < func->param_names.size() && i < call_args.size(); ++i) {
             globals[func->param_names[i]] = call_args[i];
-            if (DEBUG) std::cout << "[DEBUG] Param " << func->param_names[i] << " = " << call_args[i].to_string() << std::endl;
+            if (DEBUG) {
+                std::cout << "[DEBUG] Param " << func->param_names[i] << " = " << call_args[i].to_string() << std::endl;
+            }
         }
 
+        // Выполняем тело функции
         for (const auto& stmt : func->body) {
             if (auto decl = std::dynamic_pointer_cast<VarDecl>(stmt)) {
                 Value val = eval(decl->expr);
                 globals[decl->name] = val;
-                if (DEBUG) std::cout << "[DEBUG] Set var " << decl->name << " = " << val.to_string() << std::endl;
+                if (DEBUG) {
+                    std::cout << "[DEBUG] Set var " << decl->name << " = " << val.to_string() << std::endl;
+                }
             } else if (auto print = std::dynamic_pointer_cast<PrintStmt>(stmt)) {
-                for (size_t i = 0; i < print->args.size(); ++i) {
-                    Value v = eval(print->args[i]);
-                    std::string fmt = i < print->formats.size() ? print->formats[i] : "";
+                size_t fmt_idx = 0;
+                for (const auto& arg : print->args) {
+                    Value v = eval(arg);
+                    std::string fmt = (fmt_idx < print->formats.size()) ? print->formats[fmt_idx] : "";
+                    fmt_idx++;
                     std::cout << v.to_string(fmt);
                 }
-                if (print->newline) std::cout << std::endl;
+                std::cout << std::endl;  // чистый переход на новую строку
             } else if (auto call = std::dynamic_pointer_cast<ConectCall>(stmt)) {
                 std::vector<Value> args;
                 for (const auto& arg_expr : call->args) {
                     args.push_back(eval(arg_expr));
                 }
-                if (DEBUG) std::cout << "[DEBUG] Calling " << call->func_name << " with " << args.size() << " args" << std::endl;
+                if (DEBUG) {
+                    std::cout << "[DEBUG] Calling " << call->func_name << " with " << args.size() << " args" << std::endl;
+                }
                 execute_function(call->func_name, args);
             }
         }
 
+        // Восстанавливаем глобальные переменные (чтобы не засорять пространство имён)
         globals = saved_globals;
     }
-
     Value eval(const std::shared_ptr<AstNode>& node) {
         if (!node) return Value();
 
@@ -439,7 +473,7 @@ int main(int argc, char** argv) {
     do {
         t = lexer.next_token();
         tokens.push_back(t);
-    } while (t.type != T_EOF);
+    } while (t.type != T_EOF);з
 
     Parser parser;
     parser.load_tokens(tokens);
