@@ -5,27 +5,26 @@
 #include <map>
 #include <sstream>
 #include <cctype>
-#include <algorithm>
-#include <memory>  // <<<--- ЭТО БЫЛО ГЛАВНОЙ ПРОБЛЕМОЙ!
+#include <memory>
 
-// Типы значений
+bool DEBUG = false;
+
 enum class ValueType { INT, FLOAT, STRING, NONE };
 
 struct Value {
     ValueType type = ValueType::NONE;
-    int int_val = 0;
+    long long int_val = 0;
     double float_val = 0.0;
     std::string str_val;
 
     Value() = default;
-    Value(int v) : type(ValueType::INT), int_val(v) {}
+    Value(long long v) : type(ValueType::INT), int_val(v) {}
     Value(double v) : type(ValueType::FLOAT), float_val(v) {}
     Value(std::string v) : type(ValueType::STRING), str_val(std::move(v)) {}
 
     std::string to_string(const std::string& format = "") const {
         if (!format.empty()) {
             if (format == "{int}" && type == ValueType::INT) return std::to_string(int_val);
-            if (format == "{float}" && type == ValueType::FLOAT) return std::to_string(float_val);
             if (format == "{string}" && type == ValueType::STRING) return str_val;
         }
         switch (type) {
@@ -37,22 +36,21 @@ struct Value {
     }
 };
 
-// Токены
 enum TokenType {
-    T_PACKAGE, T_FUNCTION, T_IF, T_ELSE, T_INT, T_FLOAT, T_STRING,
-    T_PRINT, T_PRINTLN, T_RETURN, T_CONECT,
+    T_PACKAGE, T_FUNCTION, T_PRINT, T_PRINTLN, T_RETURN, T_CONECT,
+    T_INT, T_FLOAT, T_STRING,
     T_IDENTIFIER, T_STRING_LITERAL, T_NUMBER,
     T_LBRACE, T_RBRACE, T_LPAREN, T_RPAREN,
-    T_COMMA, T_PLUS, T_EQUAL, T_COLON, T_EOF
+    T_COMMA, T_PLUS, T_MINUS, T_STAR, T_SLASH, T_EQUAL,
+    T_EOF
 };
 
 struct Token {
-    TokenType type;
+    TokenType type = T_EOF;
     std::string value;
     int line = 0;
 };
 
-// Лексер
 class Lexer {
     std::string source;
     size_t pos = 0;
@@ -69,14 +67,17 @@ public:
             char c = peek();
             if (c == 0) return {T_EOF, "", line};
             if (std::isspace(c)) { get(); if (c == '\n') line++; continue; }
+
             if (c == '{') { get(); return {T_LBRACE, "{", line}; }
             if (c == '}') { get(); return {T_RBRACE, "}", line}; }
             if (c == '(') { get(); return {T_LPAREN, "(", line}; }
             if (c == ')') { get(); return {T_RPAREN, ")", line}; }
             if (c == ',') { get(); return {T_COMMA, ",", line}; }
             if (c == '+') { get(); return {T_PLUS, "+", line}; }
+            if (c == '-') { get(); return {T_MINUS, "-", line}; }
+            if (c == '*') { get(); return {T_STAR, "*", line}; }
+            if (c == '/') { get(); return {T_SLASH, "/", line}; }
             if (c == '=') { get(); return {T_EQUAL, "=", line}; }
-            if (c == ':') { get(); return {T_COLON, ":", line}; }
 
             if (c == '"') {
                 get();
@@ -86,9 +87,9 @@ public:
                 return {T_STRING_LITERAL, str, line};
             }
 
-            if (std::isdigit(c) || (c == '-' && std::isdigit(peek() + 1)) || (c == '.' && std::isdigit(peek() + 1))) {
+            if (std::isdigit(c) || (c == '-' && std::isdigit(peek() + 1))) {
                 std::string num;
-                if (c == '-' || c == '.') num += get();
+                if (c == '-') num += get();
                 while (std::isdigit(peek()) || peek() == '.') num += get();
                 return {T_NUMBER, num, line};
             }
@@ -99,89 +100,80 @@ public:
 
                 if (id == "package") return {T_PACKAGE, id, line};
                 if (id == "function") return {T_FUNCTION, id, line};
-                if (id == "if") return {T_IF, id, line};
-                if (id == "else") return {T_ELSE, id, line};
-                if (id == "int") return {T_INT, id, line};
-                if (id == "float") return {T_FLOAT, id, line};
-                if (id == "string") return {T_STRING, id, line};
                 if (id == "print") return {T_PRINT, id, line};
                 if (id == "println") return {T_PRINTLN, id, line};
                 if (id == "return") return {T_RETURN, id, line};
                 if (id == "conect") return {T_CONECT, id, line};
+                if (id == "int") return {T_INT, id, line};
+                if (id == "float") return {T_FLOAT, id, line};
+                if (id == "string") return {T_STRING, id, line};
 
                 return {T_IDENTIFIER, id, line};
             }
 
-            std::cerr << "Unknown character at line " << line << ": " << c << std::endl;
             get();
         }
     }
 };
 
-// Узлы AST
-struct AstNode {
-    virtual ~AstNode() = default;
-};
+// AST (как раньше, FunctionDef с param_names)
+struct AstNode { virtual ~AstNode() = default; };
 
 struct FunctionDef : AstNode {
     std::string name;
+    std::vector<std::string> param_names;
     std::vector<std::shared_ptr<AstNode>> body;
 };
 
 struct VarDecl : AstNode {
     std::string name;
-    TokenType type_token;
-    std::shared_ptr<AstNode> value;
+    std::shared_ptr<AstNode> expr;
 };
 
-struct Literal : AstNode {
-    Value value;
+struct BinaryOp : AstNode {
+    TokenType op;
+    std::shared_ptr<AstNode> left, right;
 };
 
-struct Identifier : AstNode {
-    std::string name;
-};
+struct Literal : AstNode { Value value; };
+struct Identifier : AstNode { std::string name; };
 
 struct PrintStmt : AstNode {
     std::vector<std::shared_ptr<AstNode>> args;
     std::vector<std::string> formats;
+    bool newline = true;
 };
 
 struct ConectCall : AstNode {
     std::string func_name;
+    std::vector<std::shared_ptr<AstNode>> args;
 };
 
-struct ReturnStmt : AstNode {
-    std::shared_ptr<AstNode> value;
-};
-
-// Парсер
+// Parser
 class Parser {
     std::vector<Token> tokens;
     size_t pos = 0;
 
+    bool is_eof() const { return pos >= tokens.size(); }
     const Token& current() const { return tokens[pos]; }
-    void eat(TokenType type) {
-        if (pos < tokens.size() && current().type == type) pos++;
-        else std::cerr << "Expected token " << type << " at line " << (pos < tokens.size() ? current().line : 0) << std::endl;
-    }
+    void advance() { if (!is_eof()) ++pos; }
 
 public:
-    void load_tokens(std::vector<Token> t) { tokens = std::move(t); }
+    void load_tokens(std::vector<Token> t) {
+        tokens = std::move(t);
+        if (tokens.empty() || tokens.back().type != T_EOF) tokens.push_back({T_EOF});
+    }
 
     std::vector<std::shared_ptr<AstNode>> parse_program() {
         std::vector<std::shared_ptr<AstNode>> nodes;
-
-        while (pos < tokens.size() && current().type != T_EOF) {
+        while (!is_eof()) {
             if (current().type == T_PACKAGE) {
-                eat(T_PACKAGE);
-                eat(T_IDENTIFIER);
+                advance(); advance();
             } else if (current().type == T_FUNCTION) {
-                nodes.push_back(parse_function());
-            } else if (current().type == T_RETURN) {
-                nodes.push_back(parse_return());
+                auto func = parse_function();
+                if (func) nodes.push_back(func);
             } else {
-                pos++;
+                advance();
             }
         }
         return nodes;
@@ -189,286 +181,272 @@ public:
 
 private:
     std::shared_ptr<FunctionDef> parse_function() {
-        eat(T_FUNCTION);
-        eat(T_LPAREN);
-        std::string name = current().value;
-        eat(T_IDENTIFIER);
-        eat(T_RPAREN);
-        eat(T_LBRACE);
+        advance(); // function
+        advance(); // (
+        std::string name = current().value; advance(); // имя
+        advance(); // )
 
         auto func = std::make_shared<FunctionDef>();
         func->name = name;
 
-        while (pos < tokens.size() && current().type != T_RBRACE) {
+        // Параметры ВСЕГДА в скобках после )
+        advance(); // (
+        while (!is_eof() && current().type != T_RPAREN) {
+            std::string param_name = current().value;
+            advance(); // имя параметра
+            advance(); // +
+            advance(); // тип
+            func->param_names.push_back(param_name);
+            if (current().type == T_COMMA) advance();
+        }
+        advance(); // )
+
+        advance(); // {
+
+        while (!is_eof() && current().type != T_RBRACE) {
             auto stmt = parse_statement();
             if (stmt) func->body.push_back(stmt);
+            else advance();
         }
-        eat(T_RBRACE);
+
+        advance(); // }
         return func;
     }
 
     std::shared_ptr<AstNode> parse_statement() {
-        if (current().type == T_IDENTIFIER && lookahead_is_var_decl()) {
+        if (current().type == T_IDENTIFIER && pos + 1 < tokens.size() && tokens[pos + 1].type == T_PLUS) {
             return parse_var_decl();
-        } else if (current().type == T_PRINT || current().type == T_PRINTLN) {
-            return parse_print();
-        } else if (current().type == T_CONECT) {
-            return parse_conect();
-        } else if (current().type == T_RETURN) {
-            return parse_return();
         }
+        if (current().type == T_PRINT || current().type == T_PRINTLN) return parse_print();
+        if (current().type == T_CONECT) return parse_conect();
+        if (current().type == T_RETURN) { advance(); return nullptr; }
         return nullptr;
     }
 
-    bool lookahead_is_var_decl() {
-        size_t temp = pos + 1;
-        if (temp >= tokens.size()) return false;
-        if (tokens[temp].type == T_PLUS) {
-            temp++;
-            if (temp >= tokens.size()) return false;
-            return tokens[temp].type == T_INT || tokens[temp].type == T_FLOAT || tokens[temp].type == T_STRING;
-        }
-        return false;
-    }
-
     std::shared_ptr<VarDecl> parse_var_decl() {
-        std::string name = current().value;
-        eat(T_IDENTIFIER);
-        eat(T_PLUS);
-        TokenType type_tok = current().type;
-        eat(type_tok); // int/float/string
-        eat(T_EQUAL);
-
-        auto value = parse_expr();
-
+        std::string name = current().value; advance();
+        advance(); // +
+        advance(); // type
+        advance(); // =
+        auto expr = parse_expr();
         auto decl = std::make_shared<VarDecl>();
         decl->name = name;
-        decl->type_token = type_tok;
-        decl->value = value;
+        decl->expr = expr;
         return decl;
     }
 
-    std::shared_ptr<AstNode> parse_expr() {
+    // Арифметика (как раньше)
+    std::shared_ptr<AstNode> parse_expr() { return parse_add_sub(); }
+    std::shared_ptr<AstNode> parse_add_sub() {
+        auto node = parse_mul_div();
+        while (!is_eof() && (current().type == T_PLUS || current().type == T_MINUS)) {
+            TokenType op = current().type; advance();
+            auto right = parse_mul_div();
+            auto bin = std::make_shared<BinaryOp>();
+            bin->op = op; bin->left = node; bin->right = right;
+            node = bin;
+        }
+        return node;
+    }
+    std::shared_ptr<AstNode> parse_mul_div() {
+        auto node = parse_primary();
+        while (!is_eof() && (current().type == T_STAR || current().type == T_SLASH)) {
+            TokenType op = current().type; advance();
+            auto right = parse_primary();
+            auto bin = std::make_shared<BinaryOp>();
+            bin->op = op; bin->left = node; bin->right = right;
+            node = bin;
+        }
+        return node;
+    }
+    std::shared_ptr<AstNode> parse_primary() {
+        if (is_eof()) return nullptr;
         if (current().type == T_NUMBER) {
-            std::string num = current().value;
-            eat(T_NUMBER);
+            long long val = std::stoll(current().value);
+            advance();
             auto lit = std::make_shared<Literal>();
-            if (num.find('.') != std::string::npos || num.find('e') != std::string::npos || num.find('E') != std::string::npos) {
-                lit->value = Value(std::stod(num));
-            } else {
-                lit->value = Value(std::stoi(num));
-            }
+            lit->value = Value(val);
             return lit;
-        } else if (current().type == T_STRING_LITERAL) {
+        }
+        if (current().type == T_STRING_LITERAL) {
             auto lit = std::make_shared<Literal>();
             lit->value = Value(current().value);
-            eat(T_STRING_LITERAL);
+            advance();
             return lit;
-        } else if (current().type == T_IDENTIFIER) {
+        }
+        if (current().type == T_IDENTIFIER) {
             auto id = std::make_shared<Identifier>();
             id->name = current().value;
-            eat(T_IDENTIFIER);
+            advance();
             return id;
         }
         return nullptr;
     }
 
     std::shared_ptr<PrintStmt> parse_print() {
-        bool is_println = current().type == T_PRINTLN;
-        eat(current().type);
-        eat(T_LPAREN);
+        bool ln = (current().type == T_PRINTLN);
+        advance(); advance(); // print (
 
-        auto print = std::make_shared<PrintStmt>();
+        auto p = std::make_shared<PrintStmt>();
+        p->newline = ln;
 
-        while (pos < tokens.size() && current().type != T_RPAREN) {
-            if (current().type == T_STRING_LITERAL || current().type == T_IDENTIFIER) {
-                print->args.push_back(parse_expr());
-            }
-
+        while (!is_eof() && current().type != T_RPAREN) {
+            p->args.push_back(parse_expr());
             if (current().type == T_COMMA) {
-                eat(T_COMMA);
+                advance();
                 if (current().type == T_STRING_LITERAL) {
-                    print->formats.push_back(current().value);
-                    eat(T_STRING_LITERAL);
+                    p->formats.push_back(current().value);
+                    advance();
                 } else {
-                    print->formats.emplace_back(); // пустой формат
+                    p->formats.emplace_back();
                 }
             }
         }
-        eat(T_RPAREN);
-
-        if (is_println) std::cout << std::endl; // println добавляет \n в конце
-        return print;
+        advance(); // )
+        return p;
     }
 
     std::shared_ptr<ConectCall> parse_conect() {
-        eat(T_CONECT);
-        eat(T_LPAREN);
-        std::string name = current().type == T_STRING_LITERAL ? current().value : current().value;
-        if (current().type == T_STRING_LITERAL) eat(T_STRING_LITERAL);
-        else eat(T_IDENTIFIER);
-        eat(T_RPAREN);
+        advance(); // conect
+        advance(); // (
+
+        std::string name;
+        if (current().type == T_STRING_LITERAL) {
+            name = current().value;
+            advance();
+        } else {
+            name = current().value;
+            advance();
+        }
 
         auto call = std::make_shared<ConectCall>();
         call->func_name = name;
-        return call;
-    }
 
-    std::shared_ptr<ReturnStmt> parse_return() {
-        eat(T_RETURN);
-        auto ret = std::make_shared<ReturnStmt>();
-        if (current().type != T_RBRACE && current().type != T_EOF) {
-            ret->value = parse_expr();
+        // Парсим аргументы: conect("add", 10, 20)
+        if (current().type == T_COMMA) {
+            advance();
+            while (!is_eof() && current().type != T_RPAREN) {
+                call->args.push_back(parse_expr());
+                if (current().type == T_COMMA) advance();
+            }
         }
-        return ret;
+        advance(); // )
+        return call;
     }
 };
 
-// Интерпретатор
+// Interpreter
 class Interpreter {
     std::map<std::string, std::shared_ptr<FunctionDef>> functions;
-    std::map<std::string, Value> variables; // пока глобальные + локальные через стек потом
+    std::map<std::string, Value> globals;
 
 public:
-    void add_function(std::shared_ptr<FunctionDef> func) {
-        functions[func->name] = func;
-    }
-
     void run(const std::vector<std::shared_ptr<AstNode>>& program) {
-        // Сначала собираем все функции
         for (const auto& node : program) {
-            if (auto func = std::dynamic_pointer_cast<FunctionDef>(node)) {
-                functions[func->name] = func;
+            if (auto f = std::dynamic_pointer_cast<FunctionDef>(node)) {
+                functions[f->name] = f;
+                if (DEBUG) std::cout << "[DEBUG] Defined function: " << f->name << " with " << f->param_names.size() << " params" << std::endl;
             }
         }
 
-        // Запускаем main
-        if (functions.find("main") != functions.end()) {
-            execute_function("main");
+        if (functions.count("main")) {
+            execute_function("main", {});
         }
     }
 
 private:
-    void execute_function(const std::string& name) {
+    void execute_function(const std::string& name, const std::vector<Value>& call_args) {
         auto func = functions[name];
-        if (!func) {
-            std::cerr << "Function not found: " << name << std::endl;
-            return;
-        }
+        if (!func) return;
 
-        std::map<std::string, Value> saved_vars = variables;
-        variables.clear();
+        auto saved_globals = globals;
+
+        // Устанавливаем параметры
+        for (size_t i = 0; i < func->param_names.size() && i < call_args.size(); ++i) {
+            globals[func->param_names[i]] = call_args[i];
+            if (DEBUG) std::cout << "[DEBUG] Param " << func->param_names[i] << " = " << call_args[i].to_string() << std::endl;
+        }
 
         for (const auto& stmt : func->body) {
-            execute(stmt);
-        }
-
-        variables = saved_vars;
-    }
-
-    void execute(const std::shared_ptr<AstNode>& node) {
-        if (!node) return;
-
-        if (auto decl = std::dynamic_pointer_cast<VarDecl>(node)) {
-            Value val = eval(decl->value);
-            variables[decl->name] = val;
-        } else if (auto print = std::dynamic_pointer_cast<PrintStmt>(node)) {
-            size_t fmt_idx = 0;
-            for (const auto& arg : print->args) {
-                Value val = eval(arg);
-                std::string fmt = fmt_idx < print->formats.size() ? print->formats[fmt_idx++] : "";
-                std::cout << val.to_string(fmt);
+            if (auto decl = std::dynamic_pointer_cast<VarDecl>(stmt)) {
+                Value val = eval(decl->expr);
+                globals[decl->name] = val;
+                if (DEBUG) std::cout << "[DEBUG] Set var " << decl->name << " = " << val.to_string() << std::endl;
+            } else if (auto print = std::dynamic_pointer_cast<PrintStmt>(stmt)) {
+                for (size_t i = 0; i < print->args.size(); ++i) {
+                    Value v = eval(print->args[i]);
+                    std::string fmt = i < print->formats.size() ? print->formats[i] : "";
+                    std::cout << v.to_string(fmt);
+                }
+                if (print->newline) std::cout << std::endl;
+            } else if (auto call = std::dynamic_pointer_cast<ConectCall>(stmt)) {
+                std::vector<Value> args;
+                for (const auto& arg_expr : call->args) {
+                    args.push_back(eval(arg_expr));
+                }
+                if (DEBUG) std::cout << "[DEBUG] Calling " << call->func_name << " with " << args.size() << " args" << std::endl;
+                execute_function(call->func_name, args);
             }
-            std::cout << std::endl;
-        } else if (auto call = std::dynamic_pointer_cast<ConectCall>(node)) {
-            execute_function(call->func_name);
         }
-        // return пока игнорируем значение
+
+        globals = saved_globals;
     }
 
     Value eval(const std::shared_ptr<AstNode>& node) {
-        if (auto lit = std::dynamic_pointer_cast<Literal>(node)) {
-            return lit->value;
-        } else if (auto id = std::dynamic_pointer_cast<Identifier>(node)) {
-            if (variables.find(id->name) != variables.end()) {
-                return variables[id->name];
+        if (!node) return Value();
+
+        if (auto lit = std::dynamic_pointer_cast<Literal>(node)) return lit->value;
+        if (auto id = std::dynamic_pointer_cast<Identifier>(node)) {
+            if (globals.count(id->name)) return globals[id->name];
+            return Value();
+        }
+        if (auto bin = std::dynamic_pointer_cast<BinaryOp>(node)) {
+            Value l = eval(bin->left);
+            Value r = eval(bin->right);
+            if (l.type == ValueType::INT && r.type == ValueType::INT) {
+                switch (bin->op) {
+                    case T_PLUS: return Value(l.int_val + r.int_val);
+                    case T_MINUS: return Value(l.int_val - r.int_val);
+                    case T_STAR: return Value(l.int_val * r.int_val);
+                    case T_SLASH: return r.int_val != 0 ? Value(l.int_val / r.int_val) : Value(0LL);
+                }
             }
-            std::cerr << "Undefined variable: " << id->name << std::endl;
             return Value();
         }
         return Value();
     }
 };
 
-// CLI функции
-void show_help() {
-    std::cout << "Program Generate Time (PGT) Zero Compiler v0.1\n";
-    std::cout << "Usage:\n";
-    std::cout << "  pgt --help              Show this help\n";
-    std::cout << "  pgt --version           Show version\n";
-    std::cout << "  pgt run <file.pgt>      Run PGT program\n";
-    std::cout << "  pgt build <file.pgt>    (future: compile to executable)\n";
-}
-
-void show_version() {
-    std::cout << "PGT Zero Compiler v0.1 (December 2025)\n";
-}
-
-std::string read_file(const std::string& filename) {
-    std::ifstream file(filename);
-    if (!file.is_open()) {
-        std::cerr << "Error: Cannot open file " << filename << std::endl;
-        return "";
-    }
-    return std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-}
-
-int main(int argc, char* argv[]) {
-    if (argc < 2) {
-        show_help();
+int main(int argc, char** argv) {
+    if (argc < 3 || std::string(argv[1]) != "run") {
+        std::cout << "PGT v0.6 - Functions with arguments!\nUsage: pgt run <file.pgt> [--debug]\n";
         return 1;
     }
 
-    std::string command = argv[1];
+    std::string filename = argv[2];
+    if (argc == 4 && std::string(argv[3]) == "--debug") DEBUG = true;
 
-    if (command == "--help") {
-        show_help();
-    } else if (command == "--version") {
-        show_version();
-    } else if (command == "run" && argc == 3) {
-        std::string filename = argv[2];
-        if (filename.size() < 4 || filename.substr(filename.size() - 4) != ".pgt") {
-            std::cerr << "Error: File must have .pgt extension\n";
-            return 1;
-        }
-
-        std::string source = read_file(filename);
-        if (source.empty()) return 1;
-
-        // Лексический анализ
-        Lexer lexer(source);
-        std::vector<Token> tokens;
-        Token token;
-        do {
-            token = lexer.next_token();
-            tokens.push_back(token);
-        } while (token.type != T_EOF);
-
-        // Парсинг
-        Parser parser;
-        parser.load_tokens(tokens);
-        auto program = parser.parse_program();
-
-        // Интерпретация
-        Interpreter interp;
-        interp.run(program);
-
-    } else if (command == "build" && argc == 3) {
-        std::cout << "Build mode not implemented yet. Use 'run' for now.\n";
-    } else {
-        show_help();
+    std::ifstream f(filename);
+    if (!f) {
+        std::cerr << "File not found\n";
         return 1;
     }
+    std::string source((std::istreambuf_iterator<char>(f)), {});
+
+    Lexer lexer(source);
+    std::vector<Token> tokens;
+    Token t;
+    do {
+        t = lexer.next_token();
+        tokens.push_back(t);
+    } while (t.type != T_EOF);
+
+    Parser parser;
+    parser.load_tokens(tokens);
+    auto program = parser.parse_program();
+
+    Interpreter interp;
+    interp.run(program);
 
     return 0;
 }
