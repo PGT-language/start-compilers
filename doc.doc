@@ -6,5 +6,38 @@ from // путь к файлу import // импортируем что то из
     clasic.pgt // пример стнадартной библиотеки
 }
 
+function(что то) // как в go 
+
 function(main) // вход в програму
 
+if // 
+
+else // 
+
+int //
+
+float //
+
+string //
+
+print // 
+
+println //
+
+create::file("c") // создания файла
+
+write::file("w") // запись файла
+
+read::file("r") // чтение файла
+
+close::file("h") // закрытие файла
+
+delete::file("d") // удаление файла
+
+conect(test) //названия точки для конекта вот так 
+
+print(arg, "{int}") // посли вызова функции мы печатаем что находыться в function 
+
+return 1 // окончание function
+
+return 0 // окончание программы
