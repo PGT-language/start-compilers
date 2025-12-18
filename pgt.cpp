@@ -23,19 +23,16 @@ struct Value {
     Value(std::string v) : type(ValueType::STRING), str_val(std::move(v)) {}
 
     std::string to_string(const std::string& format = "") const {
-    // Если формат указан — применяем его, если подходит
-    if (!format.empty()) {
-        if (format == "{int}" && type == ValueType::INT) return std::to_string(int_val);
-        if (format == "{float}" && type == ValueType::FLOAT) return std::to_string(float_val);
-        if (format == "{string}" && type == ValueType::STRING) return str_val;
-        // Если формат не подошёл — просто возвращаем значение без формата
-    }
-    // Без формата или если формат не подошёл — просто значение
-    switch (type) {
-        case ValueType::INT: return std::to_string(int_val);
-        case ValueType::FLOAT: return std::to_string(float_val);
-        case ValueType::STRING: return str_val;
-        default: return "";
+        if (!format.empty()) {
+            if (format == "{int}" && type == ValueType::INT) return std::to_string(int_val);
+            if (format == "{float}" && type == ValueType::FLOAT) return std::to_string(float_val);
+            if (format == "{string}" && type == ValueType::STRING) return str_val;
+        }
+        switch (type) {
+            case ValueType::INT: return std::to_string(int_val);
+            case ValueType::FLOAT: return std::to_string(float_val);
+            case ValueType::STRING: return str_val;
+            default: return "";
         }
     }
 };
@@ -120,7 +117,6 @@ public:
     }
 };
 
-// AST (как раньше, FunctionDef с param_names)
 struct AstNode { virtual ~AstNode() = default; };
 
 struct FunctionDef : AstNode {
@@ -145,7 +141,6 @@ struct Identifier : AstNode { std::string name; };
 struct PrintStmt : AstNode {
     std::vector<std::shared_ptr<AstNode>> args;
     std::vector<std::string> formats;
-    bool newline = true;
 };
 
 struct ConectCall : AstNode {
@@ -153,7 +148,6 @@ struct ConectCall : AstNode {
     std::vector<std::shared_ptr<AstNode>> args;
 };
 
-// Parser
 class Parser {
     std::vector<Token> tokens;
     size_t pos = 0;
@@ -184,56 +178,48 @@ public:
     }
 
 private:
-std::shared_ptr<FunctionDef> parse_function() {
-    advance(); // function
-    advance(); // первая (
+    std::shared_ptr<FunctionDef> parse_function() {
+        advance(); // function
+        advance(); // (
 
-    // Имя функции
-    std::string name = current().value;
-    advance(); // add или main
+        std::string name = current().value;
+        advance(); // имя функции
 
-    auto func = std::make_shared<FunctionDef>();
-    func->name = name;
+        auto func = std::make_shared<FunctionDef>();
+        func->name = name;
 
-    // Если есть вторая ( — значит есть параметры
-    if (current().type == T_LPAREN) {
-        advance(); // вторая (
-
+        // Параметры (если есть)
         while (!is_eof() && current().type == T_IDENTIFIER) {
+            if (pos + 1 >= tokens.size() || tokens[pos + 1].type != T_PLUS) break;
+
             std::string param_name = current().value;
-            advance(); // имя параметра (a)
+            advance(); // имя параметра
             advance(); // +
-            advance(); // тип (int)
+            advance(); // тип
 
             func->param_names.push_back(param_name);
 
-            if (current().type == T_COMMA) {
-                advance(); // ,
-            }
+            if (current().type == T_COMMA) advance();
         }
 
-        advance(); // вторая )
+        advance(); // )
+
+        advance(); // {
+
+        while (!is_eof() && current().type != T_RBRACE) {
+            auto stmt = parse_statement();
+            if (stmt) func->body.push_back(stmt);
+            else advance();
+        }
+
+        advance(); // }
+
+        if (DEBUG) {
+            std::cout << "[DEBUG] Defined function: " << func->name << " with " << func->param_names.size() << " params" << std::endl;
+        }
+
+        return func;
     }
-
-    advance(); // первая )
-
-    advance(); // {
-
-    while (!is_eof() && current().type != T_RBRACE) {
-        auto stmt = parse_statement();
-        if (stmt) func->body.push_back(stmt);
-        else advance();
-    }
-
-    advance(); // }
-
-    if (DEBUG) {
-        std::cout << "[DEBUG] Defined function: " << func->name 
-                  << " with " << func->param_names.size() << " params" << std::endl;
-    }
-
-    return func;
-}
 
     std::shared_ptr<AstNode> parse_statement() {
         if (current().type == T_IDENTIFIER && pos + 1 < tokens.size() && tokens[pos + 1].type == T_PLUS) {
@@ -257,8 +243,8 @@ std::shared_ptr<FunctionDef> parse_function() {
         return decl;
     }
 
-    // Арифметика (как раньше)
     std::shared_ptr<AstNode> parse_expr() { return parse_add_sub(); }
+
     std::shared_ptr<AstNode> parse_add_sub() {
         auto node = parse_mul_div();
         while (!is_eof() && (current().type == T_PLUS || current().type == T_MINUS)) {
@@ -270,6 +256,7 @@ std::shared_ptr<FunctionDef> parse_function() {
         }
         return node;
     }
+
     std::shared_ptr<AstNode> parse_mul_div() {
         auto node = parse_primary();
         while (!is_eof() && (current().type == T_STAR || current().type == T_SLASH)) {
@@ -281,6 +268,7 @@ std::shared_ptr<FunctionDef> parse_function() {
         }
         return node;
     }
+
     std::shared_ptr<AstNode> parse_primary() {
         if (is_eof()) return nullptr;
         if (current().type == T_NUMBER) {
@@ -306,11 +294,10 @@ std::shared_ptr<FunctionDef> parse_function() {
     }
 
     std::shared_ptr<PrintStmt> parse_print() {
-        bool ln = (current().type == T_PRINTLN);
-        advance(); advance(); // print (
+        advance(); // print or println
+        advance(); // (
 
         auto p = std::make_shared<PrintStmt>();
-        p->newline = ln;
 
         while (!is_eof() && current().type != T_RPAREN) {
             p->args.push_back(parse_expr());
@@ -344,7 +331,6 @@ std::shared_ptr<FunctionDef> parse_function() {
         auto call = std::make_shared<ConectCall>();
         call->func_name = name;
 
-        // Парсим аргументы: conect("add", 10, 20)
         if (current().type == T_COMMA) {
             advance();
             while (!is_eof() && current().type != T_RPAREN) {
@@ -357,7 +343,6 @@ std::shared_ptr<FunctionDef> parse_function() {
     }
 };
 
-// Interpreter
 class Interpreter {
     std::map<std::string, std::shared_ptr<FunctionDef>> functions;
     std::map<std::string, Value> globals;
@@ -367,7 +352,6 @@ public:
         for (const auto& node : program) {
             if (auto f = std::dynamic_pointer_cast<FunctionDef>(node)) {
                 functions[f->name] = f;
-                if (DEBUG) std::cout << "[DEBUG] Defined function: " << f->name << " with " << f->param_names.size() << " params" << std::endl;
             }
         }
 
@@ -379,56 +363,41 @@ public:
 private:
     void execute_function(const std::string& name, const std::vector<Value>& call_args) {
         auto func = functions[name];
-        if (!func) {
-            std::cerr << "Error: Function not found: " << name << std::endl;
-            return;
-        }
+        if (!func) return;
 
-        auto saved_globals = globals;
+        auto saved = globals;
 
-        // Устанавливаем параметры как локальные переменные
         for (size_t i = 0; i < func->param_names.size() && i < call_args.size(); ++i) {
             globals[func->param_names[i]] = call_args[i];
-            if (DEBUG) {
-                std::cout << "[DEBUG] Param " << func->param_names[i] << " = " << call_args[i].to_string() << std::endl;
-            }
+            if (DEBUG) std::cout << "[DEBUG] Param " << func->param_names[i] << " = " << call_args[i].to_string() << std::endl;
         }
 
-        // Выполняем тело функции
         for (const auto& stmt : func->body) {
             if (auto decl = std::dynamic_pointer_cast<VarDecl>(stmt)) {
                 Value val = eval(decl->expr);
                 globals[decl->name] = val;
-                if (DEBUG) {
-                    std::cout << "[DEBUG] Set var " << decl->name << " = " << val.to_string() << std::endl;
-                }
+                if (DEBUG) std::cout << "[DEBUG] Set var " << decl->name << " = " << val.to_string() << std::endl;
             } else if (auto print = std::dynamic_pointer_cast<PrintStmt>(stmt)) {
                 size_t fmt_idx = 0;
                 for (const auto& arg : print->args) {
                     Value v = eval(arg);
-                    std::string fmt = (fmt_idx < print->formats.size()) ? print->formats[fmt_idx] : "";
-                    fmt_idx++;
+                    std::string fmt = fmt_idx < print->formats.size() ? print->formats[fmt_idx++] : "";
                     std::cout << v.to_string(fmt);
                 }
-                std::cout << std::endl;  // чистый переход на новую строку
+                std::cout << std::endl;
             } else if (auto call = std::dynamic_pointer_cast<ConectCall>(stmt)) {
                 std::vector<Value> args;
-                for (const auto& arg_expr : call->args) {
-                    args.push_back(eval(arg_expr));
-                }
-                if (DEBUG) {
-                    std::cout << "[DEBUG] Calling " << call->func_name << " with " << args.size() << " args" << std::endl;
-                }
+                for (const auto& a : call->args) args.push_back(eval(a));
+                if (DEBUG) std::cout << "[DEBUG] Calling " << call->func_name << " with " << args.size() << " args" << std::endl;
                 execute_function(call->func_name, args);
             }
         }
 
-        // Восстанавливаем глобальные переменные (чтобы не засорять пространство имён)
-        globals = saved_globals;
+        globals = saved;
     }
+
     Value eval(const std::shared_ptr<AstNode>& node) {
         if (!node) return Value();
-
         if (auto lit = std::dynamic_pointer_cast<Literal>(node)) return lit->value;
         if (auto id = std::dynamic_pointer_cast<Identifier>(node)) {
             if (globals.count(id->name)) return globals[id->name];
@@ -443,6 +412,7 @@ private:
                     case T_MINUS: return Value(l.int_val - r.int_val);
                     case T_STAR: return Value(l.int_val * r.int_val);
                     case T_SLASH: return r.int_val != 0 ? Value(l.int_val / r.int_val) : Value(0LL);
+                    default: return Value();
                 }
             }
             return Value();
@@ -452,35 +422,86 @@ private:
 };
 
 int main(int argc, char** argv) {
-    if (argc < 3 || std::string(argv[1]) != "run") {
-        std::cout << "PGT v0.6 - Functions with arguments!\nUsage: pgt run <file.pgt> [--debug]\n";
-        return 1;
+    if (argc < 2) {
+        std::cout << "Program Generate Time (PGT) Compiler v0.1\n";
+        std::cout << "Usage:\n";
+        std::cout << "  pgt help                — Show this help\n";
+        std::cout << "  pgt version             — Show version\n";
+        std::cout << "  pgt run <file.pgt>      — Run PGT program\n";
+        std::cout << "  pgt run <file.pgt> --debug — Run with debug output\n";
+        return 0;
     }
 
-    std::string filename = argv[2];
-    if (argc == 4 && std::string(argv[3]) == "--debug") DEBUG = true;
+    std::string command = argv[1];
 
-    std::ifstream f(filename);
-    if (!f) {
-        std::cerr << "File not found\n";
-        return 1;
+    if (command == "help" || command == "--help" || command == "-h") {
+        std::cout << "Program Generate Time (PGT) Compiler v0.1\n";
+        std::cout << "Commands:\n";
+        std::cout << "  help                    — Show this help message\n";
+        std::cout << "  version                 — Show compiler version\n";
+        std::cout << "  run <file.pgt>          — Execute .pgt file\n";
+        std::cout << "  run <file.pgt> --debug  — Execute with debug info (tokens, params, calls)\n\n";
+        std::cout << "Example:\n";
+        std::cout << "  ./pgt run test.pgt\n";
+        std::cout << "  ./pgt run test.pgt --debug\n";
+        return 0;
     }
-    std::string source((std::istreambuf_iterator<char>(f)), {});
 
-    Lexer lexer(source);
-    std::vector<Token> tokens;
-    Token t;
-    do {
-        t = lexer.next_token();
-        tokens.push_back(t);
-    } while (t.type != T_EOF);з
+    if (command == "version" || command == "--version" || command == "-v") {
+        std::cout << "PGT Compiler v0.1\n";
+        std::cout << "Built on December 18, 2025\n";
+        std::cout << "Author: pabla\n";
+        return 0;
+    }
 
-    Parser parser;
-    parser.load_tokens(tokens);
-    auto program = parser.parse_program();
+    if (command == "run") {
+        if (argc < 3) {
+            std::cerr << "Error: No input file specified.\n";
+            std::cerr << "Usage: pgt run <file.pgt> [--debug]\n";
+            return 1;
+        }
 
-    Interpreter interp;
-    interp.run(program);
+        std::string filename = argv[2];
 
-    return 0;
+        // Проверка --debug
+        if (argc == 4 && std::string(argv[3]) == "--debug") {
+            DEBUG = true;
+        } else if (argc > 3) {
+            std::cerr << "Unknown argument: " << argv[3] << "\n";
+            std::cerr << "Use 'pgt help' for usage.\n";
+            return 1;
+        }
+
+        std::ifstream f(filename);
+        if (!f) {
+            std::cerr << "Error: Cannot open file '" << filename << "'\n";
+            return 1;
+        }
+
+        std::string source((std::istreambuf_iterator<char>(f)), {});
+
+        if (DEBUG) std::cout << "[DEBUG] File loaded: " << filename << " (" << source.size() << " bytes)\n";
+
+        Lexer lexer(source);
+        std::vector<Token> tokens;
+        Token t;
+        do {
+            t = lexer.next_token();
+            tokens.push_back(t);
+        } while (t.type != T_EOF);
+
+        Parser parser;
+        parser.load_tokens(tokens);
+        auto program = parser.parse_program();
+
+        Interpreter interp;
+        interp.run(program);
+
+        return 0;
+    }
+
+    // Если команда неизвестна
+    std::cerr << "Unknown command: " << command << "\n";
+    std::cerr << "Use 'pgt help' for available commands.\n";
+    return 1;
 }
