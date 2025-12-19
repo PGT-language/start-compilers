@@ -88,9 +88,9 @@ public:
                 return {T_STRING_LITERAL, str, line};
             }
 
-            if (std::isdigit(c) || (c == '-' && std::isdigit(peek() + 1))) {
+            if (std::isdigit(c) || (c == '-' && std::isdigit(peek() + 1)) || c == '.') {
                 std::string num;
-                if (c == '-') num += get();
+                if (c == '-' || c == '.') num += get();
                 while (std::isdigit(peek()) || peek() == '.') num += get();
                 return {T_NUMBER, num, line};
             }
@@ -272,10 +272,14 @@ private:
     std::shared_ptr<AstNode> parse_primary() {
         if (is_eof()) return nullptr;
         if (current().type == T_NUMBER) {
-            long long val = std::stoll(current().value);
+            std::string num_str = current().value;
             advance();
             auto lit = std::make_shared<Literal>();
-            lit->value = Value(val);
+            if (num_str.find('.') != std::string::npos) {
+                lit->value = Value(std::stod(num_str));
+            } else {
+                lit->value = Value(std::stoll(num_str));
+            }
             return lit;
         }
         if (current().type == T_STRING_LITERAL) {
@@ -407,12 +411,13 @@ private:
             Value l = eval(bin->left);
             Value r = eval(bin->right);
             if (l.type == ValueType::INT && r.type == ValueType::INT) {
+                long long lv = l.int_val;
+                long long rv = r.int_val;
                 switch (bin->op) {
-                    case T_PLUS: return Value(l.int_val + r.int_val);
-                    case T_MINUS: return Value(l.int_val - r.int_val);
-                    case T_STAR: return Value(l.int_val * r.int_val);
-                    case T_SLASH: return r.int_val != 0 ? Value(l.int_val / r.int_val) : Value(0LL);
-                    default: return Value();
+                    case T_PLUS: return Value(lv + rv);
+                    case T_MINUS: return Value(lv - rv);
+                    case T_STAR: return Value(lv * rv);
+                    case T_SLASH: return Value(rv != 0 ? lv / rv : 0LL);
                 }
             }
             return Value();
