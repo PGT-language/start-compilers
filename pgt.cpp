@@ -411,13 +411,12 @@ private:
             Value l = eval(bin->left);
             Value r = eval(bin->right);
             if (l.type == ValueType::INT && r.type == ValueType::INT) {
-                long long lv = l.int_val;
-                long long rv = r.int_val;
                 switch (bin->op) {
-                    case T_PLUS: return Value(lv + rv);
-                    case T_MINUS: return Value(lv - rv);
-                    case T_STAR: return Value(lv * rv);
-                    case T_SLASH: return Value(rv != 0 ? lv / rv : 0LL);
+                    case T_PLUS: return Value(l.int_val + r.int_val);
+                    case T_MINUS: return Value(l.int_val - r.int_val);
+                    case T_STAR: return Value(l.int_val * r.int_val);
+                    case T_SLASH: return r.int_val != 0 ? Value(l.int_val / r.int_val) : Value(0LL);
+                    default: return Value();
                 }
             }
             return Value();
