@@ -402,25 +402,49 @@ private:
 
     Value eval(const std::shared_ptr<AstNode>& node) {
         if (!node) return Value();
-        if (auto lit = std::dynamic_pointer_cast<Literal>(node)) return lit->value;
+
+        if (auto lit = std::dynamic_pointer_cast<Literal>(node)) {
+            return lit->value;
+        }
+
         if (auto id = std::dynamic_pointer_cast<Identifier>(node)) {
             if (globals.count(id->name)) return globals[id->name];
+            if (DEBUG) std::cout << "[DEBUG] Undefined variable: " << id->name << std::endl;
             return Value();
         }
+
         if (auto bin = std::dynamic_pointer_cast<BinaryOp>(node)) {
             Value l = eval(bin->left);
             Value r = eval(bin->right);
-            if (l.type == ValueType::INT && r.type == ValueType::INT) {
+
+            // Сначала проверяем float (поддержка смешанных операций и чистого float)
+            if (l.type == ValueType::FLOAT || r.type == ValueType::FLOAT) {
+                double lv = (l.type == ValueType::FLOAT) ? l.float_val : static_cast<double>(l.int_val);
+                double rv = (r.type == ValueType::FLOAT) ? r.float_val : static_cast<double>(r.int_val);
+
                 switch (bin->op) {
-                    case T_PLUS: return Value(l.int_val + r.int_val);
-                    case T_MINUS: return Value(l.int_val - r.int_val);
-                    case T_STAR: return Value(l.int_val * r.int_val);
-                    case T_SLASH: return r.int_val != 0 ? Value(l.int_val / r.int_val) : Value(0LL);
-                    default: return Value();
+                    case T_PLUS:  return Value(lv + rv);
+                    case T_MINUS: return Value(lv - rv);
+                    case T_STAR:  return Value(lv * rv);
+                    case T_SLASH: return Value(rv != 0.0 ? lv / rv : 0.0);
+                    default:      return Value(0.0);
                 }
             }
-            return Value();
+
+            // Потом — чистый int (если оба int)
+            if (l.type == ValueType::INT && r.type == ValueType::INT) {
+                switch (bin->op) {
+                    case T_PLUS:  return Value(l.int_val + r.int_val);
+                    case T_MINUS: return Value(l.int_val - r.int_val);
+                    case T_STAR:  return Value(l.int_val * r.int_val);
+                    case T_SLASH: return Value(r.int_val != 0 ? l.int_val / r.int_val : 0LL);
+                    default:      return Value(0LL);
+                }
+            }
+
+            return Value(); // если типы несовместимы
         }
+
         return Value();
     }
 };
