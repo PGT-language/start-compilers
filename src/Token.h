@@ -1,0 +1,18 @@
+#pragma once
+
+#include <string>
+
+enum TokenType {
+    T_PACKAGE, T_FUNCTION, T_PRINT, T_PRINTLN, T_RETURN, T_CONECT,
+    T_INT, T_FLOAT, T_STRING, T_INPUT,
+    T_IDENTIFIER, T_STRING_LITERAL, T_NUMBER,
+    T_LBRACE, T_RBRACE, T_LPAREN, T_RPAREN,
+    T_COMMA, T_PLUS, T_MINUS, T_STAR, T_SLASH, T_EQUAL, T_COUT,
+    T_EOF
+};
+
+struct Token {
+    TokenType type = T_EOF;
+    std::string value;
+    int line = 0;
+};
