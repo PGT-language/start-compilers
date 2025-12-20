@@ -6,6 +6,7 @@
 #include <sstream>
 #include <cctype>
 #include <memory>
+#include <limits>
 
 bool DEBUG = false;
 
@@ -39,10 +40,10 @@ struct Value {
 
 enum TokenType {
     T_PACKAGE, T_FUNCTION, T_PRINT, T_PRINTLN, T_RETURN, T_CONECT,
-    T_INT, T_FLOAT, T_STRING,
+    T_INT, T_FLOAT, T_STRING, T_INPUT,
     T_IDENTIFIER, T_STRING_LITERAL, T_NUMBER,
     T_LBRACE, T_RBRACE, T_LPAREN, T_RPAREN,
-    T_COMMA, T_PLUS, T_MINUS, T_STAR, T_SLASH, T_EQUAL,
+    T_COMMA, T_PLUS, T_MINUS, T_STAR, T_SLASH, T_EQUAL, T_COUT,
     T_EOF
 };
 
@@ -105,6 +106,8 @@ public:
                 if (id == "println") return {T_PRINTLN, id, line};
                 if (id == "return") return {T_RETURN, id, line};
                 if (id == "conect") return {T_CONECT, id, line};
+                if (id == "input") return {T_INPUT, id, line};
+                if (id == "cout") return {T_COUT, id, line};
                 if (id == "int") return {T_INT, id, line};
                 if (id == "float") return {T_FLOAT, id, line};
                 if (id == "string") return {T_STRING, id, line};
@@ -141,6 +144,10 @@ struct Identifier : AstNode { std::string name; };
 struct PrintStmt : AstNode {
     std::vector<std::shared_ptr<AstNode>> args;
     std::vector<std::string> formats;
+};
+
+struct InputStmt : AstNode {
+    std::string format;  // "{int}", "{float}", "{string}"
 };
 
 struct ConectCall : AstNode {
@@ -183,19 +190,18 @@ private:
         advance(); // (
 
         std::string name = current().value;
-        advance(); // имя функции
+        advance();
 
         auto func = std::make_shared<FunctionDef>();
         func->name = name;
 
-        // Параметры (если есть)
         while (!is_eof() && current().type == T_IDENTIFIER) {
             if (pos + 1 >= tokens.size() || tokens[pos + 1].type != T_PLUS) break;
 
             std::string param_name = current().value;
-            advance(); // имя параметра
+            advance();
             advance(); // +
-            advance(); // тип
+            advance(); // type
 
             func->param_names.push_back(param_name);
 
@@ -214,14 +220,18 @@ private:
 
         advance(); // }
 
-        if (DEBUG) {
-            std::cout << "[DEBUG] Defined function: " << func->name << " with " << func->param_names.size() << " params" << std::endl;
-        }
+        if (DEBUG) std::cout << "[DEBUG] Defined function: " << func->name << " with " << func->param_names.size() << " params" << std::endl;
 
         return func;
     }
 
     std::shared_ptr<AstNode> parse_statement() {
+        if (current().type == T_PRINT || current().type == T_PRINTLN) {
+            if (pos + 2 < tokens.size() && tokens[pos + 2].type == T_INPUT) {
+                return parse_input();  // cout(input, "{type}")
+            }
+            return parse_print();
+        }
         if (current().type == T_IDENTIFIER && pos + 1 < tokens.size() && tokens[pos + 1].type == T_PLUS) {
             return parse_var_decl();
         }
@@ -319,6 +329,20 @@ private:
         return p;
     }
 
+    std::shared_ptr<InputStmt> parse_input() {
+        advance(); // print или println (уже сделано в parse_statement)
+        advance(); // (
+        advance(); // input
+        advance(); // ,
+        std::string format = current().value;
+        advance(); // "{int}" или "{string}"
+        advance(); // )
+
+        auto input = std::make_shared<InputStmt>();
+        input->format = format;
+        return input;
+    }
+
     std::shared_ptr<ConectCall> parse_conect() {
         advance(); // conect
         advance(); // (
@@ -394,6 +418,37 @@ private:
                 for (const auto& a : call->args) args.push_back(eval(a));
                 if (DEBUG) std::cout << "[DEBUG] Calling " << call->func_name << " with " << args.size() << " args" << std::endl;
                 execute_function(call->func_name, args);
+            } else if (auto input = std::dynamic_pointer_cast<InputStmt>(stmt)) {
+                Value val;
+
+                if (input->format == "{int}") {
+                    std::cout << "> ";  // подсказка ввода
+                    long long x;
+                    if (std::cin >> x) {
+                        val = Value(x);
+                    } else {
+                        val = Value(0LL);  // если ошибка ввода
+                        std::cin.clear();
+                    }
+                } else if (input->format == "{float}") {
+                    std::cout << "> ";
+                    double x;
+                    if (std::cin >> x) {
+                        val = Value(x);
+                    } else {
+                        val = Value(0.0);
+                        std::cin.clear();
+                    }
+                } else if (input->format == "{string}") {
+                    std::cout << "> ";
+                    std::string x;
+                    std::cin.ignore();  // очищаем буфер после предыдущих >>
+                    std::getline(std::cin, x);
+                    val = Value(x);
+                }
+
+                globals["input"] = val;
+                if (DEBUG) std::cout << "[DEBUG] Input saved to 'input' = " << val.to_string() << std::endl;
             }
         }
 
@@ -402,52 +457,40 @@ private:
 
     Value eval(const std::shared_ptr<AstNode>& node) {
         if (!node) return Value();
-
-        if (auto lit = std::dynamic_pointer_cast<Literal>(node)) {
-            return lit->value;
-        }
-
+        if (auto lit = std::dynamic_pointer_cast<Literal>(node)) return lit->value;
         if (auto id = std::dynamic_pointer_cast<Identifier>(node)) {
+            if (id->name == "input" && globals.count("input")) return globals["input"];
             if (globals.count(id->name)) return globals[id->name];
-            if (DEBUG) std::cout << "[DEBUG] Undefined variable: " << id->name << std::endl;
             return Value();
         }
-
         if (auto bin = std::dynamic_pointer_cast<BinaryOp>(node)) {
             Value l = eval(bin->left);
             Value r = eval(bin->right);
-
-            // Сначала проверяем float (поддержка смешанных операций и чистого float)
             if (l.type == ValueType::FLOAT || r.type == ValueType::FLOAT) {
-                double lv = (l.type == ValueType::FLOAT) ? l.float_val : static_cast<double>(l.int_val);
-                double rv = (r.type == ValueType::FLOAT) ? r.float_val : static_cast<double>(r.int_val);
-
+                double lv = (l.type == ValueType::FLOAT) ? l.float_val : l.int_val;
+                double rv = (r.type == ValueType::FLOAT) ? r.float_val : r.int_val;
                 switch (bin->op) {
-                    case T_PLUS:  return Value(lv + rv);
+                    case T_PLUS: return Value(lv + rv);
                     case T_MINUS: return Value(lv - rv);
-                    case T_STAR:  return Value(lv * rv);
+                    case T_STAR: return Value(lv * rv);
                     case T_SLASH: return Value(rv != 0.0 ? lv / rv : 0.0);
-                    default:      return Value(0.0);
                 }
             }
-
-            // Потом — чистый int (если оба int)
             if (l.type == ValueType::INT && r.type == ValueType::INT) {
                 switch (bin->op) {
-                    case T_PLUS:  return Value(l.int_val + r.int_val);
+                    case T_PLUS: return Value(l.int_val + r.int_val);
                     case T_MINUS: return Value(l.int_val - r.int_val);
-                    case T_STAR:  return Value(l.int_val * r.int_val);
+                    case T_STAR: return Value(l.int_val * r.int_val);
                     case T_SLASH: return Value(r.int_val != 0 ? l.int_val / r.int_val : 0LL);
-                    default:      return Value(0LL);
                 }
             }
-
-            return Value(); // если типы несовместимы
+            return Value();
         }
-
         return Value();
     }
 };
+
+// main остаётся твоим стабильным
 
 int main(int argc, char** argv) {
     if (argc < 2) {
@@ -467,17 +510,16 @@ int main(int argc, char** argv) {
         std::cout << "Commands:\n";
         std::cout << "  help                    — Show this help message\n";
         std::cout << "  version                 — Show compiler version\n";
-        std::cout << "  run <file.pgt>          — Execute .pgt file\n";
-        std::cout << "  run <file.pgt> --debug  — Execute with debug info (tokens, params, calls)\n\n";
+        std::cout << "  run <file.pgt  — Execute .pgt file\n";
+        std::cout << "  run <file.pgt> --debug  — Execute with debug info\n\n";
         std::cout << "Example:\n";
         std::cout << "  ./pgt run test.pgt\n";
-        std::cout << "  ./pgt run test.pgt --debug\n";
         return 0;
     }
 
     if (command == "version" || command == "--version" || command == "-v") {
         std::cout << "PGT Compiler v0.1\n";
-        std::cout << "Built on December 18, 2025\n";
+        std::cout << "Built on December 20, 2025\n";
         std::cout << "Author: pabla\n";
         return 0;
     }
@@ -508,8 +550,6 @@ int main(int argc, char** argv) {
 
         std::string source((std::istreambuf_iterator<char>(f)), {});
 
-        if (DEBUG) std::cout << "[DEBUG] File loaded: " << filename << " (" << source.size() << " bytes)\n";
-
         Lexer lexer(source);
         std::vector<Token> tokens;
         Token t;
@@ -528,7 +568,6 @@ int main(int argc, char** argv) {
         return 0;
     }
 
-    // Если команда неизвестна
     std::cerr << "Unknown command: " << command << "\n";
     std::cerr << "Use 'pgt help' for available commands.\n";
     return 1;
