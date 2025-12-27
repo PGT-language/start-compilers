@@ -23,6 +23,7 @@ class Parser {
     std::shared_ptr<PrintStmt> parse_print();
     std::shared_ptr<InputStmt> parse_input();
     std::shared_ptr<ConectCall> parse_conect();
+    std::shared_ptr<ImportStmt> parse_import();
 
 public:
     void load_tokens(std::vector<Token> t);

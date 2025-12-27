@@ -2,11 +2,14 @@
 #include "Parser.h"
 #include "Interpreter.h"
 #include "Utils.h"
+#include "Ast.h"
 
 #include <iostream>
 #include <fstream>
 #include <sstream>
 #include <cctype>
+#include <set>
+#include <map>
 
 int main(int argc, char** argv) {
     if (argc < 2) {
@@ -58,28 +61,113 @@ int main(int argc, char** argv) {
             return 1;
         }
 
-        std::ifstream f(filename);
-        if (!f) {
-            std::cerr << "Error: Cannot open file '" << filename << "'\n";
-            return 1;
+        // Система загрузки мультифайлов
+        std::set<std::string> loaded_files;
+        std::map<std::string, std::vector<std::shared_ptr<AstNode>>> file_asts;
+        std::vector<std::string> files_to_load = {filename};
+
+        // Функция для получения директории файла
+        auto get_directory = [](const std::string& filepath) -> std::string {
+            size_t last_slash = filepath.find_last_of("/\\");
+            if (last_slash == std::string::npos) return ".";
+            return filepath.substr(0, last_slash);
+        };
+
+        // Функция для разрешения пути к импортируемому файлу
+        auto resolve_import_path = [&](const std::string& base_dir, const std::string& import_path) -> std::string {
+            // Если путь уже абсолютный или начинается с ./, используем как есть
+            if (import_path[0] == '/' || (import_path.size() > 1 && import_path[0] == '.' && import_path[1] == '/')) {
+                return import_path;
+            }
+            
+            // Если путь не заканчивается на .pgt, добавляем
+            std::string full_path = import_path;
+            if (full_path.size() < 4 || full_path.substr(full_path.size() - 4) != ".pgt") {
+                full_path += ".pgt";
+            }
+            
+            // Пробуем относительно директории базового файла
+            std::string relative_path = base_dir + "/" + full_path;
+            std::ifstream test(relative_path);
+            if (test) {
+                test.close();
+                return relative_path;
+            }
+            
+            // Пробуем относительно текущей директории
+            test.open(full_path);
+            if (test) {
+                test.close();
+                return full_path;
+            }
+            
+            return full_path; // Возвращаем даже если не нашли (ошибка будет позже)
+        };
+
+        // Загружаем все файлы рекурсивно
+        while (!files_to_load.empty()) {
+            std::string current_file = files_to_load.back();
+            files_to_load.pop_back();
+
+            // Пропускаем уже загруженные файлы
+            if (loaded_files.count(current_file)) {
+                continue;
+            }
+
+            std::ifstream f(current_file);
+            if (!f) {
+                std::cerr << "Error: Cannot open file '" << current_file << "'\n";
+                continue;
+            }
+
+            std::string source((std::istreambuf_iterator<char>(f)), {});
+            f.close();
+
+            if (DEBUG) std::cout << "[DEBUG] Loading file: " << current_file << std::endl;
+
+            Lexer lexer(source);
+            std::vector<Token> tokens;
+            Token t;
+            do {
+                t = lexer.next_token();
+                tokens.push_back(t);
+            } while (t.type != T_EOF);
+
+            Parser parser;
+            parser.load_tokens(tokens);
+            auto program = parser.parse_program();
+
+            // Сохраняем AST для этого файла
+            file_asts[current_file] = program;
+
+            // Ищем импорты и добавляем их в очередь загрузки
+            std::string base_dir = get_directory(current_file);
+            for (const auto& node : program) {
+                if (auto import = std::dynamic_pointer_cast<ImportStmt>(node)) {
+                    std::string import_path = resolve_import_path(base_dir, import->file_path);
+                    if (DEBUG) std::cout << "[DEBUG] Found import: " << import->import_name 
+                                         << " from " << import->file_path 
+                                         << " -> resolved to " << import_path << std::endl;
+                    files_to_load.push_back(import_path);
+                }
+            }
+
+            loaded_files.insert(current_file);
         }
 
-        std::string source((std::istreambuf_iterator<char>(f)), {});
-
-        Lexer lexer(source);
-        std::vector<Token> tokens;
-        Token t;
-        do {
-            t = lexer.next_token();
-            tokens.push_back(t);
-        } while (t.type != T_EOF);
-
-        Parser parser;
-        parser.load_tokens(tokens);
-        auto program = parser.parse_program();
+        // Объединяем все AST в один
+        std::vector<std::shared_ptr<AstNode>> combined_program;
+        for (const auto& [file, ast] : file_asts) {
+            for (const auto& node : ast) {
+                // Пропускаем импорты, они уже обработаны
+                if (!std::dynamic_pointer_cast<ImportStmt>(node)) {
+                    combined_program.push_back(node);
+                }
+            }
+        }
 
         Interpreter interp;
-        interp.run(program);
+        interp.run(combined_program);
 
         return 0;
     }

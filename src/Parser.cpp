@@ -17,9 +17,18 @@ std::vector<std::shared_ptr<AstNode>> Parser::parse_program() {
     while (!is_eof()) {
         if (current().type == T_PACKAGE) {
             advance(); advance();
+        } else if (current().type == T_FROM) {
+            auto import = parse_import();
+            if (import) nodes.push_back(import);
         } else if (current().type == T_FUNCTION) {
             auto func = parse_function();
             if (func) nodes.push_back(func);
+        } else if (current().type == T_IDENTIFIER && pos + 1 < tokens.size() && tokens[pos + 1].type == T_PLUS) {
+            // Глобальная переменная
+            auto var = parse_var_decl();
+            if (var) nodes.push_back(var);
+        } else if (current().type == T_RETURN) {
+            advance(); // пропускаем return вне функций
         } else {
             advance();
         }
@@ -68,16 +77,15 @@ std::shared_ptr<FunctionDef> Parser::parse_function() {
 }
 
 std::shared_ptr<AstNode> Parser::parse_statement() {
+    if (current().type == T_COUT) {
+        return parse_input();  // cout(input, "{type}")
+    }
     if (current().type == T_PRINT || current().type == T_PRINTLN) {
-        if (pos + 2 < tokens.size() && tokens[pos + 2].type == T_INPUT) {
-            return parse_input();  // cout(input, "{type}")
-        }
         return parse_print();
     }
     if (current().type == T_IDENTIFIER && pos + 1 < tokens.size() && tokens[pos + 1].type == T_PLUS) {
         return parse_var_decl();
     }
-    if (current().type == T_PRINT || current().type == T_PRINTLN) return parse_print();
     if (current().type == T_CONECT) return parse_conect();
     if (current().type == T_RETURN) { advance(); return nullptr; }
     return nullptr;
@@ -140,7 +148,7 @@ std::shared_ptr<AstNode> Parser::parse_primary() {
         advance();
         return lit;
     }
-    if (current().type == T_IDENTIFIER) {
+    if (current().type == T_IDENTIFIER || current().type == T_INPUT) {
         auto id = std::make_shared<Identifier>();
         id->name = current().value;
         advance();
@@ -172,16 +180,23 @@ std::shared_ptr<PrintStmt> Parser::parse_print() {
 }
 
 std::shared_ptr<InputStmt> Parser::parse_input() {
-    advance(); // print или println (уже сделано в parse_statement)
+    advance(); // cout
     advance(); // (
+    
+    // Проверяем, что следующий токен - input
+    if (current().type != T_INPUT) {
+        return nullptr;
+    }
     advance(); // input
     advance(); // ,
+    
     std::string format = current().value;
-    advance(); // "{int}" или "{string}"
+    advance(); // "{int}", "{float}" или "{string}"
     advance(); // )
 
     auto input = std::make_shared<InputStmt>();
     input->format = format;
+    input->prompt = "";  // промпт пока не поддерживается в синтаксисе
     return input;
 }
 
@@ -210,4 +225,43 @@ std::shared_ptr<ConectCall> Parser::parse_conect() {
     }
     advance(); // )
     return call;
+}
+
+std::shared_ptr<ImportStmt> Parser::parse_import() {
+    advance(); // from
+    
+    std::string file_path;
+    if (current().type == T_STRING_LITERAL) {
+        file_path = current().value;
+        advance();
+    } else if (current().type == T_IDENTIFIER) {
+        file_path = current().value;
+        advance();
+    } else {
+        return nullptr;
+    }
+    
+    if (current().type != T_IMPORT) {
+        return nullptr;
+    }
+    advance(); // import
+    
+    std::string import_name;
+    if (current().type == T_STRING_LITERAL) {
+        import_name = current().value;
+        advance();
+    } else if (current().type == T_IDENTIFIER) {
+        import_name = current().value;
+        advance();
+    } else {
+        return nullptr;
+    }
+    
+    auto import = std::make_shared<ImportStmt>();
+    import->file_path = file_path;
+    import->import_name = import_name;
+    
+    if (DEBUG) std::cout << "[DEBUG] Import: " << import_name << " from " << file_path << std::endl;
+    
+    return import;
 }

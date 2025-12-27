@@ -53,6 +53,8 @@ Token Lexer::next_token() {
             if (id == "int") return {T_INT, id, line};
             if (id == "float") return {T_FLOAT, id, line};
             if (id == "string") return {T_STRING, id, line};
+            if (id == "from") return {T_FROM, id, line};
+            if (id == "import") return {T_IMPORT, id, line};
 
             return {T_IDENTIFIER, id, line};
         }

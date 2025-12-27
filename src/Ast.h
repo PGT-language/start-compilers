@@ -34,9 +34,15 @@ struct PrintStmt : AstNode {
 
 struct InputStmt : AstNode {
     std::string format;  // "{int}", "{float}", "{string}"
+    std::string prompt;  // опциональный промпт для ввода
 };
 
 struct ConectCall : AstNode {
     std::string func_name;
     std::vector<std::shared_ptr<AstNode>> args;
+};
+
+struct ImportStmt : AstNode {
+    std::string file_path;  // путь к файлу после "from"
+    std::string import_name; // что импортируем после "import"
 };
