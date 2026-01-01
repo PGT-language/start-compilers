@@ -46,6 +46,9 @@ std::shared_ptr<FunctionDef> Parser::parse_function() {
     auto func = std::make_shared<FunctionDef>();
     func->name = name;
 
+    // Пропускаем запятую после имени функции, если она есть
+    if (current().type == T_COMMA) advance();
+
     while (!is_eof() && current().type == T_IDENTIFIER) {
         if (pos + 1 >= tokens.size() || tokens[pos + 1].type != T_PLUS) break;
 

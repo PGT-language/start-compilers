@@ -29,6 +29,7 @@ void Interpreter::execute_function(const std::string& name, const std::vector<Va
     std::map<std::string, Value> locals;
 
     // Устанавливаем параметры как локальные переменные
+    if (DEBUG) std::cout << "[DEBUG] Function " << name << " has " << func->param_names.size() << " params, got " << call_args.size() << " args" << std::endl;
     for (size_t i = 0; i < func->param_names.size() && i < call_args.size(); ++i) {
         locals[func->param_names[i]] = call_args[i];
         if (DEBUG) std::cout << "[DEBUG] Param " << func->param_names[i] << " = " << call_args[i].to_string() << std::endl;
