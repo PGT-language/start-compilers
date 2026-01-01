@@ -26,6 +26,19 @@ Token Lexer::next_token() {
         if (c == '"') {
             get();
             std::string str;
+            bool is_first_char = true;
+            
+            // Пропускаем первый перенос строки и пробелы/табуляции после открывающей кавычки
+            if (peek() == '\n' || peek() == '\r') {
+                if (peek() == '\n') line++;
+                get();
+                // Пропускаем пробелы и табуляции после первого переноса строки
+                while (peek() == ' ' || peek() == '\t') {
+                    get();
+                }
+                is_first_char = false;
+            }
+            
             while (peek() != 0) {
                 if (peek() == '"') {
                     // Проверяем контекст после закрывающей кавычки
@@ -39,6 +52,10 @@ Token Lexer::next_token() {
                     }
                     // Если следующий символ - закрывающая скобка, запятая или конец файла, то это конец строки
                     if (peek() == ')' || peek() == ',' || peek() == ';' || peek() == 0) {
+                        // Убираем последний перенос строки из строки, если он есть
+                        if (!str.empty() && str.back() == '\n') {
+                            str.pop_back();
+                        }
                         break;
                     }
                     // Иначе это кавычка внутри строки, возвращаемся назад
@@ -52,6 +69,7 @@ Token Lexer::next_token() {
                     } else {
                         str += ch;
                     }
+                    is_first_char = false;
                 }
             }
             return {T_STRING_LITERAL, str, line};
