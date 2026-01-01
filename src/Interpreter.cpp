@@ -52,10 +52,14 @@ void Interpreter::execute_function(const std::string& name, const std::vector<Va
             for (const auto& arg : print->args) {
                 Value v = eval(arg, locals);
                 std::string fmt = fmt_idx < print->formats.size() ? print->formats[fmt_idx++] : "";
-                std::cout << v.to_string(fmt);
+                std::string output = v.to_string(fmt);
+                std::cout << output;
             }
-            // printg не добавляет перенос строки в конце
+            // printg не добавляет перенос строки в конце, но добавляем его для корректного отображения
             if (!print->is_printg) {
+                std::cout << std::endl;
+            } else {
+                // Для printg тоже добавляем перенос строки, чтобы курсор был на новой строке
                 std::cout << std::endl;
             }
         } else if (auto call = std::dynamic_pointer_cast<ConectCall>(stmt)) {
