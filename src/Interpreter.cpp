@@ -54,7 +54,10 @@ void Interpreter::execute_function(const std::string& name, const std::vector<Va
                 std::string fmt = fmt_idx < print->formats.size() ? print->formats[fmt_idx++] : "";
                 std::cout << v.to_string(fmt);
             }
-            std::cout << std::endl;
+            // printg не добавляет перенос строки в конце
+            if (!print->is_printg) {
+                std::cout << std::endl;
+            }
         } else if (auto call = std::dynamic_pointer_cast<ConectCall>(stmt)) {
             std::vector<Value> args;
             for (const auto& a : call->args) args.push_back(eval(a, locals));

@@ -30,6 +30,7 @@ struct Identifier : AstNode { std::string name; };
 struct PrintStmt : AstNode {
     std::vector<std::shared_ptr<AstNode>> args;
     std::vector<std::string> formats;
+    bool is_printg = false;  // true для printg, false для print/println
 };
 
 struct InputStmt : AstNode {

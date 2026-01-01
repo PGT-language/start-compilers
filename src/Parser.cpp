@@ -83,7 +83,7 @@ std::shared_ptr<AstNode> Parser::parse_statement() {
     if (current().type == T_COUT) {
         return parse_input();  // cout(input, "{type}")
     }
-    if (current().type == T_PRINT || current().type == T_PRINTLN) {
+    if (current().type == T_PRINT || current().type == T_PRINTG || current().type == T_PRINTLN) {
         return parse_print();
     }
     if (current().type == T_IDENTIFIER && pos + 1 < tokens.size() && tokens[pos + 1].type == T_PLUS) {
@@ -161,10 +161,13 @@ std::shared_ptr<AstNode> Parser::parse_primary() {
 }
 
 std::shared_ptr<PrintStmt> Parser::parse_print() {
-    advance(); // print or println
+    TokenType print_type = current().type;
+    bool is_printg = (print_type == T_PRINTG);
+    advance(); // print, printg or println
     advance(); // (
 
     auto p = std::make_shared<PrintStmt>();
+    p->is_printg = is_printg;
 
     while (!is_eof() && current().type != T_RPAREN) {
         p->args.push_back(parse_expr());

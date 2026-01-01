@@ -26,8 +26,34 @@ Token Lexer::next_token() {
         if (c == '"') {
             get();
             std::string str;
-            while (peek() != '"' && peek() != 0) str += get();
-            if (peek() == '"') get();
+            while (peek() != 0) {
+                if (peek() == '"') {
+                    // Проверяем контекст после закрывающей кавычки
+                    // Сохраняем текущую позицию
+                    size_t save_pos = pos;
+                    get(); // съедаем кавычку
+                    // Пропускаем пробелы, табуляции и переносы строк
+                    while (peek() == ' ' || peek() == '\t' || peek() == '\n' || peek() == '\r') {
+                        if (peek() == '\n') line++;
+                        get();
+                    }
+                    // Если следующий символ - закрывающая скобка, запятая или конец файла, то это конец строки
+                    if (peek() == ')' || peek() == ',' || peek() == ';' || peek() == 0) {
+                        break;
+                    }
+                    // Иначе это кавычка внутри строки, возвращаемся назад
+                    pos = save_pos;
+                    str += '"';
+                } else {
+                    char ch = get();
+                    if (ch == '\n') {
+                        line++;
+                        str += '\n';
+                    } else {
+                        str += ch;
+                    }
+                }
+            }
             return {T_STRING_LITERAL, str, line};
         }
 
@@ -45,6 +71,7 @@ Token Lexer::next_token() {
             if (id == "package") return {T_PACKAGE, id, line};
             if (id == "function") return {T_FUNCTION, id, line};
             if (id == "print") return {T_PRINT, id, line};
+            if (id == "printg") return {T_PRINTG, id, line};
             if (id == "println") return {T_PRINTLN, id, line};
             if (id == "return") return {T_RETURN, id, line};
             if (id == "conect") return {T_CONECT, id, line};
