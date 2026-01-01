@@ -31,6 +31,7 @@ int main(int argc, char** argv) {
         std::cout << "  version                 — Show compiler version\n";
         std::cout << "  run <file.pgt>          — Execute .pgt file\n";
         std::cout << "  run <file.pgt> --debug  — Execute with debug info\n\n";
+        std::cout << "  history                 — Show history of commands\n";
         std::cout << "Example:\n";
         std::cout << "  ./pgt run test.pgt\n";
         return 0;
@@ -169,6 +170,18 @@ int main(int argc, char** argv) {
         Interpreter interp;
         interp.run(combined_program);
 
+        return 0;
+    }
+
+    if (command == "history") {
+        std::cout << "Hello, my name is Pabla\n";
+        std::cout << "I'm a programmer and a developer\n";
+        std::cout << "I'm a student of the 11th grade of the school\n";
+        std::cout << "I'm from Ukraine, Lutsk\n";
+        std::cout << "I'm 17 years old\n";
+        std::cout << "now i'm living Sweden, Malmö\n";
+        std::cout << "I'm studying at the Malmö University\n";
+        std::cout << "I'm learning programming and developing languages\n";
         return 0;
     }
 
