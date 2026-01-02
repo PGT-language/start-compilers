@@ -3,6 +3,8 @@
 #include "Interpreter.h"
 #include "Utils.h"
 #include "Ast.h"
+#include "SemanticAnalyzer.h"
+#include "Error.h"
 
 #include <iostream>
 #include <fstream>
@@ -178,8 +180,23 @@ int main(int argc, char** argv) {
             }
         }
 
-        Interpreter interp;
-        interp.run(combined_program);
+        // Семантический анализ
+        try {
+            SemanticAnalyzer analyzer;
+            analyzer.analyze(combined_program);
+        } catch (const CompilerError& e) {
+            std::cerr << e.get_traceback();
+            return 1;
+        }
+
+        // Выполнение
+        try {
+            Interpreter interp;
+            interp.run(combined_program);
+        } catch (const CompilerError& e) {
+            std::cerr << e.get_traceback();
+            return 1;
+        }
 
         return 0;
     }

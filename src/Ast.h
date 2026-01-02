@@ -2,11 +2,15 @@
 
 #include "Utils.h"
 #include "Token.h"
+#include "Error.h"
 #include <memory>
 #include <vector>
 #include <string>
 
-struct AstNode { virtual ~AstNode() = default; };
+struct AstNode { 
+    SourceLocation location;  // Позиция в исходном коде
+    virtual ~AstNode() = default; 
+};
 
 struct FunctionDef : AstNode {
     std::string name;

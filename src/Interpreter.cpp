@@ -1,5 +1,6 @@
 #include "Interpreter.h"
 #include "Utils.h"
+#include "Error.h"
 #include <iostream>
 #include <limits>
 
@@ -22,8 +23,13 @@ void Interpreter::run(const std::vector<std::shared_ptr<AstNode>>& program) {
 }
 
 void Interpreter::execute_function(const std::string& name, const std::vector<Value>& call_args) {
+    if (!functions.count(name)) {
+        throw UndefinedError(name, "function", SourceLocation());
+    }
     auto func = functions[name];
-    if (!func) return;
+    
+    // Добавляем текущую функцию в стек вызовов
+    call_stack.push_back(func->location);
 
     // Локальные переменные функции (параметры + переменные внутри функции)
     std::map<std::string, Value> locals;
@@ -35,8 +41,9 @@ void Interpreter::execute_function(const std::string& name, const std::vector<Va
         if (DEBUG) std::cout << "[DEBUG] Param " << func->param_names[i] << " = " << call_args[i].to_string() << std::endl;
     }
 
-    for (const auto& stmt : func->body) {
-        if (auto decl = std::dynamic_pointer_cast<VarDecl>(stmt)) {
+    try {
+        for (const auto& stmt : func->body) {
+            if (auto decl = std::dynamic_pointer_cast<VarDecl>(stmt)) {
             Value val = eval(decl->expr, locals);
             // Если переменная уже существует глобально, изменяем глобальную
             // Иначе создаем локальную переменную
@@ -47,7 +54,7 @@ void Interpreter::execute_function(const std::string& name, const std::vector<Va
                 locals[decl->name] = val;
                 if (DEBUG) std::cout << "[DEBUG] Set local var " << decl->name << " = " << val.to_string() << std::endl;
             }
-        } else if (auto print = std::dynamic_pointer_cast<PrintStmt>(stmt)) {
+            } else if (auto print = std::dynamic_pointer_cast<PrintStmt>(stmt)) {
             size_t fmt_idx = 0;
             for (const auto& arg : print->args) {
                 Value v = eval(arg, locals);
@@ -62,12 +69,17 @@ void Interpreter::execute_function(const std::string& name, const std::vector<Va
                 // Для printg тоже добавляем перенос строки, чтобы курсор был на новой строке
                 std::cout << std::endl;
             }
-        } else if (auto call = std::dynamic_pointer_cast<ConectCall>(stmt)) {
+            } else if (auto call = std::dynamic_pointer_cast<ConectCall>(stmt)) {
             std::vector<Value> args;
             for (const auto& a : call->args) args.push_back(eval(a, locals));
             if (DEBUG) std::cout << "[DEBUG] Calling " << call->func_name << " with " << args.size() << " args" << std::endl;
-            execute_function(call->func_name, args);
-        } else if (auto if_stmt = std::dynamic_pointer_cast<IfStmt>(stmt)) {
+            try {
+                execute_function(call->func_name, args);
+            } catch (CompilerError& e) {
+                e.traceback.push_back(call->location);
+                throw;
+            }
+            } else if (auto if_stmt = std::dynamic_pointer_cast<IfStmt>(stmt)) {
             Value cond_val = eval(if_stmt->condition, locals);
             bool condition_true = false;
             
@@ -106,7 +118,12 @@ void Interpreter::execute_function(const std::string& name, const std::vector<Va
                 } else if (auto call = std::dynamic_pointer_cast<ConectCall>(s)) {
                     std::vector<Value> args;
                     for (const auto& a : call->args) args.push_back(eval(a, locals));
-                    execute_function(call->func_name, args);
+                    try {
+                        execute_function(call->func_name, args);
+                    } catch (CompilerError& e) {
+                        e.traceback.push_back(call->location);
+                        throw;
+                    }
                 } else if (auto input = std::dynamic_pointer_cast<InputStmt>(s)) {
                     Value val;
                     if (!input->prompt.empty()) {
@@ -173,12 +190,17 @@ void Interpreter::execute_function(const std::string& name, const std::vector<Va
                         } else if (auto call = std::dynamic_pointer_cast<ConectCall>(ns)) {
                             std::vector<Value> args;
                             for (const auto& a : call->args) args.push_back(eval(a, locals));
-                            execute_function(call->func_name, args);
+                            try {
+                                execute_function(call->func_name, args);
+                            } catch (CompilerError& e) {
+                                e.traceback.push_back(call->location);
+                                throw;
+                            }
                         }
                     }
                 }
             }
-        } else if (auto input = std::dynamic_pointer_cast<InputStmt>(stmt)) {
+            } else if (auto input = std::dynamic_pointer_cast<InputStmt>(stmt)) {
             Value val;
 
             // Выводим промпт, если он задан
@@ -226,8 +248,16 @@ void Interpreter::execute_function(const std::string& name, const std::vector<Va
                 locals[var_name] = val;
                 if (DEBUG) std::cout << "[DEBUG] Input saved to local '" << var_name << "' = " << val.to_string() << std::endl;
             }
+            }
         }
+    } catch (CompilerError& e) {
+        // Добавляем traceback
+        e.traceback = call_stack;
+        call_stack.pop_back();
+        throw;
     }
+    // Удаляем функцию из стека вызовов
+    call_stack.pop_back();
 }
 
 Value Interpreter::eval(const std::shared_ptr<AstNode>& node, const std::map<std::string, Value>& locals) {
@@ -241,9 +271,10 @@ Value Interpreter::eval(const std::shared_ptr<AstNode>& node, const std::map<std
         if (globals.count(id->name)) {
             return globals[id->name];
         }
-        // Если переменная не найдена, возвращаем пустую строку (а не пустое значение)
-        // Это нужно для сравнения строк, когда одна из переменных не определена
-        return Value(std::string(""));
+        // Если переменная не найдена, выбрасываем ошибку с traceback
+        UndefinedError err(id->name, "variable", id->location);
+        err.traceback = call_stack;
+        throw err;
     }
     if (auto bin = std::dynamic_pointer_cast<BinaryOp>(node)) {
         Value l = eval(bin->left, locals);

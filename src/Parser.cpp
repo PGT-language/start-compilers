@@ -136,18 +136,22 @@ std::shared_ptr<AstNode> Parser::parse_statement() {
     if (current().type == T_IDENTIFIER && pos + 1 < tokens.size() && tokens[pos + 1].type == T_PLUS) {
         return parse_var_decl();
     }
+    if (current().type == T_IDENTIFIER && pos + 1 < tokens.size() && tokens[pos + 1].type == T_LPAREN) {
+        return parse_function_call();  // func1()
+    }
     if (current().type == T_CONECT) return parse_conect();
     if (current().type == T_RETURN) { advance(); return nullptr; }
     return nullptr;
 }
 
 std::shared_ptr<VarDecl> Parser::parse_var_decl() {
+    auto decl = std::make_shared<VarDecl>();
+    decl->location = SourceLocation(current().line, 0);  // Сохраняем позицию
     std::string name = current().value; advance();
     advance(); // +
     advance(); // type
     advance(); // =
     auto expr = parse_expr();
-    auto decl = std::make_shared<VarDecl>();
     decl->name = name;
     decl->expr = expr;
     return decl;
@@ -160,9 +164,11 @@ std::shared_ptr<AstNode> Parser::parse_comparison() {
     while (!is_eof() && (current().type == T_GREATER || current().type == T_LESS || 
                          current().type == T_GREATER_EQUAL || current().type == T_LESS_EQUAL ||
                          current().type == T_EQUAL_EQUAL || current().type == T_NOT_EQUAL)) {
+        int op_line = current().line;
         TokenType op = current().type; advance();
         auto right = parse_add_sub();
         auto bin = std::make_shared<BinaryOp>();
+        bin->location = SourceLocation(op_line, 0);
         bin->op = op; bin->left = node; bin->right = right;
         node = bin;
     }
@@ -172,9 +178,11 @@ std::shared_ptr<AstNode> Parser::parse_comparison() {
 std::shared_ptr<AstNode> Parser::parse_add_sub() {
     auto node = parse_mul_div();
     while (!is_eof() && (current().type == T_PLUS || current().type == T_MINUS)) {
+        int op_line = current().line;
         TokenType op = current().type; advance();
         auto right = parse_mul_div();
         auto bin = std::make_shared<BinaryOp>();
+        bin->location = SourceLocation(op_line, 0);
         bin->op = op; bin->left = node; bin->right = right;
         node = bin;
     }
@@ -184,9 +192,11 @@ std::shared_ptr<AstNode> Parser::parse_add_sub() {
 std::shared_ptr<AstNode> Parser::parse_mul_div() {
     auto node = parse_primary();
     while (!is_eof() && (current().type == T_STAR || current().type == T_SLASH)) {
+        int op_line = current().line;
         TokenType op = current().type; advance();
         auto right = parse_primary();
         auto bin = std::make_shared<BinaryOp>();
+        bin->location = SourceLocation(op_line, 0);
         bin->op = op; bin->left = node; bin->right = right;
         node = bin;
     }
@@ -197,8 +207,10 @@ std::shared_ptr<AstNode> Parser::parse_primary() {
     if (is_eof()) return nullptr;
     if (current().type == T_NUMBER) {
         std::string num_str = current().value;
+        int line = current().line;
         advance();
         auto lit = std::make_shared<Literal>();
+        lit->location = SourceLocation(line, 0);
         if (num_str.find('.') != std::string::npos) {
             lit->value = Value(std::stod(num_str));
         } else {
@@ -208,12 +220,14 @@ std::shared_ptr<AstNode> Parser::parse_primary() {
     }
     if (current().type == T_STRING_LITERAL) {
         auto lit = std::make_shared<Literal>();
+        lit->location = SourceLocation(current().line, 0);
         lit->value = Value(current().value);
         advance();
         return lit;
     }
     if (current().type == T_IDENTIFIER || current().type == T_INPUT) {
         auto id = std::make_shared<Identifier>();
+        id->location = SourceLocation(current().line, 0);
         id->name = current().value;
         advance();
         return id;
@@ -222,13 +236,14 @@ std::shared_ptr<AstNode> Parser::parse_primary() {
 }
 
 std::shared_ptr<PrintStmt> Parser::parse_print() {
+    auto p = std::make_shared<PrintStmt>();
+    p->location = SourceLocation(current().line, 0);  // Сохраняем позицию
     TokenType print_type = current().type;
     bool is_printg = (print_type == T_PRINTG);
     if (DEBUG) std::cout << "[DEBUG] parse_print: starting at token: " << current().type << " (" << current().value << ")" << std::endl;
     advance(); // print, printg or println
     advance(); // (
 
-    auto p = std::make_shared<PrintStmt>();
     p->is_printg = is_printg;
 
     while (!is_eof() && current().type != T_RPAREN) {
@@ -322,9 +337,10 @@ std::shared_ptr<InputStmt> Parser::parse_input() {
 }
 
 std::shared_ptr<ConectCall> Parser::parse_conect() {
+    int call_line = current().line;
     advance(); // conect
     advance(); // (
-
+    
     std::string name;
     if (current().type == T_STRING_LITERAL) {
         name = current().value;
@@ -333,15 +349,38 @@ std::shared_ptr<ConectCall> Parser::parse_conect() {
         name = current().value;
         advance();
     }
-
+    
     auto call = std::make_shared<ConectCall>();
+    call->location = SourceLocation(call_line, 0);
     call->func_name = name;
-
+    
     if (current().type == T_COMMA) {
         advance();
         while (!is_eof() && current().type != T_RPAREN) {
             call->args.push_back(parse_expr());
             if (current().type == T_COMMA) advance();
+        }
+    }
+    advance(); // )
+    return call;
+}
+
+std::shared_ptr<ConectCall> Parser::parse_function_call() {
+    int call_line = current().line;
+    std::string name = current().value;
+    advance(); // identifier
+    advance(); // (
+    
+    auto call = std::make_shared<ConectCall>();
+    call->location = SourceLocation(call_line, 0);
+    call->func_name = name;
+    
+    // Парсим аргументы, если они есть
+    if (current().type != T_RPAREN) {
+        call->args.push_back(parse_expr());
+        while (!is_eof() && current().type == T_COMMA) {
+            advance(); // ,
+            call->args.push_back(parse_expr());
         }
     }
     advance(); // )
@@ -388,6 +427,7 @@ std::shared_ptr<ImportStmt> Parser::parse_import() {
 }
 
 std::shared_ptr<IfStmt> Parser::parse_if() {
+    int if_line = current().line;
     advance(); // if
     if (current().type != T_LPAREN) {
         if (DEBUG) std::cout << "[DEBUG] Expected '(' after 'if'" << std::endl;
@@ -410,6 +450,7 @@ std::shared_ptr<IfStmt> Parser::parse_if() {
     advance(); // {
     
     auto if_stmt = std::make_shared<IfStmt>();
+    if_stmt->location = SourceLocation(if_line, 0);
     if_stmt->condition = condition;
     
     // Парсим тело if
