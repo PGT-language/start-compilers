@@ -102,13 +102,15 @@ void Interpreter::execute_function(const std::string& name, const std::vector<Va
                 val = Value(x);
             }
 
-            // Сохраняем в локальные переменные, если нет локальной, то в глобальные
-            if (globals.count("input")) {
-                globals["input"] = val;
+            // Сохраняем в указанную переменную (локальную или глобальную)
+            std::string var_name = input->var_name.empty() ? "input" : input->var_name;
+            if (globals.count(var_name)) {
+                globals[var_name] = val;
+                if (DEBUG) std::cout << "[DEBUG] Input saved to global '" << var_name << "' = " << val.to_string() << std::endl;
             } else {
-                locals["input"] = val;
+                locals[var_name] = val;
+                if (DEBUG) std::cout << "[DEBUG] Input saved to local '" << var_name << "' = " << val.to_string() << std::endl;
             }
-            if (DEBUG) std::cout << "[DEBUG] Input saved to 'input' = " << val.to_string() << std::endl;
         }
     }
 }

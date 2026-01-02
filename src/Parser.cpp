@@ -189,19 +189,25 @@ std::shared_ptr<InputStmt> Parser::parse_input() {
     advance(); // cout
     advance(); // (
     
-    // Проверяем, что следующий токен - input
-    if (current().type != T_INPUT) {
+    auto input = std::make_shared<InputStmt>();
+    
+    // Проверяем, что следующий токен - идентификатор (имя переменной) или input
+    if (current().type == T_INPUT) {
+        input->var_name = "input";
+        advance(); // input
+    } else if (current().type == T_IDENTIFIER) {
+        input->var_name = current().value;
+        advance(); // имя переменной
+    } else {
         return nullptr;
     }
-    advance(); // input
+    
     advance(); // ,
     
-    std::string format = current().value;
+    input->format = current().value;
     advance(); // "{int}", "{float}" или "{string}"
     advance(); // )
 
-    auto input = std::make_shared<InputStmt>();
-    input->format = format;
     input->prompt = "";  // промпт пока не поддерживается в синтаксисе
     return input;
 }

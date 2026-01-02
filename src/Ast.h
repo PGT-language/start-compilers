@@ -36,6 +36,7 @@ struct PrintStmt : AstNode {
 struct InputStmt : AstNode {
     std::string format;  // "{int}", "{float}", "{string}"
     std::string prompt;  // опциональный промпт для ввода
+    std::string var_name;  // имя переменной, в которую сохраняется значение (по умолчанию "input")
 };
 
 struct ConectCall : AstNode {
