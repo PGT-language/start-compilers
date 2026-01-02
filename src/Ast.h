@@ -58,3 +58,10 @@ struct IfStmt : AstNode {
     std::vector<std::shared_ptr<AstNode>> then_body;  // тело if
     std::vector<std::shared_ptr<AstNode>> else_body;  // тело else (может быть пустым)
 };
+
+struct FileOp : AstNode {
+    TokenType operation;  // T_CREATE, T_WRITE, T_READ, T_CLOSE, T_DELETE
+    std::shared_ptr<AstNode> file_path;  // путь к файлу (выражение)
+    std::string mode;  // режим работы: "c", "w", "r", "h", "d"
+    std::shared_ptr<AstNode> data;  // данные для записи (только для write), может быть nullptr
+};

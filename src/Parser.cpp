@@ -133,6 +133,13 @@ std::shared_ptr<AstNode> Parser::parse_statement() {
     if (current().type == T_IDENTIFIER && current().value == "if") {
         return parse_if();
     }
+    // Проверяем файловые операции: create::file, write::file, read::file, close::file, delete::file
+    if ((current().type == T_CREATE || current().type == T_WRITE || current().type == T_READ || 
+         current().type == T_CLOSE || current().type == T_DELETE) && 
+        pos + 1 < tokens.size() && tokens[pos + 1].type == T_COLON_COLON &&
+        pos + 2 < tokens.size() && tokens[pos + 2].type == T_FILE) {
+        return parse_file_op();
+    }
     if (current().type == T_IDENTIFIER && pos + 1 < tokens.size() && tokens[pos + 1].type == T_PLUS) {
         return parse_var_decl();
     }
@@ -424,6 +431,68 @@ std::shared_ptr<ImportStmt> Parser::parse_import() {
     if (DEBUG) std::cout << "[DEBUG] Import: " << import_name << " from " << file_path << std::endl;
     
     return import;
+}
+
+std::shared_ptr<FileOp> Parser::parse_file_op() {
+    int op_line = current().line;
+    TokenType operation = current().type;  // T_CREATE, T_WRITE, T_READ, T_CLOSE, T_DELETE
+    advance(); // operation
+    
+    if (current().type != T_COLON_COLON) {
+        if (DEBUG) std::cout << "[DEBUG] Expected '::' after file operation" << std::endl;
+        return nullptr;
+    }
+    advance(); // ::
+    
+    if (current().type != T_FILE) {
+        if (DEBUG) std::cout << "[DEBUG] Expected 'file' after '::'" << std::endl;
+        return nullptr;
+    }
+    advance(); // file
+    
+    if (current().type != T_LPAREN) {
+        if (DEBUG) std::cout << "[DEBUG] Expected '(' after 'file'" << std::endl;
+        return nullptr;
+    }
+    advance(); // (
+    
+    auto file_op = std::make_shared<FileOp>();
+    file_op->location = SourceLocation(op_line, 0);
+    file_op->operation = operation;
+    file_op->data = nullptr;
+    
+    // Парсим режим (первый аргумент - строка с режимом)
+    if (current().type == T_STRING_LITERAL) {
+        file_op->mode = current().value;
+        advance();
+    } else {
+        // Если это не строка, пытаемся распарсить как выражение (путь к файлу)
+        file_op->file_path = parse_expr();
+        // Режим будет установлен позже или по умолчанию
+        file_op->mode = "";
+    }
+    
+    // Для write может быть второй аргумент - данные для записи
+    if (operation == T_WRITE && current().type == T_COMMA) {
+        advance(); // ,
+        file_op->data = parse_expr();
+    }
+    
+    if (current().type != T_RPAREN) {
+        if (DEBUG) std::cout << "[DEBUG] Expected ')' after file operation arguments" << std::endl;
+        return nullptr;
+    }
+    advance(); // )
+    
+    // Если file_path не был установлен, используем режим как путь (для обратной совместимости)
+    if (!file_op->file_path && !file_op->mode.empty()) {
+        // Создаем Literal с путем из режима
+        // Но по документации, режим - это "c", "w", "r", "h", "d"
+        // Путь к файлу должен быть передан отдельно
+        // Пока оставим mode как есть, путь будет установлен в интерпретаторе
+    }
+    
+    return file_op;
 }
 
 std::shared_ptr<IfStmt> Parser::parse_if() {

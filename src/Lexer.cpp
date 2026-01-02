@@ -56,6 +56,16 @@ Token Lexer::next_token() {
             pos--;
             // Продолжаем как обычный символ
         }
+        if (c == ':') {
+            get();
+            if (peek() == ':') {
+                get();
+                return {T_COLON_COLON, "::", line};
+            }
+            // Если это не ::, возвращаемся назад
+            pos--;
+            // Продолжаем как обычный символ
+        }
 
         if (c == '"') {
             get();
@@ -193,7 +203,7 @@ Token Lexer::next_token() {
 
         if (std::isalpha(c) || c == '_') {
             std::string id;
-            while (std::isalnum(peek()) || peek() == '_' || peek() == ':') id += get();
+            while (std::isalnum(peek()) || peek() == '_') id += get();
 
             if (id == "package") return {T_PACKAGE, id, line};
             if (id == "function") return {T_FUNCTION, id, line};
@@ -209,6 +219,14 @@ Token Lexer::next_token() {
             if (id == "string") return {T_STRING, id, line};
             if (id == "from") return {T_FROM, id, line};
             if (id == "import") return {T_IMPORT, id, line};
+            if (id == "if") return {T_IF, id, line};
+            if (id == "else") return {T_ELSE, id, line};
+            if (id == "create") return {T_CREATE, id, line};
+            if (id == "write") return {T_WRITE, id, line};
+            if (id == "read") return {T_READ, id, line};
+            if (id == "close") return {T_CLOSE, id, line};
+            if (id == "delete") return {T_DELETE, id, line};
+            if (id == "file") return {T_FILE, id, line};
 
             return {T_IDENTIFIER, id, line};
         }
