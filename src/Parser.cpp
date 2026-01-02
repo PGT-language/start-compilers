@@ -1,5 +1,6 @@
 #include "Parser.h"
 #include "Utils.h"
+#include "Error.h"
 #include <iostream>
 #include <limits>
 
@@ -99,20 +100,34 @@ std::shared_ptr<FunctionDef> Parser::parse_function() {
         last_pos = pos;
         
         size_t start_pos = pos;
-        auto stmt = parse_statement();
-        if (stmt) {
-            func->body.push_back(stmt);
+        try {
+            auto stmt = parse_statement();
+            if (stmt) {
+                func->body.push_back(stmt);
         } else {
             // Если не удалось распарсить и позиция не изменилась, значит застряли
             if (pos == start_pos) {
-                if (DEBUG) std::cout << "[DEBUG] Cannot parse statement at token: " << current().type << " (" << current().value << "), skipping" << std::endl;
-                
-                
-                // Пропускаем токен
-                advance();
+                // Проверяем, не является ли это попыткой вызвать файловую операцию с ошибкой
+                std::string token_val = current().value;
+                if (current().type == T_IDENTIFIER && 
+                    (token_val.find("write") != std::string::npos || 
+                     token_val.find("create") != std::string::npos ||
+                     token_val.find("read") != std::string::npos ||
+                     token_val.find("close") != std::string::npos ||
+                     token_val.find("delete") != std::string::npos)) {
+                    // Похоже на опечатку в файловой операции
+                    throw SyntaxError("Unknown file operation: '" + token_val + "'. Did you mean 'write', 'create', 'read', 'close', or 'delete'?", 
+                                     SourceLocation(current().line, 0));
+                }
+                // Выбрасываем ошибку синтаксиса
+                throw SyntaxError("Unexpected token: '" + current().value + "' at line " + std::to_string(current().line), 
+                                 SourceLocation(current().line, 0));
             } else {
-                // Позиция изменилась, просто продолжаем
+                // Позиция изменилась, просто продолжаем (возможно, это был return или другой оператор)
             }
+        }
+        } catch (const SyntaxError& e) {
+            throw;  // Пробрасываем ошибку синтаксиса дальше
         }
     }
 
@@ -147,7 +162,18 @@ std::shared_ptr<AstNode> Parser::parse_statement() {
         return parse_function_call();  // func1()
     }
     if (current().type == T_CONECT) return parse_conect();
-    if (current().type == T_RETURN) { advance(); return nullptr; }
+    if (current().type == T_RETURN) { 
+        advance(); // return
+        // Пропускаем выражение после return, если оно есть (до закрывающей скобки или конца функции)
+        if (!is_eof() && current().type != T_RBRACE) {
+            try {
+                parse_expr();  // Парсим выражение, но не используем результат
+            } catch (...) {
+                // Если не удалось распарсить, просто пропускаем
+            }
+        }
+        return nullptr; 
+    }
     return nullptr;
 }
 
@@ -300,19 +326,11 @@ std::shared_ptr<PrintStmt> Parser::parse_print() {
         }
     }
     if (current().type != T_RPAREN) {
-        if (DEBUG) std::cout << "[DEBUG] parse_print: expected ')' but got: " << current().type << " (" << current().value << "), skipping to )" << std::endl;
-        // Пропускаем до закрывающей скобки
-        while (!is_eof() && current().type != T_RPAREN) {
-            advance();
-        }
+        throw SyntaxError("Expected ')' after print arguments, got: " + current().value, 
+                         SourceLocation(current().line, 0));
     }
-    if (current().type == T_RPAREN) {
-        advance(); // )
-        if (DEBUG) std::cout << "[DEBUG] parse_print: successfully parsed " << p->args.size() << " args" << std::endl;
-    } else {
-        if (DEBUG) std::cout << "[DEBUG] parse_print: failed to find closing ')'" << std::endl;
-        return nullptr;
-    }
+    advance(); // )
+    if (DEBUG) std::cout << "[DEBUG] parse_print: successfully parsed " << p->args.size() << " args" << std::endl;
     return p;
 }
 
@@ -439,20 +457,20 @@ std::shared_ptr<FileOp> Parser::parse_file_op() {
     advance(); // operation
     
     if (current().type != T_COLON_COLON) {
-        if (DEBUG) std::cout << "[DEBUG] Expected '::' after file operation" << std::endl;
-        return nullptr;
+        throw SyntaxError("Expected '::' after file operation, got: " + current().value, 
+                         SourceLocation(current().line, 0));
     }
     advance(); // ::
     
     if (current().type != T_FILE) {
-        if (DEBUG) std::cout << "[DEBUG] Expected 'file' after '::'" << std::endl;
-        return nullptr;
+        throw SyntaxError("Expected 'file' after '::', got: " + current().value, 
+                         SourceLocation(current().line, 0));
     }
     advance(); // file
     
     if (current().type != T_LPAREN) {
-        if (DEBUG) std::cout << "[DEBUG] Expected '(' after 'file'" << std::endl;
-        return nullptr;
+        throw SyntaxError("Expected '(' after 'file', got: " + current().value, 
+                         SourceLocation(current().line, 0));
     }
     advance(); // (
     
@@ -461,16 +479,18 @@ std::shared_ptr<FileOp> Parser::parse_file_op() {
     file_op->operation = operation;
     file_op->data = nullptr;
     
-    // Парсим режим (первый аргумент - строка с режимом)
-    if (current().type == T_STRING_LITERAL) {
-        file_op->mode = current().value;
-        advance();
-    } else {
-        // Если это не строка, пытаемся распарсить как выражение (путь к файлу)
-        file_op->file_path = parse_expr();
-        // Режим будет установлен позже или по умолчанию
-        file_op->mode = "";
+    // Определяем режим на основе операции
+    switch (operation) {
+        case T_CREATE: file_op->mode = "c"; break;
+        case T_WRITE: file_op->mode = "w"; break;
+        case T_READ: file_op->mode = "r"; break;
+        case T_CLOSE: file_op->mode = "h"; break;
+        case T_DELETE: file_op->mode = "d"; break;
+        default: file_op->mode = "";
     }
+    
+    // Парсим путь к файлу (первый аргумент)
+    file_op->file_path = parse_expr();
     
     // Для write может быть второй аргумент - данные для записи
     if (operation == T_WRITE && current().type == T_COMMA) {
@@ -479,18 +499,10 @@ std::shared_ptr<FileOp> Parser::parse_file_op() {
     }
     
     if (current().type != T_RPAREN) {
-        if (DEBUG) std::cout << "[DEBUG] Expected ')' after file operation arguments" << std::endl;
-        return nullptr;
+        throw SyntaxError("Expected ')' after file operation arguments, got: " + current().value, 
+                         SourceLocation(current().line, 0));
     }
     advance(); // )
-    
-    // Если file_path не был установлен, используем режим как путь (для обратной совместимости)
-    if (!file_op->file_path && !file_op->mode.empty()) {
-        // Создаем Literal с путем из режима
-        // Но по документации, режим - это "c", "w", "r", "h", "d"
-        // Путь к файлу должен быть передан отдельно
-        // Пока оставим mode как есть, путь будет установлен в интерпретаторе
-    }
     
     return file_op;
 }
@@ -499,22 +511,22 @@ std::shared_ptr<IfStmt> Parser::parse_if() {
     int if_line = current().line;
     advance(); // if
     if (current().type != T_LPAREN) {
-        if (DEBUG) std::cout << "[DEBUG] Expected '(' after 'if'" << std::endl;
-        return nullptr;
+        throw SyntaxError("Expected '(' after 'if', got: " + current().value, 
+                         SourceLocation(current().line, 0));
     }
     advance(); // (
     
     auto condition = parse_expr();
     
     if (current().type != T_RPAREN) {
-        if (DEBUG) std::cout << "[DEBUG] Expected ')' after condition" << std::endl;
-        return nullptr;
+        throw SyntaxError("Expected ')' after if condition, got: " + current().value, 
+                         SourceLocation(current().line, 0));
     }
     advance(); // )
     
     if (current().type != T_LBRACE) {
-        if (DEBUG) std::cout << "[DEBUG] Expected '{' after if condition" << std::endl;
-        return nullptr;
+        throw SyntaxError("Expected '{' after if condition, got: " + current().value, 
+                         SourceLocation(current().line, 0));
     }
     advance(); // {
     

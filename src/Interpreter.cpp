@@ -3,6 +3,8 @@
 #include "Error.h"
 #include <iostream>
 #include <limits>
+#include <fstream>
+#include <filesystem>
 
 void Interpreter::run(const std::vector<std::shared_ptr<AstNode>>& program) {
     // Сначала обрабатываем все функции и глобальные переменные
@@ -196,6 +198,53 @@ void Interpreter::execute_function(const std::string& name, const std::vector<Va
                                 e.traceback.push_back(call->location);
                                 throw;
                             }
+                        } else if (auto file_op = std::dynamic_pointer_cast<FileOp>(ns)) {
+                            // Обработка файловых операций в вложенных if
+                            Value file_path_val = eval(file_op->file_path, locals);
+                            if (file_path_val.type != ValueType::STRING) {
+                                throw TypeError("File path must be a string", file_op->location);
+                            }
+                            std::string file_path = file_path_val.str_val;
+                            
+                            // Простая обработка (полная реализация уже есть выше)
+                            if (file_op->operation == T_CREATE) {
+                                std::ofstream file(file_path, std::ios::out);
+                                if (!file.is_open()) {
+                                    throw RuntimeError("Failed to create file: " + file_path, file_op->location);
+                                }
+                                file.close();
+                            } else if (file_op->operation == T_WRITE && file_op->data) {
+                                Value data_val = eval(file_op->data, locals);
+                                std::ofstream file(file_path, std::ios::out | std::ios::app);
+                                if (!file.is_open()) {
+                                    throw RuntimeError("Failed to open file for writing: " + file_path, file_op->location);
+                                }
+                                file << data_val.to_string();
+                                file.close();
+                            } else if (file_op->operation == T_READ) {
+                                std::ifstream file(file_path);
+                                if (!file.is_open()) {
+                                    throw RuntimeError("Failed to open file for reading: " + file_path, file_op->location);
+                                }
+                                std::string content;
+                                std::string line;
+                                while (std::getline(file, line)) {
+                                    if (!content.empty()) content += "\n";
+                                    content += line;
+                                }
+                                file.close();
+                                std::cout << content << std::endl;
+                            } else if (file_op->operation == T_DELETE) {
+                                if (std::filesystem::exists(file_path)) {
+                                    if (open_files.count(file_path)) {
+                                        open_files[file_path]->close();
+                                        open_files.erase(file_path);
+                                    }
+                                    std::filesystem::remove(file_path);
+                                } else {
+                                    throw RuntimeError("File does not exist: " + file_path, file_op->location);
+                                }
+                            }
                         }
                     }
                 }
@@ -247,6 +296,87 @@ void Interpreter::execute_function(const std::string& name, const std::vector<Va
             } else {
                 locals[var_name] = val;
                 if (DEBUG) std::cout << "[DEBUG] Input saved to local '" << var_name << "' = " << val.to_string() << std::endl;
+            }
+            } else if (auto file_op = std::dynamic_pointer_cast<FileOp>(stmt)) {
+            // Обработка файловых операций
+            Value file_path_val = eval(file_op->file_path, locals);
+            if (file_path_val.type != ValueType::STRING) {
+                throw TypeError("File path must be a string", file_op->location);
+            }
+            std::string file_path = file_path_val.str_val;
+            
+            switch (file_op->operation) {
+                case T_CREATE: {
+                    // Создание файла
+                    std::ofstream file(file_path, std::ios::out);
+                    if (!file.is_open()) {
+                        throw RuntimeError("Failed to create file: " + file_path, file_op->location);
+                    }
+                    file.close();
+                    if (DEBUG) std::cout << "[DEBUG] Created file: " << file_path << std::endl;
+                    break;
+                }
+                case T_WRITE: {
+                    // Запись в файл
+                    if (!file_op->data) {
+                        throw SemanticError("Write operation requires data argument", file_op->location);
+                    }
+                    Value data_val = eval(file_op->data, locals);
+                    std::string data_str = data_val.to_string();
+                    
+                    std::ofstream file(file_path, std::ios::out | std::ios::app);
+                    if (!file.is_open()) {
+                        throw RuntimeError("Failed to open file for writing: " + file_path, file_op->location);
+                    }
+                    file << data_str;
+                    file.close();
+                    if (DEBUG) std::cout << "[DEBUG] Wrote to file: " << file_path << std::endl;
+                    break;
+                }
+                case T_READ: {
+                    // Чтение из файла
+                    std::ifstream file(file_path);
+                    if (!file.is_open()) {
+                        throw RuntimeError("Failed to open file for reading: " + file_path, file_op->location);
+                    }
+                    std::string content;
+                    std::string line;
+                    while (std::getline(file, line)) {
+                        if (!content.empty()) content += "\n";
+                        content += line;
+                    }
+                    file.close();
+                    // Сохраняем результат в переменную (можно расширить для сохранения в переменную)
+                    if (DEBUG) std::cout << "[DEBUG] Read from file: " << file_path << " (" << content.size() << " bytes)" << std::endl;
+                    // Пока просто выводим содержимое (можно расширить для сохранения в переменную)
+                    std::cout << content << std::endl;
+                    break;
+                }
+                case T_CLOSE: {
+                    // Закрытие файла (если он был открыт через другой механизм)
+                    if (open_files.count(file_path)) {
+                        open_files[file_path]->close();
+                        open_files.erase(file_path);
+                        if (DEBUG) std::cout << "[DEBUG] Closed file: " << file_path << std::endl;
+                    }
+                    break;
+                }
+                case T_DELETE: {
+                    // Удаление файла
+                    if (std::filesystem::exists(file_path)) {
+                        if (open_files.count(file_path)) {
+                            open_files[file_path]->close();
+                            open_files.erase(file_path);
+                        }
+                        std::filesystem::remove(file_path);
+                        if (DEBUG) std::cout << "[DEBUG] Deleted file: " << file_path << std::endl;
+                    } else {
+                        throw RuntimeError("File does not exist: " + file_path, file_op->location);
+                    }
+                    break;
+                }
+                default:
+                    throw SemanticError("Unknown file operation", file_op->location);
             }
             }
         }

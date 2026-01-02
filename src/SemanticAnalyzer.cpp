@@ -179,6 +179,8 @@ void SemanticAnalyzer::analyze_statement(const std::shared_ptr<AstNode>& stmt) {
         analyze_if(if_stmt);
     } else if (auto call = std::dynamic_pointer_cast<ConectCall>(stmt)) {
         analyze_call(call);
+    } else if (auto file_op = std::dynamic_pointer_cast<FileOp>(stmt)) {
+        analyze_file_op(file_op);
     }
 }
 
@@ -282,6 +284,23 @@ void SemanticAnalyzer::analyze_call(const std::shared_ptr<ConectCall>& call) {
     // Анализируем аргументы
     for (const auto& arg : call->args) {
         analyze_expr(arg);
+    }
+}
+
+void SemanticAnalyzer::analyze_file_op(const std::shared_ptr<FileOp>& file_op) {
+    // Анализируем путь к файлу (должен быть строкой)
+    analyze_expr(file_op->file_path);
+    
+    // Для write проверяем данные
+    if (file_op->operation == T_WRITE && file_op->data) {
+        analyze_expr(file_op->data);
+    }
+    
+    // Проверяем, что операция валидна
+    if (file_op->operation != T_CREATE && file_op->operation != T_WRITE && 
+        file_op->operation != T_READ && file_op->operation != T_CLOSE && 
+        file_op->operation != T_DELETE) {
+        throw SemanticError("Invalid file operation", file_op->location);
     }
 }
 

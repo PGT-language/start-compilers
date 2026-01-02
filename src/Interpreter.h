@@ -5,11 +5,13 @@
 #include <map>
 #include <memory>
 #include <vector>
+#include <fstream>
 
 class Interpreter {
     std::map<std::string, std::shared_ptr<FunctionDef>> functions;
     std::map<std::string, Value> globals;  // Глобальные переменные
     std::vector<SourceLocation> call_stack;  // Стек вызовов для traceback
+    std::map<std::string, std::unique_ptr<std::fstream>> open_files;  // Открытые файлы
 
     void execute_function(const std::string& name, const std::vector<Value>& call_args);
     Value eval(const std::shared_ptr<AstNode>& node, const std::map<std::string, Value>& locals = {});

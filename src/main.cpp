@@ -148,7 +148,13 @@ int main(int argc, char** argv) {
             Parser parser;
             parser.load_tokens(tokens);
             if (DEBUG) std::cout << "[DEBUG] Starting parse_program..." << std::endl;
-            auto program = parser.parse_program();
+            std::vector<std::shared_ptr<AstNode>> program;
+            try {
+                program = parser.parse_program();
+            } catch (const CompilerError& e) {
+                std::cerr << e.get_traceback();
+                return 1;
+            }
             if (DEBUG) std::cout << "[DEBUG] Parsed " << program.size() << " nodes" << std::endl;
 
             // Сохраняем AST для этого файла
