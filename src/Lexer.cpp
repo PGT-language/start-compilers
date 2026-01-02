@@ -1,5 +1,6 @@
 #include "Lexer.h"
 #include <cctype>
+#include <iostream>
 
 char Lexer::peek() const { return pos < source.size() ? source[pos] : 0; }
 char Lexer::get() { return pos < source.size() ? source[pos++] : 0; }
@@ -21,7 +22,40 @@ Token Lexer::next_token() {
         if (c == '-') { get(); return {T_MINUS, "-", line}; }
         if (c == '*') { get(); return {T_STAR, "*", line}; }
         if (c == '/') { get(); return {T_SLASH, "/", line}; }
-        if (c == '=') { get(); return {T_EQUAL, "=", line}; }
+        if (c == '=') {
+            get();
+            if (peek() == '=') {
+                get();
+                return {T_EQUAL_EQUAL, "==", line};
+            }
+            return {T_EQUAL, "=", line};
+        }
+        if (c == '>') {
+            get();
+            if (peek() == '=') {
+                get();
+                return {T_GREATER_EQUAL, ">=", line};
+            }
+            return {T_GREATER, ">", line};
+        }
+        if (c == '<') {
+            get();
+            if (peek() == '=') {
+                get();
+                return {T_LESS_EQUAL, "<=", line};
+            }
+            return {T_LESS, "<", line};
+        }
+        if (c == '!') {
+            get();
+            if (peek() == '=') {
+                get();
+                return {T_NOT_EQUAL, "!=", line};
+            }
+            // Если это не !=, возвращаемся назад
+            pos--;
+            // Продолжаем как обычный символ
+        }
 
         if (c == '"') {
             get();
@@ -39,19 +73,40 @@ Token Lexer::next_token() {
                 is_first_char = false;
             }
             
+            size_t iterations = 0;
+            size_t last_pos = pos;
             while (peek() != 0) {
+                iterations++;
+                if (iterations > 100000) {
+                    // Защита от бесконечного цикла
+                    std::cerr << "Error: Infinite loop in string lexer at line " << line << std::endl;
+                    break;
+                }
+                
+                // Проверяем, не застряли ли мы на одном месте
+                if (pos == last_pos && iterations > 1000) {
+                    std::cerr << "Error: Lexer stuck at position " << pos << " in string" << std::endl;
+                    break;
+                }
+                last_pos = pos;
+                
                 if (peek() == '"') {
                     // Проверяем контекст после закрывающей кавычки
                     // Сохраняем текущую позицию
                     size_t save_pos = pos;
                     get(); // съедаем кавычку
+                    size_t after_quote_pos = pos;
+                    int saved_line = line;
                     // Пропускаем пробелы, табуляции и переносы строк после кавычки
                     while (peek() == ' ' || peek() == '\t' || peek() == '\n' || peek() == '\r') {
                         if (peek() == '\n') line++;
                         get();
                     }
-                    // Если следующий символ - закрывающая скобка, запятая или конец файла, то это конец строки
-                    if (peek() == ')' || peek() == ',' || peek() == ';' || peek() == 0) {
+                    // Если следующий символ - закрывающая скобка, запятая, идентификатор или конец файла, то это конец строки
+                    if (peek() == ')' || peek() == ',' || peek() == ';' || peek() == 0 || isalpha(peek())) {
+                        // Возвращаемся к позиции сразу после кавычки, чтобы не пропустить символы
+                        pos = after_quote_pos;
+                        line = saved_line;
                         // Убираем пробелы, табуляции и переносы строк в конце строки
                         // Удаляем все пробельные символы с конца, включая последний перенос строки
                         while (!str.empty()) {
@@ -101,9 +156,14 @@ Token Lexer::next_token() {
                         str = cleaned;
                         break;
                     }
-                    // Иначе это кавычка внутри строки, возвращаемся назад
+                    // Иначе это кавычка внутри строки, возвращаемся назад и добавляем её в строку
+                    // Но нужно продвинуться вперед, чтобы не зациклиться
                     pos = save_pos;
                     str += '"';
+                    // Продвигаемся вперед, пропуская кавычку, чтобы не зациклиться
+                    if (pos < source.size()) {
+                        pos++; // Пропускаем кавычку
+                    }
                 } else {
                     char ch = get();
                     // Не добавляем пробелы и табуляции, если они идут перед закрывающей кавычкой на новой строке

@@ -14,7 +14,20 @@ void Parser::advance() { if (!is_eof()) ++pos; }
 
 std::vector<std::shared_ptr<AstNode>> Parser::parse_program() {
     std::vector<std::shared_ptr<AstNode>> nodes;
+    size_t last_pos = pos;
+    size_t iterations = 0;
     while (!is_eof()) {
+        if (pos == last_pos) {
+            iterations++;
+            if (iterations > 1000) {
+                if (DEBUG) std::cout << "[DEBUG] Parser stuck in parse_program at token: " << current().type << " (" << current().value << ")" << std::endl;
+                break;
+            }
+        } else {
+            iterations = 0;
+        }
+        last_pos = pos;
+        
         if (current().type == T_PACKAGE) {
             advance(); advance();
         } else if (current().type == T_FROM) {
@@ -66,10 +79,41 @@ std::shared_ptr<FunctionDef> Parser::parse_function() {
 
     advance(); // {
 
+    size_t iterations = 0;
+    size_t last_pos = pos;
     while (!is_eof() && current().type != T_RBRACE) {
+        // Защита от бесконечного цикла
+        if (pos == last_pos) {
+            iterations++;
+            if (iterations > 100) {
+                if (DEBUG) std::cout << "[DEBUG] Parser stuck in parse_function at token: " << current().type << " (" << current().value << "), skipping to }" << std::endl;
+                // Пропускаем до закрывающей скобки функции
+                while (!is_eof() && current().type != T_RBRACE) {
+                    advance();
+                }
+                break;
+            }
+        } else {
+            iterations = 0;
+        }
+        last_pos = pos;
+        
+        size_t start_pos = pos;
         auto stmt = parse_statement();
-        if (stmt) func->body.push_back(stmt);
-        else advance();
+        if (stmt) {
+            func->body.push_back(stmt);
+        } else {
+            // Если не удалось распарсить и позиция не изменилась, значит застряли
+            if (pos == start_pos) {
+                if (DEBUG) std::cout << "[DEBUG] Cannot parse statement at token: " << current().type << " (" << current().value << "), skipping" << std::endl;
+                
+                
+                // Пропускаем токен
+                advance();
+            } else {
+                // Позиция изменилась, просто продолжаем
+            }
+        }
     }
 
     advance(); // }
@@ -85,6 +129,9 @@ std::shared_ptr<AstNode> Parser::parse_statement() {
     }
     if (current().type == T_PRINT || current().type == T_PRINTG || current().type == T_PRINTLN) {
         return parse_print();
+    }
+    if (current().type == T_IDENTIFIER && current().value == "if") {
+        return parse_if();
     }
     if (current().type == T_IDENTIFIER && pos + 1 < tokens.size() && tokens[pos + 1].type == T_PLUS) {
         return parse_var_decl();
@@ -106,7 +153,21 @@ std::shared_ptr<VarDecl> Parser::parse_var_decl() {
     return decl;
 }
 
-std::shared_ptr<AstNode> Parser::parse_expr() { return parse_add_sub(); }
+std::shared_ptr<AstNode> Parser::parse_expr() { return parse_comparison(); }
+
+std::shared_ptr<AstNode> Parser::parse_comparison() {
+    auto node = parse_add_sub();
+    while (!is_eof() && (current().type == T_GREATER || current().type == T_LESS || 
+                         current().type == T_GREATER_EQUAL || current().type == T_LESS_EQUAL ||
+                         current().type == T_EQUAL_EQUAL || current().type == T_NOT_EQUAL)) {
+        TokenType op = current().type; advance();
+        auto right = parse_add_sub();
+        auto bin = std::make_shared<BinaryOp>();
+        bin->op = op; bin->left = node; bin->right = right;
+        node = bin;
+    }
+    return node;
+}
 
 std::shared_ptr<AstNode> Parser::parse_add_sub() {
     auto node = parse_mul_div();
@@ -163,6 +224,7 @@ std::shared_ptr<AstNode> Parser::parse_primary() {
 std::shared_ptr<PrintStmt> Parser::parse_print() {
     TokenType print_type = current().type;
     bool is_printg = (print_type == T_PRINTG);
+    if (DEBUG) std::cout << "[DEBUG] parse_print: starting at token: " << current().type << " (" << current().value << ")" << std::endl;
     advance(); // print, printg or println
     advance(); // (
 
@@ -170,18 +232,65 @@ std::shared_ptr<PrintStmt> Parser::parse_print() {
     p->is_printg = is_printg;
 
     while (!is_eof() && current().type != T_RPAREN) {
-        p->args.push_back(parse_expr());
+        // Парсим аргумент
+        if (DEBUG) std::cout << "[DEBUG] parse_print: parsing arg at token: " << current().type << " (" << current().value << ")" << std::endl;
+        auto arg = parse_expr();
+        if (!arg) {
+            if (DEBUG) std::cout << "[DEBUG] parse_print: failed to parse expr at token: " << current().type << " (" << current().value << ")" << std::endl;
+            // Если не удалось распарсить выражение, но мы уже внутри print, попробуем пропустить до закрывающей скобки
+            while (!is_eof() && current().type != T_RPAREN) {
+                advance();
+            }
+            break;
+        }
+        p->args.push_back(arg);
+        p->formats.emplace_back(); // Добавляем пустой формат по умолчанию
+        if (DEBUG) std::cout << "[DEBUG] parse_print: parsed arg, current token: " << current().type << " (" << current().value << ")" << std::endl;
+        
+        // Проверяем, есть ли после аргумента запятая
         if (current().type == T_COMMA) {
             advance();
-            if (current().type == T_STRING_LITERAL) {
-                p->formats.push_back(current().value);
+            
+            // Проверяем, является ли следующий токен строкой формата (начинается с "{")
+            // Это может быть формат для предыдущего аргумента
+            if (current().type == T_STRING_LITERAL && 
+                current().value.size() >= 2 && 
+                current().value[0] == '{' && current().value.back() == '}') {
+                // Это формат для предыдущего аргумента
+                p->formats.back() = current().value;
                 advance();
-            } else {
-                p->formats.emplace_back();
+                
+                // Если после формата есть еще запятая, значит есть еще аргументы
+                if (current().type == T_COMMA) {
+                    advance();
+                    // Продолжаем цикл для следующего аргумента
+                } else if (current().type == T_RPAREN) {
+                    // Если после формата закрывающая скобка, выходим
+                    break;
+                }
+                // Если после формата не запятая и не скобка, продолжаем парсить
             }
+            // Если после запятой не формат, значит это следующий аргумент (продолжаем цикл)
+            // Цикл продолжается автоматически
+        } else {
+            // Если нет запятой, значит это последний аргумент
+            break;
         }
     }
-    advance(); // )
+    if (current().type != T_RPAREN) {
+        if (DEBUG) std::cout << "[DEBUG] parse_print: expected ')' but got: " << current().type << " (" << current().value << "), skipping to )" << std::endl;
+        // Пропускаем до закрывающей скобки
+        while (!is_eof() && current().type != T_RPAREN) {
+            advance();
+        }
+    }
+    if (current().type == T_RPAREN) {
+        advance(); // )
+        if (DEBUG) std::cout << "[DEBUG] parse_print: successfully parsed " << p->args.size() << " args" << std::endl;
+    } else {
+        if (DEBUG) std::cout << "[DEBUG] parse_print: failed to find closing ')'" << std::endl;
+        return nullptr;
+    }
     return p;
 }
 
@@ -276,4 +385,65 @@ std::shared_ptr<ImportStmt> Parser::parse_import() {
     if (DEBUG) std::cout << "[DEBUG] Import: " << import_name << " from " << file_path << std::endl;
     
     return import;
+}
+
+std::shared_ptr<IfStmt> Parser::parse_if() {
+    advance(); // if
+    if (current().type != T_LPAREN) {
+        if (DEBUG) std::cout << "[DEBUG] Expected '(' after 'if'" << std::endl;
+        return nullptr;
+    }
+    advance(); // (
+    
+    auto condition = parse_expr();
+    
+    if (current().type != T_RPAREN) {
+        if (DEBUG) std::cout << "[DEBUG] Expected ')' after condition" << std::endl;
+        return nullptr;
+    }
+    advance(); // )
+    
+    if (current().type != T_LBRACE) {
+        if (DEBUG) std::cout << "[DEBUG] Expected '{' after if condition" << std::endl;
+        return nullptr;
+    }
+    advance(); // {
+    
+    auto if_stmt = std::make_shared<IfStmt>();
+    if_stmt->condition = condition;
+    
+    // Парсим тело if
+    while (!is_eof() && current().type != T_RBRACE) {
+        auto stmt = parse_statement();
+        if (stmt) {
+            if_stmt->then_body.push_back(stmt);
+        } else {
+            advance(); // пропускаем неизвестные токены
+        }
+    }
+    
+    if (current().type == T_RBRACE) {
+        advance(); // }
+    }
+    
+    // Проверяем наличие else
+    if (current().type == T_IDENTIFIER && current().value == "else") {
+        advance(); // else
+        if (current().type == T_LBRACE) {
+            advance(); // {
+            while (!is_eof() && current().type != T_RBRACE) {
+                auto stmt = parse_statement();
+                if (stmt) {
+                    if_stmt->else_body.push_back(stmt);
+                } else {
+                    advance();
+                }
+            }
+            if (current().type == T_RBRACE) {
+                advance(); // }
+            }
+        }
+    }
+    
+    return if_stmt;
 }

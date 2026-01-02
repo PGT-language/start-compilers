@@ -67,6 +67,117 @@ void Interpreter::execute_function(const std::string& name, const std::vector<Va
             for (const auto& a : call->args) args.push_back(eval(a, locals));
             if (DEBUG) std::cout << "[DEBUG] Calling " << call->func_name << " with " << args.size() << " args" << std::endl;
             execute_function(call->func_name, args);
+        } else if (auto if_stmt = std::dynamic_pointer_cast<IfStmt>(stmt)) {
+            Value cond_val = eval(if_stmt->condition, locals);
+            bool condition_true = false;
+            
+            // Проверяем условие
+            if (cond_val.type == ValueType::INT) {
+                condition_true = (cond_val.int_val != 0);
+            } else if (cond_val.type == ValueType::FLOAT) {
+                condition_true = (cond_val.float_val != 0.0);
+            } else if (cond_val.type == ValueType::STRING) {
+                condition_true = !cond_val.str_val.empty();
+            }
+            
+            // Выполняем соответствующее тело
+            const auto& body_to_execute = condition_true ? if_stmt->then_body : if_stmt->else_body;
+            for (const auto& s : body_to_execute) {
+                // Рекурсивно выполняем операторы из тела if/else
+                if (auto decl = std::dynamic_pointer_cast<VarDecl>(s)) {
+                    Value val = eval(decl->expr, locals);
+                    if (globals.count(decl->name)) {
+                        globals[decl->name] = val;
+                    } else {
+                        locals[decl->name] = val;
+                    }
+                } else if (auto print = std::dynamic_pointer_cast<PrintStmt>(s)) {
+                    size_t fmt_idx = 0;
+                    for (const auto& arg : print->args) {
+                        Value v = eval(arg, locals);
+                        std::string fmt = fmt_idx < print->formats.size() ? print->formats[fmt_idx++] : "";
+                        std::cout << v.to_string(fmt);
+                    }
+                    if (!print->is_printg) {
+                        std::cout << std::endl;
+                    } else {
+                        std::cout << std::endl;
+                    }
+                } else if (auto call = std::dynamic_pointer_cast<ConectCall>(s)) {
+                    std::vector<Value> args;
+                    for (const auto& a : call->args) args.push_back(eval(a, locals));
+                    execute_function(call->func_name, args);
+                } else if (auto input = std::dynamic_pointer_cast<InputStmt>(s)) {
+                    Value val;
+                    if (!input->prompt.empty()) {
+                        std::cout << input->prompt;
+                    } else {
+                        std::cout << "> ";
+                    }
+                    std::cout.flush();
+                    if (input->format == "{int}") {
+                        long long x;
+                        if (std::cin.peek() == '\n') std::cin.ignore();
+                        std::cin >> x;
+                        val = Value(x);
+                    } else if (input->format == "{float}") {
+                        double x;
+                        if (std::cin.peek() == '\n') std::cin.ignore();
+                        std::cin >> x;
+                        val = Value(x);
+                    } else if (input->format == "{string}") {
+                        std::string x;
+                        if (std::cin.peek() == '\n') std::cin.ignore();
+                        std::getline(std::cin, x);
+                        val = Value(x);
+                    }
+                    std::string var_name = input->var_name.empty() ? "input" : input->var_name;
+                    if (globals.count(var_name)) {
+                        globals[var_name] = val;
+                    } else {
+                        locals[var_name] = val;
+                    }
+                } else if (auto nested_if = std::dynamic_pointer_cast<IfStmt>(s)) {
+                    // Рекурсивно обрабатываем вложенные if
+                    Value nested_cond = eval(nested_if->condition, locals);
+                    bool nested_true = false;
+                    if (nested_cond.type == ValueType::INT) {
+                        nested_true = (nested_cond.int_val != 0);
+                    } else if (nested_cond.type == ValueType::FLOAT) {
+                        nested_true = (nested_cond.float_val != 0.0);
+                    } else if (nested_cond.type == ValueType::STRING) {
+                        nested_true = !nested_cond.str_val.empty();
+                    }
+                    const auto& nested_body = nested_true ? nested_if->then_body : nested_if->else_body;
+                    for (const auto& ns : nested_body) {
+                        // Рекурсивно выполняем вложенные операторы
+                        if (auto decl = std::dynamic_pointer_cast<VarDecl>(ns)) {
+                            Value val = eval(decl->expr, locals);
+                            if (globals.count(decl->name)) {
+                                globals[decl->name] = val;
+                            } else {
+                                locals[decl->name] = val;
+                            }
+                        } else if (auto print = std::dynamic_pointer_cast<PrintStmt>(ns)) {
+                            size_t fmt_idx = 0;
+                            for (const auto& arg : print->args) {
+                                Value v = eval(arg, locals);
+                                std::string fmt = fmt_idx < print->formats.size() ? print->formats[fmt_idx++] : "";
+                                std::cout << v.to_string(fmt);
+                            }
+                            if (!print->is_printg) {
+                                std::cout << std::endl;
+                            } else {
+                                std::cout << std::endl;
+                            }
+                        } else if (auto call = std::dynamic_pointer_cast<ConectCall>(ns)) {
+                            std::vector<Value> args;
+                            for (const auto& a : call->args) args.push_back(eval(a, locals));
+                            execute_function(call->func_name, args);
+                        }
+                    }
+                }
+            }
         } else if (auto input = std::dynamic_pointer_cast<InputStmt>(stmt)) {
             Value val;
 
@@ -76,6 +187,7 @@ void Interpreter::execute_function(const std::string& name, const std::vector<Va
             } else {
                 std::cout << "> ";
             }
+            std::cout.flush();  // Сбрасываем буфер, чтобы промпт сразу отобразился
 
             if (input->format == "{int}") {
                 long long x;
@@ -97,7 +209,10 @@ void Interpreter::execute_function(const std::string& name, const std::vector<Va
                 }
             } else if (input->format == "{string}") {
                 std::string x;
-                std::cin.ignore();  // очищаем буфер после предыдущих >>
+                // Очищаем буфер только если есть данные
+                if (std::cin.peek() == '\n') {
+                    std::cin.ignore();  // пропускаем оставшийся перенос строки
+                }
                 std::getline(std::cin, x);
                 val = Value(x);
             }
@@ -126,11 +241,73 @@ Value Interpreter::eval(const std::shared_ptr<AstNode>& node, const std::map<std
         if (globals.count(id->name)) {
             return globals[id->name];
         }
-        return Value();
+        // Если переменная не найдена, возвращаем пустую строку (а не пустое значение)
+        // Это нужно для сравнения строк, когда одна из переменных не определена
+        return Value(std::string(""));
     }
     if (auto bin = std::dynamic_pointer_cast<BinaryOp>(node)) {
         Value l = eval(bin->left, locals);
         Value r = eval(bin->right, locals);
+        
+        // Операторы сравнения
+        if (bin->op == T_GREATER || bin->op == T_LESS || bin->op == T_GREATER_EQUAL || 
+            bin->op == T_LESS_EQUAL || bin->op == T_EQUAL_EQUAL || bin->op == T_NOT_EQUAL) {
+            bool result = false;
+            
+            // Сравнение строк
+            if (l.type == ValueType::STRING && r.type == ValueType::STRING) {
+                int cmp = l.str_val.compare(r.str_val);
+                switch (bin->op) {
+                    case T_GREATER: result = (cmp > 0); break;
+                    case T_LESS: result = (cmp < 0); break;
+                    case T_GREATER_EQUAL: result = (cmp >= 0); break;
+                    case T_LESS_EQUAL: result = (cmp <= 0); break;
+                    case T_EQUAL_EQUAL: result = (cmp == 0); break;
+                    case T_NOT_EQUAL: result = (cmp != 0); break;
+                }
+            } else {
+                // Сравнение чисел или смешанных типов
+                // Если один из операндов - строка, а другой - нет, конвертируем в строки
+                if (l.type == ValueType::STRING || r.type == ValueType::STRING || 
+                    l.type == ValueType::NONE || r.type == ValueType::NONE) {
+                    std::string l_str = (l.type == ValueType::STRING) ? l.str_val : l.to_string();
+                    std::string r_str = (r.type == ValueType::STRING) ? r.str_val : r.to_string();
+                    if (DEBUG) std::cout << "[DEBUG] Comparing: '" << l_str << "' " << (bin->op == T_GREATER ? ">" : bin->op == T_LESS ? "<" : bin->op == T_EQUAL_EQUAL ? "==" : "?") << " '" << r_str << "'" << std::endl;
+                    int cmp = l_str.compare(r_str);
+                    switch (bin->op) {
+                        case T_GREATER: result = (cmp > 0); break;
+                        case T_LESS: result = (cmp < 0); break;
+                        case T_GREATER_EQUAL: result = (cmp >= 0); break;
+                        case T_LESS_EQUAL: result = (cmp <= 0); break;
+                        case T_EQUAL_EQUAL: result = (cmp == 0); break;
+                        case T_NOT_EQUAL: result = (cmp != 0); break;
+                    }
+                    if (DEBUG) std::cout << "[DEBUG] Comparison result: " << (result ? "true" : "false") << std::endl;
+                } else {
+                    // Сравнение чисел
+                    double lv, rv;
+                    if (l.type == ValueType::FLOAT) lv = l.float_val;
+                    else if (l.type == ValueType::INT) lv = l.int_val;
+                    else lv = 0.0;
+                    
+                    if (r.type == ValueType::FLOAT) rv = r.float_val;
+                    else if (r.type == ValueType::INT) rv = r.int_val;
+                    else rv = 0.0;
+                
+                    switch (bin->op) {
+                        case T_GREATER: result = (lv > rv); break;
+                        case T_LESS: result = (lv < rv); break;
+                        case T_GREATER_EQUAL: result = (lv >= rv); break;
+                        case T_LESS_EQUAL: result = (lv <= rv); break;
+                        case T_EQUAL_EQUAL: result = (lv == rv); break;
+                        case T_NOT_EQUAL: result = (lv != rv); break;
+                    }
+                }
+            }
+            return Value(result ? 1LL : 0LL);
+        }
+        
+        // Арифметические операции
         if (l.type == ValueType::FLOAT || r.type == ValueType::FLOAT) {
             double lv = (l.type == ValueType::FLOAT) ? l.float_val : l.int_val;
             double rv = (r.type == ValueType::FLOAT) ? r.float_val : r.int_val;

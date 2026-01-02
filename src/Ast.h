@@ -48,3 +48,9 @@ struct ImportStmt : AstNode {
     std::string file_path;  // путь к файлу после "from"
     std::string import_name; // что импортируем после "import"
 };
+
+struct IfStmt : AstNode {
+    std::shared_ptr<AstNode> condition;  // условие
+    std::vector<std::shared_ptr<AstNode>> then_body;  // тело if
+    std::vector<std::shared_ptr<AstNode>> else_body;  // тело else (может быть пустым)
+};

@@ -125,18 +125,29 @@ int main(int argc, char** argv) {
             f.close();
 
             if (DEBUG) std::cout << "[DEBUG] Loading file: " << current_file << std::endl;
+            if (DEBUG) std::cout << "[DEBUG] File size: " << source.size() << " bytes" << std::endl;
 
             Lexer lexer(source);
             std::vector<Token> tokens;
             Token t;
+            size_t token_count = 0;
             do {
                 t = lexer.next_token();
                 tokens.push_back(t);
+                token_count++;
+                if (token_count > 10000) {
+                    std::cerr << "Error: Too many tokens, possible infinite loop in lexer" << std::endl;
+                    break;
+                }
             } while (t.type != T_EOF);
+            
+            if (DEBUG) std::cout << "[DEBUG] Tokenized " << tokens.size() << " tokens" << std::endl;
 
             Parser parser;
             parser.load_tokens(tokens);
+            if (DEBUG) std::cout << "[DEBUG] Starting parse_program..." << std::endl;
             auto program = parser.parse_program();
+            if (DEBUG) std::cout << "[DEBUG] Parsed " << program.size() << " nodes" << std::endl;
 
             // Сохраняем AST для этого файла
             file_asts[current_file] = program;
