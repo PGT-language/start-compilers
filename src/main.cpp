@@ -157,6 +157,18 @@ int main(int argc, char** argv) {
             }
             if (DEBUG) std::cout << "[DEBUG] Parsed " << program.size() << " nodes" << std::endl;
 
+            // Проверяем обязательные элементы для главного файла
+            if (current_file == filename) {
+                if (!parser.found_package_main()) {
+                    std::cerr << "Error: Missing 'package main' declaration in main file\n";
+                    return 1;
+                }
+                if (!parser.found_return_zero()) {
+                    std::cerr << "Error: Missing 'return 0' at the end of main file\n";
+                    return 1;
+                }
+            }
+
             // Сохраняем AST для этого файла
             file_asts[current_file] = program;
 
@@ -165,14 +177,52 @@ int main(int argc, char** argv) {
             for (const auto& node : program) {
                 if (auto import = std::dynamic_pointer_cast<ImportStmt>(node)) {
                     std::string import_path = resolve_import_path(base_dir, import->file_path);
-                    if (DEBUG) std::cout << "[DEBUG] Found import: " << import->import_name 
-                                         << " from " << import->file_path 
-                                         << " -> resolved to " << import_path << std::endl;
+                    if (DEBUG) {
+                        std::cout << "[DEBUG] Found import: ";
+                        for (size_t i = 0; i < import->import_names.size(); ++i) {
+                            if (i > 0) std::cout << ", ";
+                            std::cout << import->import_names[i];
+                        }
+                        std::cout << " from " << import->file_path 
+                                 << " -> resolved to " << import_path << std::endl;
+                    }
                     files_to_load.push_back(import_path);
                 }
             }
 
             loaded_files.insert(current_file);
+        }
+
+        // Проверяем, что все импортированные функции существуют в импортируемых файлах
+        std::map<std::string, std::set<std::string>> file_functions;  // файл -> множество функций
+        for (const auto& [file, ast] : file_asts) {
+            for (const auto& node : ast) {
+                if (auto func = std::dynamic_pointer_cast<FunctionDef>(node)) {
+                    file_functions[file].insert(func->name);
+                }
+            }
+        }
+        
+        // Проверяем импорты
+        for (const auto& [file, ast] : file_asts) {
+            for (const auto& node : ast) {
+                if (auto import = std::dynamic_pointer_cast<ImportStmt>(node)) {
+                    std::string import_path = resolve_import_path(get_directory(file), import->file_path);
+                    if (!file_functions.count(import_path)) {
+                        std::cerr << "Error: Cannot find imported file: " << import_path << "\n";
+                        return 1;
+                    }
+                    const auto& available_funcs = file_functions[import_path];
+                    for (const auto& func_name : import->import_names) {
+                        if (!available_funcs.count(func_name)) {
+                            SemanticError err("Function '" + func_name + "' not found in imported file '" + import->file_path + "'", 
+                                             import->location);
+                            std::cerr << err.get_traceback();
+                            return 1;
+                        }
+                    }
+                }
+            }
         }
 
         // Объединяем все AST в один
@@ -184,6 +234,21 @@ int main(int argc, char** argv) {
                     combined_program.push_back(node);
                 }
             }
+        }
+
+        // Проверяем наличие return 1 в функции main
+        bool main_has_return_one = false;
+        for (const auto& node : combined_program) {
+            if (auto func = std::dynamic_pointer_cast<FunctionDef>(node)) {
+                if (func->name == "main") {
+                    main_has_return_one = func->has_return_one;
+                    break;
+                }
+            }
+        }
+        if (!main_has_return_one) {
+            std::cerr << "Error: Function 'main' must contain 'return 1'\n";
+            return 1;
         }
 
         // Семантический анализ

@@ -8,6 +8,8 @@
 class Parser {
     std::vector<Token> tokens;
     size_t pos = 0;
+    bool has_package_main = false;
+    bool has_return_zero = false;
 
     bool is_eof() const;
     const Token& current() const;
@@ -32,4 +34,6 @@ class Parser {
 public:
     void load_tokens(std::vector<Token> t);
     std::vector<std::shared_ptr<AstNode>> parse_program();
+    bool found_package_main() const { return has_package_main; }
+    bool found_return_zero() const { return has_return_zero; }
 };

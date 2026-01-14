@@ -16,6 +16,7 @@ struct FunctionDef : AstNode {
     std::string name;
     std::vector<std::string> param_names;
     std::vector<std::shared_ptr<AstNode>> body;
+    bool has_return_one = false;  // Есть ли return 1 в функции
 };
 
 struct VarDecl : AstNode {
@@ -50,7 +51,7 @@ struct ConectCall : AstNode {
 
 struct ImportStmt : AstNode {
     std::string file_path;  // путь к файлу после "from"
-    std::string import_name; // что импортируем после "import"
+    std::vector<std::string> import_names; // список функций для импорта
 };
 
 struct IfStmt : AstNode {

@@ -14,6 +14,10 @@ const Token& Parser::current() const { return tokens[pos]; }
 void Parser::advance() { if (!is_eof()) ++pos; }
 
 std::vector<std::shared_ptr<AstNode>> Parser::parse_program() {
+    // Сбрасываем флаги для нового парсинга
+    has_package_main = false;
+    has_return_zero = false;
+    
     std::vector<std::shared_ptr<AstNode>> nodes;
     size_t last_pos = pos;
     size_t iterations = 0;
@@ -30,7 +34,11 @@ std::vector<std::shared_ptr<AstNode>> Parser::parse_program() {
         last_pos = pos;
         
         if (current().type == T_PACKAGE) {
-            advance(); advance();
+            advance(); // package
+            if (current().type == T_IDENTIFIER && current().value == "main") {
+                has_package_main = true;
+            }
+            advance(); // main или другое значение
         } else if (current().type == T_FROM) {
             auto import = parse_import();
             if (import) nodes.push_back(import);
@@ -42,6 +50,13 @@ std::vector<std::shared_ptr<AstNode>> Parser::parse_program() {
             auto var = parse_var_decl();
             if (var) nodes.push_back(var);
         } else if (current().type == T_RETURN) {
+            // Проверяем, является ли это return 0 в конце файла
+            size_t save_pos = pos;
+            advance(); // return
+            if (!is_eof() && current().type == T_NUMBER && current().value == "0") {
+                has_return_zero = true;
+            }
+            pos = save_pos; // Возвращаемся назад
             advance(); // пропускаем return вне функций
         } else {
             advance();
@@ -102,6 +117,14 @@ std::shared_ptr<FunctionDef> Parser::parse_function() {
         size_t start_pos = pos;
         try {
             auto stmt = parse_statement();
+            // Проверяем, является ли это return 1 (проверяем после парсинга, если stmt == nullptr)
+            if (!stmt && start_pos < tokens.size() && tokens[start_pos].type == T_RETURN) {
+                size_t check_pos = start_pos + 1; // позиция после return
+                if (check_pos < tokens.size() && tokens[check_pos].type == T_NUMBER && 
+                    tokens[check_pos].value == "1") {
+                    func->has_return_one = true;
+                }
+            }
             if (stmt) {
                 func->body.push_back(stmt);
         } else {
@@ -145,7 +168,7 @@ std::shared_ptr<AstNode> Parser::parse_statement() {
     if (current().type == T_PRINT || current().type == T_PRINTG || current().type == T_PRINTLN) {
         return parse_print();
     }
-    if (current().type == T_IDENTIFIER && current().value == "if") {
+    if (current().type == T_IF) {
         return parse_if();
     }
     // Проверяем файловые операции: create::file, write::file, read::file, close::file, delete::file
@@ -431,22 +454,43 @@ std::shared_ptr<ImportStmt> Parser::parse_import() {
     }
     advance(); // import
     
-    std::string import_name;
-    if (current().type == T_STRING_LITERAL) {
-        import_name = current().value;
-        advance();
-    } else if (current().type == T_IDENTIFIER) {
-        import_name = current().value;
-        advance();
-    } else {
-        return nullptr;
-    }
-    
     auto import = std::make_shared<ImportStmt>();
     import->file_path = file_path;
-    import->import_name = import_name;
     
-    if (DEBUG) std::cout << "[DEBUG] Import: " << import_name << " from " << file_path << std::endl;
+    // Парсим список функций для импорта (разделенных запятыми)
+    while (!is_eof()) {
+        std::string import_name;
+        if (current().type == T_STRING_LITERAL) {
+            import_name = current().value;
+            advance();
+        } else if (current().type == T_IDENTIFIER) {
+            import_name = current().value;
+            advance();
+        } else {
+            break; // Неожиданный токен, прекращаем парсинг
+        }
+        
+        import->import_names.push_back(import_name);
+        
+        if (current().type == T_COMMA) {
+            advance(); // ,
+        } else {
+            break; // Больше нет функций для импорта
+        }
+    }
+    
+    if (import->import_names.empty()) {
+        return nullptr; // Нет функций для импорта
+    }
+    
+    if (DEBUG) {
+        std::cout << "[DEBUG] Import: ";
+        for (size_t i = 0; i < import->import_names.size(); ++i) {
+            if (i > 0) std::cout << ", ";
+            std::cout << import->import_names[i];
+        }
+        std::cout << " from " << file_path << std::endl;
+    }
     
     return import;
 }
@@ -549,7 +593,7 @@ std::shared_ptr<IfStmt> Parser::parse_if() {
     }
     
     // Проверяем наличие else
-    if (current().type == T_IDENTIFIER && current().value == "else") {
+    if (current().type == T_ELSE) {
         advance(); // else
         if (current().type == T_LBRACE) {
             advance(); // {
