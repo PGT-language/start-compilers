@@ -7,6 +7,7 @@
 #include "Error.h"
 #include "CodeGen.h"
 #include "GarbageCollector.h"
+#include "Global.h"
 
 #include <iostream>
 #include <fstream>
@@ -14,6 +15,8 @@
 #include <cctype>
 #include <set>
 #include <map>
+
+bool DEBUG = false;
 
 int main(int argc, char** argv) {
     if (argc < 2) {
@@ -51,16 +54,6 @@ int main(int argc, char** argv) {
         std::cout << "Author: pabla\n";
         return 0;
     }
-    if (command == "build") {
-        if (argc < 3) {
-            std::cerr << "Error: No input file specified.\n";
-            std::cerr << "Usage: pgt build <file.pgt>\n";
-            return 1;
-        }
-        std::string filename = argv[2];
-        build(filename);
-    }
-    return 0;
 
     if (command == "run") {
         if (argc < 3) {
@@ -426,7 +419,7 @@ int main(int argc, char** argv) {
         std::cout << "Generated C code: " << temp_c_file << "\n";
         
         // Компилируем C код в бинарник
-        std::string compile_cmd = "gcc " + temp_c_file + " src/GarbageCollector.cpp -lstdc++ -o " + output_name;
+        std::string compile_cmd = "g++ -I. " + temp_c_file + " src/GarbageCollector.cpp src/Utils.cpp -lstdc++ -o " + output_name;
         std::cout << "Compiling: " << compile_cmd << "\n";
         int result = system(compile_cmd.c_str());
         

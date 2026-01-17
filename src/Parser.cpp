@@ -59,7 +59,12 @@ std::vector<std::shared_ptr<AstNode>> Parser::parse_program() {
             pos = save_pos; // Возвращаемся назад
             advance(); // пропускаем return вне функций
         } else {
-            advance();
+            auto stmt = parse_statement();
+            if (stmt) {
+                nodes.push_back(stmt);
+            } else {
+                advance();
+            }
         }
     }
     return nodes;

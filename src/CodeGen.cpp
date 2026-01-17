@@ -179,7 +179,11 @@ void CodeGen::generate_file_op(const std::shared_ptr<FileOp>& file_op) {
 
 void CodeGen::generate_call(const std::shared_ptr<ConectCall>& call) {
     write_indent();
-    code << call->func_name << "(";
+    std::string func_name = call->func_name;
+    if (func_name == "main") {
+        func_name = "pgt_main";
+    }
+    code << func_name << "(";
     for (size_t i = 0; i < call->args.size(); ++i) {
         if (i > 0) code << ", ";
         code << generate_expr(call->args[i]);
@@ -204,8 +208,13 @@ void CodeGen::generate_statement(const std::shared_ptr<AstNode>& stmt) {
 }
 
 void CodeGen::generate_function(const std::shared_ptr<FunctionDef>& func) {
+    std::string func_name = func->name;
+    if (func_name == "main") {
+        func_name = "pgt_main";
+    }
+
     // Генерируем сигнатуру функции
-    code << "void " << func->name << "(";
+    code << "void " << func_name << "(";
     for (size_t i = 0; i < func->param_names.size(); ++i) {
         if (i > 0) code << ", ";
         code << "void* " << func->param_names[i];
@@ -236,7 +245,11 @@ std::string CodeGen::generate(const std::vector<std::shared_ptr<AstNode>>& progr
     // Первый проход: объявляем все функции (forward declarations)
     for (const auto& node : program) {
         if (auto func = std::dynamic_pointer_cast<FunctionDef>(node)) {
-            code << "void " << func->name << "(";
+            std::string func_name = func->name;
+            if (func_name == "main") {
+                func_name = "pgt_main";
+            }
+            code << "void " << func_name << "(";
             for (size_t i = 0; i < func->param_names.size(); ++i) {
                 if (i > 0) code << ", ";
                 code << "void* " << func->param_names[i];
@@ -259,7 +272,16 @@ std::string CodeGen::generate(const std::vector<std::shared_ptr<AstNode>>& progr
     // Генерируем main функцию
     code << "int main(int argc, char** argv) {\n";
     code << "    gc_init();\n";
-    code << "    main();\n";
+    
+    // Ищем и выполняем conect(main)
+    for (const auto& node : program) {
+        if (auto call = std::dynamic_pointer_cast<ConectCall>(node)) {
+            if (call->func_name == "main") {
+                code << "    pgt_main();\n";
+            }
+        }
+    }
+    
     code << "    gc_cleanup();\n";
     code << "    return 0;\n";
     code << "}\n";
@@ -275,4 +297,3 @@ void CodeGen::save_to_file(const std::string& filename) {
     out << code.str();
     out.close();
 }
-

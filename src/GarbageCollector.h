@@ -4,6 +4,7 @@
 #include <set>
 #include <memory>
 #include <cstddef>
+#include <cstdlib>
 
 // Объект в куче, управляемый GC
 struct GCObject {
@@ -56,10 +57,3 @@ public:
 
 // Глобальный GC (для runtime)
 extern GarbageCollector* global_gc;
-
-// Вспомогательные функции для работы с GC в runtime
-void* gc_malloc(size_t size);
-void gc_collect();
-void gc_add_root(void* ptr);
-void gc_remove_root(void* ptr);
-

@@ -1,3 +1,2 @@
 #include "Utils.h"
-
-bool DEBUG = false;
+#include "Global.h"

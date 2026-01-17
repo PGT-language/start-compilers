@@ -1,4 +1,7 @@
 #include "GarbageCollector.h"
+#include "runtime/gc.h"
+#include "Global.h"
+#include "Utils.h"
 #include <iostream>
 #include <algorithm>
 
@@ -126,4 +129,3 @@ void gc_add_root(void* ptr) {
 void gc_remove_root(void* ptr) {
     // Упрощенная версия - не используем в текущей реализации
 }
-
