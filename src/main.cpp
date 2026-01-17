@@ -5,6 +5,8 @@
 #include "Ast.h"
 #include "SemanticAnalyzer.h"
 #include "Error.h"
+#include "CodeGen.h"
+#include "GarbageCollector.h"
 
 #include <iostream>
 #include <fstream>
@@ -21,6 +23,7 @@ int main(int argc, char** argv) {
         std::cout << "  pgt version             — Show version\n";
         std::cout << "  pgt run <file.pgt>      — Run PGT program\n";
         std::cout << "  pgt run <file.pgt> --debug — Run with debug output\n";
+        std::cout << "  pgt build <file.pgt>     — Build PGT program\n";
         return 0;
     }
 
@@ -32,10 +35,13 @@ int main(int argc, char** argv) {
         std::cout << "  help                    — Show this help message\n";
         std::cout << "  version                 — Show compiler version\n";
         std::cout << "  run <file.pgt>          — Execute .pgt file\n";
-        std::cout << "  run <file.pgt> --debug  — Execute with debug info\n\n";
+        std::cout << "  run <file.pgt> --debug  — Execute with debug info\n";
+        std::cout << "  build <file.pgt>        — Compile to binary executable\n";
+        std::cout << "  build <file.pgt> -o <output> — Compile with custom output name\n\n";
         std::cout << "  history                 — Show history of commands\n";
         std::cout << "Example:\n";
         std::cout << "  ./pgt run test.pgt\n";
+        std::cout << "  ./pgt build test.pgt -o program\n";
         return 0;
     }
 
@@ -45,6 +51,16 @@ int main(int argc, char** argv) {
         std::cout << "Author: pabla\n";
         return 0;
     }
+    if (command == "build") {
+        if (argc < 3) {
+            std::cerr << "Error: No input file specified.\n";
+            std::cerr << "Usage: pgt build <file.pgt>\n";
+            return 1;
+        }
+        std::string filename = argv[2];
+        build(filename);
+    }
+    return 0;
 
     if (command == "run") {
         if (argc < 3) {
@@ -266,6 +282,160 @@ int main(int argc, char** argv) {
             interp.run(combined_program);
         } catch (const CompilerError& e) {
             std::cerr << e.get_traceback();
+            return 1;
+        }
+
+        return 0;
+    }
+
+    if (command == "build") {
+        if (argc < 3) {
+            std::cerr << "Error: No input file specified.\n";
+            std::cerr << "Usage: pgt build <file.pgt> [-o output]\n";
+            return 1;
+        }
+
+        std::string filename = argv[2];
+        std::string output_name = "a.out";
+        
+        // Проверка -o для указания имени выходного файла
+        if (argc >= 5 && std::string(argv[3]) == "-o") {
+            output_name = argv[4];
+        }
+
+        // Используем ту же систему загрузки файлов, что и для run
+        std::set<std::string> loaded_files;
+        std::map<std::string, std::vector<std::shared_ptr<AstNode>>> file_asts;
+        std::vector<std::string> files_to_load = {filename};
+
+        // Функция для получения директории файла
+        auto get_directory = [](const std::string& filepath) -> std::string {
+            size_t last_slash = filepath.find_last_of("/\\");
+            if (last_slash == std::string::npos) return ".";
+            return filepath.substr(0, last_slash);
+        };
+
+        // Функция для разрешения пути к импортируемому файлу
+        auto resolve_import_path = [&](const std::string& base_dir, const std::string& import_path) -> std::string {
+            if (import_path[0] == '/' || (import_path.size() > 1 && import_path[0] == '.' && import_path[1] == '/')) {
+                return import_path;
+            }
+            
+            std::string full_path = import_path;
+            if (full_path.size() < 4 || full_path.substr(full_path.size() - 4) != ".pgt") {
+                full_path += ".pgt";
+            }
+            
+            std::string relative_path = base_dir + "/" + full_path;
+            std::ifstream test(relative_path);
+            if (test) {
+                test.close();
+                return relative_path;
+            }
+            
+            test.open(full_path);
+            if (test) {
+                test.close();
+                return full_path;
+            }
+            
+            return full_path;
+        };
+
+        // Загружаем все файлы
+        while (!files_to_load.empty()) {
+            std::string current_file = files_to_load.back();
+            files_to_load.pop_back();
+
+            if (loaded_files.count(current_file)) continue;
+
+            std::ifstream f(current_file);
+            if (!f) {
+                std::cerr << "Error: Cannot open file '" << current_file << "'\n";
+                continue;
+            }
+
+            std::string source((std::istreambuf_iterator<char>(f)), {});
+            f.close();
+
+            Lexer lexer(source);
+            std::vector<Token> tokens;
+            Token t;
+            do {
+                t = lexer.next_token();
+                tokens.push_back(t);
+            } while (t.type != T_EOF);
+            
+            Parser parser;
+            parser.load_tokens(tokens);
+            std::vector<std::shared_ptr<AstNode>> program;
+            try {
+                program = parser.parse_program();
+            } catch (const CompilerError& e) {
+                std::cerr << e.get_traceback();
+                return 1;
+            }
+
+            file_asts[current_file] = program;
+
+            // Ищем импорты
+            std::string base_dir = get_directory(current_file);
+            for (const auto& node : program) {
+                if (auto import = std::dynamic_pointer_cast<ImportStmt>(node)) {
+                    std::string import_path = resolve_import_path(base_dir, import->file_path);
+                    files_to_load.push_back(import_path);
+                }
+            }
+
+            loaded_files.insert(current_file);
+        }
+
+        // Объединяем все AST
+        std::vector<std::shared_ptr<AstNode>> combined_program;
+        for (const auto& [file, ast] : file_asts) {
+            for (const auto& node : ast) {
+                if (!std::dynamic_pointer_cast<ImportStmt>(node)) {
+                    combined_program.push_back(node);
+                }
+            }
+        }
+
+        // Семантический анализ
+        try {
+            SemanticAnalyzer analyzer;
+            analyzer.analyze(combined_program);
+        } catch (const CompilerError& e) {
+            std::cerr << e.get_traceback();
+            return 1;
+        }
+
+        // Генерация C кода
+        CodeGen codegen;
+        std::string c_code = codegen.generate(combined_program);
+        
+        // Сохраняем C код во временный файл
+        std::string temp_c_file = output_name + ".c";
+        std::ofstream out(temp_c_file);
+        if (!out) {
+            std::cerr << "Error: Cannot create output file\n";
+            return 1;
+        }
+        out << c_code;
+        out.close();
+        
+        std::cout << "Generated C code: " << temp_c_file << "\n";
+        
+        // Компилируем C код в бинарник
+        std::string compile_cmd = "gcc " + temp_c_file + " src/GarbageCollector.cpp -lstdc++ -o " + output_name;
+        std::cout << "Compiling: " << compile_cmd << "\n";
+        int result = system(compile_cmd.c_str());
+        
+        if (result == 0) {
+            std::cout << "Successfully compiled to: " << output_name << "\n";
+            // Удаляем временный C файл
+            remove(temp_c_file.c_str());
+        } else {
+            std::cerr << "Compilation failed\n";
             return 1;
         }
 
