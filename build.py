@@ -8,7 +8,6 @@ source_files = [
     "src/Interpreter.cpp",
     "src/Utils.cpp",
     "src/SemanticAnalyzer.cpp",
-    "src/CodeGen.cpp",
     "src/GarbageCollector.cpp"
 ]
 
