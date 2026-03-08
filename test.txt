@@ -1,0 +1,532 @@
+дока языка 
+
+package // названия пакета к примеру main как в >Go
+
+from // путь к файлу import // импортируем что то из файла
+
+function(что то) // как в go 
+
+function(main) // вход в програму
+
+if // 
+
+else // 
+
+int //
+
+float //
+
+string //
+
+print // 
+
+println //
+
+create::file("c") // создания файла
+
+write::file("w") // запись файла
+
+read::file("r") // чтение файла
+
+close::file("h") // закрытие файла
+
+delete::file("d") // удаление файла
+
+conect(test) //названия точки для конекта вот так 
+
+print(arg, "{int}") // посли вызова функции мы печатаем что находыться в function 
+
+cout(input, "{int}") // для работы с пользовательским вводом
+
+printg("
+    какой то много строчный тест
+    Test,
+    Test,
+    Test,
+    Test,
+    Test,
+    Test,
+    Test,
+")
+
+return 1 // окончание function
+
+return 0 // окончание программы
+
+с дебагом 
+
+pabla@archlinux ~/D/my-langvihc (main)> ./compile/pgt run test_code/intro2.pgt --debug
+[DEBUG] Loading file: test_code/intro2.pgt
+[DEBUG] File size: 423 bytes
+[DEBUG] Tokenized 61 tokens
+[DEBUG] Starting parse_program...
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 14 (=== File Operations Demo ===)
+[DEBUG] parse_print: parsed arg, current token: 19 ())
+[DEBUG] parse_print: successfully parsed 1 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 14 (1. Creating file...)
+[DEBUG] parse_print: parsed arg, current token: 19 ())
+[DEBUG] parse_print: successfully parsed 1 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 14 (2. Writing to file...)
+[DEBUG] parse_print: parsed arg, current token: 19 ())
+[DEBUG] parse_print: successfully parsed 1 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 14 (=== All operations completed! ===)
+[DEBUG] parse_print: parsed arg, current token: 19 ())
+[DEBUG] parse_print: successfully parsed 1 args
+[DEBUG] Defined function: main with 0 params
+[DEBUG] Parsed 1 nodes
+[DEBUG] Function main has 0 params, got 0 args
+[DEBUG] Set local var filename = demo.txt
+[DEBUG] Set local var content = Hello World !
+=== File Operations Demo ===
+1. Creating file...
+[DEBUG] Created file: demo.txt
+2. Writing to file...
+[DEBUG] Wrote to file: demo.txt
+[DEBUG] Wrote to file: demo.txt
+=== All operations completed! ===
+pabla@archlinux ~/D/my-langvihc (main)> 
+
+
+
+
+
+без дебага 
+
+
+pabla@archlinux ~/D/my-langvihc (main)> ./compile/pgt run test_code/intro2.pgt
+=== File Operations Demo ===
+1. Creating file...
+2. Writing to file...
+=== All operations completed! ===
+pabla@archlinux ~/D/my-langvihc (main)> 
+
+
+код языка
+
+
+```intro2.pgt
+package main
+
+function(main) {
+    filename + string = "demo.txt"
+    content + string = "Hello World !"
+    
+    println("=== File Operations Demo ===")
+    
+    println("1. Creating file...")
+    create::file(filename)
+    
+    println("2. Writing to file...")
+    write::file(filename, content)
+    write::file(filename, "Second line")
+    
+    
+    println("=== All operations completed! ===")
+    return 1
+}
+
+return 0
+
+```
+
+```calculator.pgt
+package main
+
+function(main) {
+    println("=== Простой калькулятор ===")
+    println("Введите два числа для вычислений")
+    
+    println("Первое число: ")
+    cout(input, "{int}")
+    a + int = input
+    
+    println("Второе число: ")
+    cout(input, "{int}")
+    b + int = input
+    
+    sum + int = a + b
+    diff + int = a - b
+    prod + int = a * b
+    quot + int = a / b
+    
+    println("--- Результаты ---")
+    println(a, "{int}")
+    println(" + ")
+    println(b, "{int}")
+    println(" = ", sum, "{int}")
+    
+    println(a, "{int}")
+    println(" - ")
+    println(b, "{int}")
+    println(" = ", diff, "{int}")
+    
+    println(a, "{int}")
+    println(" * ")
+    println(b, "{int}")
+    println(" = ", prod, "{int}")
+    
+    println(a, "{int}")
+    println(" / ")
+    println(b, "{int}")
+    println(" = ", quot, "{int}")
+    
+    return 1
+}
+return 0
+
+
+```
+
+тест с дебагом и без
+
+pabla@archlinux ~/D/my-langvihc (main)> ./compile/pgt run test_code/calculator.pgt --debug
+[DEBUG] Loading file: test_code/calculator.pgt
+[DEBUG] File size: 943 bytes
+[DEBUG] Tokenized 179 tokens
+[DEBUG] Starting parse_program...
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 14 (=== Простой калькулятор ===)
+[DEBUG] parse_print: parsed arg, current token: 19 ())
+[DEBUG] parse_print: successfully parsed 1 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 14 (Введите два числа для вычислений)
+[DEBUG] parse_print: parsed arg, current token: 19 ())
+[DEBUG] parse_print: successfully parsed 1 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 14 (Первое число:)
+[DEBUG] parse_print: parsed arg, current token: 19 ())
+[DEBUG] parse_print: successfully parsed 1 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 14 (Второе число:)
+[DEBUG] parse_print: parsed arg, current token: 19 ())
+[DEBUG] parse_print: successfully parsed 1 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 14 (--- Результаты ---)
+[DEBUG] parse_print: parsed arg, current token: 19 ())
+[DEBUG] parse_print: successfully parsed 1 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 13 (a)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: successfully parsed 1 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 14 ( +)
+[DEBUG] parse_print: parsed arg, current token: 19 ())
+[DEBUG] parse_print: successfully parsed 1 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 13 (b)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: successfully parsed 1 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 14 ( =)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: parsing arg at token: 13 (sum)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: successfully parsed 2 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 13 (a)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: successfully parsed 1 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 14 ( -)
+[DEBUG] parse_print: parsed arg, current token: 19 ())
+[DEBUG] parse_print: successfully parsed 1 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 13 (b)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: successfully parsed 1 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 14 ( =)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: parsing arg at token: 13 (diff)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: successfully parsed 2 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 13 (a)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: successfully parsed 1 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 14 ( *)
+[DEBUG] parse_print: parsed arg, current token: 19 ())
+[DEBUG] parse_print: successfully parsed 1 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 13 (b)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: successfully parsed 1 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 14 ( =)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: parsing arg at token: 13 (prod)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: successfully parsed 2 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 13 (a)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: successfully parsed 1 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 14 ( /)
+[DEBUG] parse_print: parsed arg, current token: 19 ())
+[DEBUG] parse_print: successfully parsed 1 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 13 (b)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: successfully parsed 1 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 14 ( =)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: parsing arg at token: 13 (quot)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: successfully parsed 2 args
+[DEBUG] Defined function: main with 0 params
+[DEBUG] Parsed 1 nodes
+[DEBUG] Function main has 0 params, got 0 args
+=== Простой калькулятор ===
+Введите два числа для вычислений
+Первое число:
+> 22
+[DEBUG] Input saved to local 'input' = 22
+[DEBUG] Set local var a = 22
+Второе число:
+> 22
+[DEBUG] Input saved to local 'input' = 22
+[DEBUG] Set local var b = 22
+[DEBUG] Set local var sum = 44
+[DEBUG] Set local var diff = 0
+[DEBUG] Set local var prod = 484
+[DEBUG] Set local var quot = 1
+--- Результаты ---
+22
+ +
+22
+ =44
+22
+ -
+22
+ =0
+22
+ *
+22
+ =484
+22
+ /
+22
+ =1
+pabla@archlinux ~/D/my-langvihc (main)> 
+
+
+и без дебага
+
+pabla@archlinux ~/D/my-langvihc (main)> ./compile/pgt run test_code/calculator.pgt
+=== Простой калькулятор ===
+Введите два числа для вычислений
+Первое число:
+> 22
+Второе число:
+> 22
+--- Результаты ---
+22
+ +
+22
+ =44
+22
+ -
+22
+ =0
+22
+ *
+22
+ =484
+22
+ /
+22
+ =1
+pabla@archlinux ~/D/my-langvihc (main)> 
+
+
+
+
+код 
+
+```test2.pgt
+package main
+
+function(main) {
+	test + int = 300
+	test2 + int = 567
+
+	sums + int = test * test2
+	println(sums, "{int}")
+
+	println("Hello, World!")
+
+	a + int = 10
+    b + int = 20
+    sum + int = a + b
+    mul + int = a * b
+
+    println("Sum:", sum, "{int}")
+    println("Mul:", mul, "{int}")
+
+	message + string = "Привет от pabla!"
+	print("Сообщение: ", message, "{string}")
+
+	ad + int = 10
+    bd + int = 20
+
+    sumd + int = ad + bd
+
+	pi + float = 3.14159
+    radius + float = 5.0
+    area + float = pi * radius * radius
+
+	cout("{int}")     // ввод числа
+
+    println
+    print("Ты ввёл число: ", input, "{int}")
+
+    print("Площадь круга: ", area, "{float}")
+
+	if (sumd > 25) {
+        print("Сумма большая: ", sum, "{int}")
+    } else {
+        print("Сумма маленькая: ", sum, "{int}")
+    }
+
+    return 1
+}
+return 0
+```
+
+и тест с дебагом и без дебага
+
+pabla@archlinux ~/D/my-langvihc (main) [1]> ./compile/pgt run test_code/test2.pgt --debug
+[DEBUG] Loading file: test_code/test2.pgt
+[DEBUG] File size: 868 bytes
+[DEBUG] Tokenized 177 tokens
+[DEBUG] Starting parse_program...
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 13 (sums)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: successfully parsed 1 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 14 (Hello, World!)
+[DEBUG] parse_print: parsed arg, current token: 19 ())
+[DEBUG] parse_print: successfully parsed 1 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 14 (Sum:)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: parsing arg at token: 13 (sum)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: successfully parsed 2 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 14 (Mul:)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: parsing arg at token: 13 (mul)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: successfully parsed 2 args
+[DEBUG] parse_print: starting at token: 2 (print)
+[DEBUG] parse_print: parsing arg at token: 14 (Сообщение:)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: parsing arg at token: 13 (message)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: successfully parsed 2 args
+Error: Syntax error: Unexpected token: '{int}' at line 32
+  at line 32, column 0
+pabla@archlinux ~/D/my-langvihc (main) [1]> ./compile/pgt run test_code/test2.pgt --debug
+[DEBUG] Loading file: test_code/test2.pgt
+[DEBUG] File size: 853 bytes
+[DEBUG] Tokenized 173 tokens
+[DEBUG] Starting parse_program...
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 13 (sums)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: successfully parsed 1 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 14 (Hello, World!)
+[DEBUG] parse_print: parsed arg, current token: 19 ())
+[DEBUG] parse_print: successfully parsed 1 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 14 (Sum:)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: parsing arg at token: 13 (sum)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: successfully parsed 2 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 14 (Mul:)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: parsing arg at token: 13 (mul)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: successfully parsed 2 args
+[DEBUG] parse_print: starting at token: 2 (print)
+[DEBUG] parse_print: parsing arg at token: 14 (Сообщение:)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: parsing arg at token: 13 (message)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: successfully parsed 2 args
+[DEBUG] parse_print: starting at token: 4 (println)
+[DEBUG] parse_print: parsing arg at token: 18 (()
+[DEBUG] parse_print: failed to parse expr at token: 18 (()
+[DEBUG] parse_print: successfully parsed 0 args
+[DEBUG] parse_print: starting at token: 2 (print)
+[DEBUG] parse_print: parsing arg at token: 14 (Площадь круга:)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: parsing arg at token: 13 (area)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: successfully parsed 2 args
+[DEBUG] parse_print: starting at token: 2 (print)
+[DEBUG] parse_print: parsing arg at token: 14 (Сумма большая:)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: parsing arg at token: 13 (sum)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: successfully parsed 2 args
+[DEBUG] parse_print: starting at token: 2 (print)
+[DEBUG] parse_print: parsing arg at token: 14 (Сумма маленькая:)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: parsing arg at token: 13 (sum)
+[DEBUG] parse_print: parsed arg, current token: 20 (,)
+[DEBUG] parse_print: successfully parsed 2 args
+[DEBUG] Defined function: main with 0 params
+[DEBUG] Parsed 1 nodes
+[DEBUG] Function main has 0 params, got 0 args
+[DEBUG] Set local var test = 300
+[DEBUG] Set local var test2 = 567
+[DEBUG] Set local var sums = 170100
+170100
+Hello, World!
+[DEBUG] Set local var a = 10
+[DEBUG] Set local var b = 20
+[DEBUG] Set local var sum = 30
+[DEBUG] Set local var mul = 200
+Sum:30
+Mul:200
+[DEBUG] Set local var message = Привет от pabla!
+Сообщение:Привет от pabla!
+[DEBUG] Set local var ad = 10
+[DEBUG] Set local var bd = 20
+[DEBUG] Set local var sumd = 30
+[DEBUG] Set local var pi = 3.141590
+[DEBUG] Set local var radius = 5.000000
+[DEBUG] Set local var area = 78.539750
+
+Площадь круга:78.539750
+Сумма большая:30
+pabla@archlinux ~/D/my-langvihc (main)> 
+
+
+
+и без дебага
+
+
+pabla@archlinux ~/D/my-langvihc (main)> ./compile/pgt run test_code/test2.pgt
+170100
+Hello, World!
+Sum:30
+Mul:200
+Сообщение:Привет от pabla!
+
+Площадь круга:78.539750
+Сумма большая:30
+pabla@archlinux ~/D/my-langvihc (main)> 
