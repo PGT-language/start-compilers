@@ -211,7 +211,7 @@ Token Lexer::next_token() {
             if (id == "printg") return {T_PRINTG, id, line};
             if (id == "println") return {T_PRINTLN, id, line};
             if (id == "return") return {T_RETURN, id, line};
-            if (id == "conect") return {T_CONECT, id, line};
+            if (id == "call") return {T_CALL, id, line};
             if (id == "input") return {T_INPUT, id, line};
             if (id == "cout") return {T_COUT, id, line};
             if (id == "int") return {T_INT, id, line};

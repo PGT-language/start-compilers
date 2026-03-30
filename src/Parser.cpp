@@ -189,7 +189,7 @@ std::shared_ptr<AstNode> Parser::parse_statement() {
     if (current().type == T_IDENTIFIER && pos + 1 < tokens.size() && tokens[pos + 1].type == T_LPAREN) {
         return parse_function_call();  // func1()
     }
-    if (current().type == T_CONECT) return parse_conect();
+    if (current().type == T_CALL) return parse_call();
     if (current().type == T_RETURN) { 
         advance(); // return
         // Пропускаем выражение после return, если оно есть (до закрывающей скобки или конца функции)
@@ -389,9 +389,9 @@ std::shared_ptr<InputStmt> Parser::parse_input() {
     return input;
 }
 
-std::shared_ptr<ConectCall> Parser::parse_conect() {
+std::shared_ptr<CallStmt> Parser::parse_call() {
     int call_line = current().line;
-    advance(); // conect
+    advance(); // call
     advance(); // (
     
     std::string name;
@@ -403,7 +403,7 @@ std::shared_ptr<ConectCall> Parser::parse_conect() {
         advance();
     }
     
-    auto call = std::make_shared<ConectCall>();
+    auto call = std::make_shared<CallStmt>();
     call->location = SourceLocation(call_line, 0);
     call->func_name = name;
     
@@ -418,13 +418,13 @@ std::shared_ptr<ConectCall> Parser::parse_conect() {
     return call;
 }
 
-std::shared_ptr<ConectCall> Parser::parse_function_call() {
+std::shared_ptr<CallStmt> Parser::parse_function_call() {
     int call_line = current().line;
     std::string name = current().value;
     advance(); // identifier
     advance(); // (
     
-    auto call = std::make_shared<ConectCall>();
+    auto call = std::make_shared<CallStmt>();
     call->location = SourceLocation(call_line, 0);
     call->func_name = name;
     

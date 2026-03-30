@@ -177,7 +177,7 @@ void SemanticAnalyzer::analyze_statement(const std::shared_ptr<AstNode>& stmt) {
         analyze_input(input);
     } else if (auto if_stmt = std::dynamic_pointer_cast<IfStmt>(stmt)) {
         analyze_if(if_stmt);
-    } else if (auto call = std::dynamic_pointer_cast<ConectCall>(stmt)) {
+    } else if (auto call = std::dynamic_pointer_cast<CallStmt>(stmt)) {
         analyze_call(call);
     } else if (auto file_op = std::dynamic_pointer_cast<FileOp>(stmt)) {
         analyze_file_op(file_op);
@@ -269,7 +269,7 @@ void SemanticAnalyzer::analyze_if(const std::shared_ptr<IfStmt>& if_stmt) {
     exit_scope();
 }
 
-void SemanticAnalyzer::analyze_call(const std::shared_ptr<ConectCall>& call) {
+void SemanticAnalyzer::analyze_call(const std::shared_ptr<CallStmt>& call) {
     if (!functions.count(call->func_name)) {
         throw UndefinedError(call->func_name, "function", call->location);
     }
@@ -307,4 +307,3 @@ void SemanticAnalyzer::analyze_file_op(const std::shared_ptr<FileOp>& file_op) {
 void SemanticAnalyzer::analyze(const std::vector<std::shared_ptr<AstNode>>& program) {
     analyze_program(program);
 }
-

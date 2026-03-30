@@ -68,7 +68,7 @@ void Interpreter::execute_function(const std::string& name, const std::vector<Va
             if (!print->is_printg) {
                 std::cout << std::endl;
             }
-            } else if (auto call = std::dynamic_pointer_cast<ConectCall>(stmt)) {
+            } else if (auto call = std::dynamic_pointer_cast<CallStmt>(stmt)) {
             std::vector<Value> args;
             for (const auto& a : call->args) args.push_back(eval(a, locals));
             if (DEBUG) std::cout << "[DEBUG] Calling " << call->func_name << " with " << args.size() << " args" << std::endl;
@@ -114,7 +114,7 @@ void Interpreter::execute_function(const std::string& name, const std::vector<Va
                     } else {
                         std::cout << std::endl;
                     }
-                } else if (auto call = std::dynamic_pointer_cast<ConectCall>(s)) {
+                } else if (auto call = std::dynamic_pointer_cast<CallStmt>(s)) {
                     std::vector<Value> args;
                     for (const auto& a : call->args) args.push_back(eval(a, locals));
                     try {
@@ -186,7 +186,7 @@ void Interpreter::execute_function(const std::string& name, const std::vector<Va
                             } else {
                                 std::cout << std::endl;
                             }
-                        } else if (auto call = std::dynamic_pointer_cast<ConectCall>(ns)) {
+                        } else if (auto call = std::dynamic_pointer_cast<CallStmt>(ns)) {
                             std::vector<Value> args;
                             for (const auto& a : call->args) args.push_back(eval(a, locals));
                             try {

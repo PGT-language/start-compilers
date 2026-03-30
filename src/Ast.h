@@ -44,7 +44,7 @@ struct InputStmt : AstNode {
     std::string var_name;  // имя переменной, в которую сохраняется значение (по умолчанию "input")
 };
 
-struct ConectCall : AstNode {
+struct CallStmt : AstNode {
     std::string func_name;
     std::vector<std::shared_ptr<AstNode>> args;
 };

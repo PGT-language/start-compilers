@@ -177,7 +177,7 @@ void CodeGen::generate_file_op(const std::shared_ptr<FileOp>& file_op) {
     }
 }
 
-void CodeGen::generate_call(const std::shared_ptr<ConectCall>& call) {
+void CodeGen::generate_call(const std::shared_ptr<CallStmt>& call) {
     write_indent();
     std::string func_name = call->func_name;
     if (func_name == "main") {
@@ -200,7 +200,7 @@ void CodeGen::generate_statement(const std::shared_ptr<AstNode>& stmt) {
         generate_input(input);
     } else if (auto if_stmt = std::dynamic_pointer_cast<IfStmt>(stmt)) {
         generate_if(if_stmt);
-    } else if (auto call = std::dynamic_pointer_cast<ConectCall>(stmt)) {
+    } else if (auto call = std::dynamic_pointer_cast<CallStmt>(stmt)) {
         generate_call(call);
     } else if (auto file_op = std::dynamic_pointer_cast<FileOp>(stmt)) {
         generate_file_op(file_op);
@@ -273,9 +273,9 @@ std::string CodeGen::generate(const std::vector<std::shared_ptr<AstNode>>& progr
     code << "int main(int argc, char** argv) {\n";
     code << "    gc_init();\n";
     
-    // Ищем и выполняем conect(main)
+    // Ищем и выполняем call(main)
     for (const auto& node : program) {
-        if (auto call = std::dynamic_pointer_cast<ConectCall>(node)) {
+        if (auto call = std::dynamic_pointer_cast<CallStmt>(node)) {
             if (call->func_name == "main") {
                 code << "    pgt_main();\n";
             }

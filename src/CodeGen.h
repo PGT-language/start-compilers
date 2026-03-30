@@ -27,10 +27,9 @@ class CodeGen {
     void generate_if(const std::shared_ptr<IfStmt>& if_stmt);
     void generate_file_op(const std::shared_ptr<FileOp>& file_op);
     void generate_var_decl(const std::shared_ptr<VarDecl>& decl);
-    void generate_call(const std::shared_ptr<ConectCall>& call);
+    void generate_call(const std::shared_ptr<CallStmt>& call);
     
 public:
     std::string generate(const std::vector<std::shared_ptr<AstNode>>& program);
     void save_to_file(const std::string& filename);
 };
-
