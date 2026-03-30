@@ -99,6 +99,28 @@ Token Lexer::next_token() {
                     break;
                 }
                 last_pos = pos;
+
+                if (peek() == '\\') {
+                    get(); // пропускаем backslash
+                    char escaped = get();
+                    if (escaped == 0) {
+                        break;
+                    }
+                    if (escaped == 'n') {
+                        str += '\n';
+                    } else if (escaped == 't') {
+                        str += '\t';
+                    } else if (escaped == 'r') {
+                        str += '\r';
+                    } else if (escaped == '"') {
+                        str += '"';
+                    } else if (escaped == '\\') {
+                        str += '\\';
+                    } else {
+                        str += escaped;
+                    }
+                    continue;
+                }
                 
                 if (peek() == '"') {
                     // Проверяем контекст после закрывающей кавычки
@@ -127,43 +149,6 @@ Token Lexer::next_token() {
                                 break;
                             }
                         }
-                        // Убираем пробелы и табуляции в конце каждой строки (перед переносом строки)
-                        // и удаляем пустые строки (переносы строк, после которых идут только пробелы до следующего переноса)
-                        // Также убираем отступы в начале строк после переноса строки
-                        std::string cleaned;
-                        bool after_newline = false;
-                        for (size_t i = 0; i < str.length(); ++i) {
-                            if (str[i] == '\n' || str[i] == '\r') {
-                                // Удаляем пробелы и табуляции перед переносом строки
-                                while (!cleaned.empty() && (cleaned.back() == ' ' || cleaned.back() == '\t')) {
-                                    cleaned.pop_back();
-                                }
-                                // Проверяем, что идет после этого переноса строки
-                                size_t j = i + 1;
-                                // Пропускаем пробелы и табуляции после переноса (отступы)
-                                while (j < str.length() && (str[j] == ' ' || str[j] == '\t')) {
-                                    j++;
-                                }
-                                // Если после пробелов идет еще один перенос строки или конец строки, пропускаем этот перенос
-                                if (j >= str.length() || str[j] == '\n' || str[j] == '\r') {
-                                    // Пропускаем этот перенос строки
-                                    i = j - 1;
-                                    continue;
-                                }
-                                // Иначе сохраняем перенос строки и продолжаем (пробелы уже пропущены)
-                                cleaned += str[i];
-                                after_newline = true;
-                            } else {
-                                // Если мы после переноса строки и это пробел/табуляция, пропускаем (отступы уже убраны)
-                                if (after_newline && (str[i] == ' ' || str[i] == '\t')) {
-                                    // Пропускаем пробелы в начале строки
-                                    continue;
-                                }
-                                cleaned += str[i];
-                                after_newline = false;
-                            }
-                        }
-                        str = cleaned;
                         break;
                     }
                     // Иначе это кавычка внутри строки, возвращаемся назад и добавляем её в строку
