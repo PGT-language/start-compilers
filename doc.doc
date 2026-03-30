@@ -60,3 +60,11 @@ printg("
 return 1 // окончание function
 
 return 0 // окончание программы
+
+net::http::get("https://example.com") // получение данных по url
+
+net::http::post("https://example.com", "{data}") // отправка данных по url
+
+net::https::get("https://example.com") // получение данных по url только по https
+
+net::https::post("https://example.com", "{data}") // отправка данных по url только по https
