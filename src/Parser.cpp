@@ -6,11 +6,20 @@
 
 void Parser::load_tokens(std::vector<Token> t) {
     tokens = std::move(t);
+    pos = 0;
     if (tokens.empty() || tokens.back().type != T_EOF) tokens.push_back({T_EOF});
 }
 
-bool Parser::is_eof() const { return pos >= tokens.size(); }
-const Token& Parser::current() const { return tokens[pos]; }
+bool Parser::is_eof() const {
+    return pos >= tokens.size() || tokens[pos].type == T_EOF;
+}
+
+const Token& Parser::current() const {
+    static const Token eof_token{T_EOF, "", 0};
+    if (tokens.empty()) return eof_token;
+    if (pos >= tokens.size()) return tokens.back();
+    return tokens[pos];
+}
 void Parser::advance() { if (!is_eof()) ++pos; }
 
 std::vector<std::shared_ptr<AstNode>> Parser::parse_program() {
@@ -157,6 +166,10 @@ std::shared_ptr<FunctionDef> Parser::parse_function() {
         } catch (const SyntaxError& e) {
             throw;  // Пробрасываем ошибку синтаксиса дальше
         }
+    }
+
+    if (is_eof()) {
+        throw SyntaxError("Expected '}' to close function '" + func->name + "'", func->location);
     }
 
     advance(); // }
@@ -428,6 +441,10 @@ std::shared_ptr<CallStmt> Parser::parse_call() {
             if (current().type == T_COMMA) advance();
         }
     }
+    if (is_eof() || current().type != T_RPAREN) {
+        throw SyntaxError("Expected ')' after function call arguments, got: " + current().value,
+                         SourceLocation(current().line, 0));
+    }
     advance(); // )
     return call;
 }
@@ -561,7 +578,7 @@ std::shared_ptr<FileOp> Parser::parse_file_op() {
         file_op->data = parse_expr();
     }
     
-    if (current().type != T_RPAREN) {
+    if (is_eof() || current().type != T_RPAREN) {
         throw SyntaxError("Expected ')' after file operation arguments, got: " + current().value, 
                          SourceLocation(current().line, 0));
     }
@@ -581,24 +598,28 @@ std::shared_ptr<NetOp> Parser::parse_net_op() {
     advance(); // ::
 
     if (current().type != T_IDENTIFIER) {
-        throw SyntaxError("Expected transport after 'net::', got: " + current().value,
+        throw SyntaxError("Expected network method or transport after 'net::', got: " + current().value,
                          SourceLocation(current().line, 0));
     }
-    std::string transport = current().value;
-    advance(); // http / https
+    std::string first_part = current().value;
+    advance();
 
-    if (current().type != T_COLON_COLON) {
-        throw SyntaxError("Expected '::' after network transport, got: " + current().value,
-                         SourceLocation(current().line, 0));
-    }
-    advance(); // ::
+    std::string transport;
+    std::string method;
+    if (current().type == T_COLON_COLON) {
+        transport = first_part;
+        advance(); // ::
 
-    if (current().type != T_IDENTIFIER) {
-        throw SyntaxError("Expected network method after transport, got: " + current().value,
-                         SourceLocation(current().line, 0));
+        if (current().type != T_IDENTIFIER) {
+            throw SyntaxError("Expected network method after transport, got: " + current().value,
+                             SourceLocation(current().line, 0));
+        }
+        method = current().value;
+        advance(); // get / post
+    } else {
+        transport = "";
+        method = first_part;
     }
-    std::string method = current().value;
-    advance(); // get / post
 
     if (current().type != T_LPAREN) {
         throw SyntaxError("Expected '(' after network method, got: " + current().value,
@@ -623,7 +644,7 @@ std::shared_ptr<NetOp> Parser::parse_net_op() {
         net_op->data = parse_expr();
     }
 
-    if (current().type != T_RPAREN) {
+    if (is_eof() || current().type != T_RPAREN) {
         throw SyntaxError("Expected ')' after network operation arguments, got: " + current().value,
                          SourceLocation(current().line, 0));
     }
@@ -669,6 +690,10 @@ std::shared_ptr<IfStmt> Parser::parse_if() {
         }
     }
     
+    if (is_eof()) {
+        throw SyntaxError("Expected '}' to close if block", if_stmt->location);
+    }
+
     if (current().type == T_RBRACE) {
         advance(); // }
     }
@@ -685,6 +710,9 @@ std::shared_ptr<IfStmt> Parser::parse_if() {
                 } else {
                     advance();
                 }
+            }
+            if (is_eof()) {
+                throw SyntaxError("Expected '}' to close else block", if_stmt->location);
             }
             if (current().type == T_RBRACE) {
                 advance(); // }
@@ -738,6 +766,10 @@ std::shared_ptr<WhileStmt> Parser::parse_while() {
         } else {
             advance();
         }
+    }
+
+    if (is_eof()) {
+        throw SyntaxError("Expected '}' to close while block", while_stmt->location);
     }
 
     if (current().type == T_RBRACE) {

@@ -86,7 +86,7 @@ std::string Interpreter::perform_http_request(const std::string& transport, cons
                                               const std::string& url, const std::string& body,
                                               const SourceLocation& loc) const {
     ParsedUrl parsed = parse_url(url, loc);
-    if (transport != parsed.scheme) {
+    if (!transport.empty() && transport != parsed.scheme) {
         throw RuntimeError("Network transport and URL scheme must match", loc);
     }
     if (parsed.scheme != "http" && parsed.scheme != "https") {
@@ -448,7 +448,7 @@ void Interpreter::execute_statement(const std::shared_ptr<AstNode>& stmt, std::m
             throw TypeError("Network URL must be a string", net_op->location);
         }
 
-        if (net_op->transport != "http" && net_op->transport != "https") {
+        if (!net_op->transport.empty() && net_op->transport != "http" && net_op->transport != "https") {
             throw RuntimeError("Unsupported network transport: " + net_op->transport, net_op->location);
         }
 

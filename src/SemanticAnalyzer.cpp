@@ -310,7 +310,7 @@ void SemanticAnalyzer::analyze_call(const std::shared_ptr<CallStmt>& call) {
 }
 
 void SemanticAnalyzer::analyze_net_op(const std::shared_ptr<NetOp>& net_op) {
-    if (net_op->transport != "http" && net_op->transport != "https") {
+    if (!net_op->transport.empty() && net_op->transport != "http" && net_op->transport != "https") {
         throw SemanticError("Unsupported network transport: '" + net_op->transport + "'", net_op->location);
     }
     if (net_op->method != "get" && net_op->method != "post") {

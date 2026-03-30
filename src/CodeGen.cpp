@@ -194,7 +194,10 @@ void CodeGen::generate_file_op(const std::shared_ptr<FileOp>& file_op) {
 
 void CodeGen::generate_net_op(const std::shared_ptr<NetOp>& net_op) {
     write_indent();
-    code << "fprintf(stderr, \"Network operation '" << net_op->transport << "::" << net_op->method
+    std::string op_name = net_op->transport.empty()
+        ? "net::" + net_op->method
+        : "net::" + net_op->transport + "::" + net_op->method;
+    code << "fprintf(stderr, \"Network operation '" << op_name
          << "' is not supported by the C backend yet\\n\");\n";
     write_indent();
     code << "exit(1);\n";

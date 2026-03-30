@@ -61,6 +61,10 @@ return 1 // окончание function
 
 return 0 // окончание программы
 
+net::get("https://example.com") // transport выбирается автоматически из URL
+
+net::post("https://example.com", "{data}") // transport выбирается автоматически из URL
+
 net::http::get("http://example.com") // получение данных по url, Linux-only
 
 net::http::post("http://example.com", "{data}") // отправка данных по url, Linux-only
