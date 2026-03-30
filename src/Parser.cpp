@@ -284,6 +284,38 @@ std::shared_ptr<AstNode> Parser::parse_mul_div() {
     return node;
 }
 
+std::shared_ptr<BuiltinCallExpr> Parser::parse_builtin_call_expr() {
+    int call_line = current().line;
+    std::string name = current().value;
+    advance(); // builtin name
+
+    if (current().type != T_LPAREN) {
+        throw SyntaxError("Expected '(' after builtin '" + name + "', got: " + current().value,
+                         SourceLocation(current().line, 0));
+    }
+    advance(); // (
+
+    auto call = std::make_shared<BuiltinCallExpr>();
+    call->location = SourceLocation(call_line, 0);
+    call->name = name;
+
+    if (current().type != T_RPAREN) {
+        call->args.push_back(parse_expr());
+        while (!is_eof() && current().type == T_COMMA) {
+            advance(); // ,
+            call->args.push_back(parse_expr());
+        }
+    }
+
+    if (is_eof() || current().type != T_RPAREN) {
+        throw SyntaxError("Expected ')' after builtin call arguments, got: " + current().value,
+                         SourceLocation(current().line, 0));
+    }
+    advance(); // )
+
+    return call;
+}
+
 std::shared_ptr<AstNode> Parser::parse_primary() {
     if (is_eof()) return nullptr;
     if (current().type == T_NUMBER) {
@@ -312,6 +344,11 @@ std::shared_ptr<AstNode> Parser::parse_primary() {
         lit->value = Value(current().type == T_TRUE ? 1LL : 0LL);
         advance();
         return lit;
+    }
+    if (current().type == T_IDENTIFIER &&
+        (current().value == "protocol") &&
+        pos + 1 < tokens.size() && tokens[pos + 1].type == T_LPAREN) {
+        return parse_builtin_call_expr();
     }
     if (current().type == T_IDENTIFIER || current().type == T_INPUT) {
         auto id = std::make_shared<Identifier>();

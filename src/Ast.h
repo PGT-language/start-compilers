@@ -32,6 +32,11 @@ struct BinaryOp : AstNode {
 struct Literal : AstNode { Value value; };
 struct Identifier : AstNode { std::string name; };
 
+struct BuiltinCallExpr : AstNode {
+    std::string name;
+    std::vector<std::shared_ptr<AstNode>> args;
+};
+
 struct PrintStmt : AstNode {
     std::vector<std::shared_ptr<AstNode>> args;
     std::vector<std::string> formats;

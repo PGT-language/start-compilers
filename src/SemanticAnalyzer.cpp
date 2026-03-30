@@ -14,6 +14,19 @@ VarType SemanticAnalyzer::infer_expr_type(const std::shared_ptr<AstNode>& node) 
     if (auto lit = std::dynamic_pointer_cast<Literal>(node)) {
         return get_value_type(lit->value);
     }
+    if (auto builtin = std::dynamic_pointer_cast<BuiltinCallExpr>(node)) {
+        if (builtin->name == "protocol") {
+            if (builtin->args.size() != 1) {
+                throw SemanticError("Builtin 'protocol' expects 1 argument", builtin->location);
+            }
+            VarType arg_type = infer_expr_type(builtin->args[0]);
+            if (arg_type != VarType::STRING && arg_type != VarType::UNKNOWN) {
+                throw TypeError("Builtin 'protocol' expects a string URL", builtin->location);
+            }
+            return VarType::STRING;
+        }
+        throw SemanticError("Unknown builtin expression: '" + builtin->name + "'", builtin->location);
+    }
     if (auto id = std::dynamic_pointer_cast<Identifier>(node)) {
         auto* var = find_variable(id->name);
         if (var) {

@@ -44,6 +44,13 @@ std::string CodeGen::generate_expr(const std::shared_ptr<AstNode>& expr) {
     if (auto id = std::dynamic_pointer_cast<Identifier>(expr)) {
         return id->name;
     }
+
+    if (auto builtin = std::dynamic_pointer_cast<BuiltinCallExpr>(expr)) {
+        if (builtin->name == "protocol") {
+            throw std::runtime_error("Builtin expression 'protocol' is not supported by the C backend yet");
+        }
+        throw std::runtime_error("Unknown builtin expression in codegen: " + builtin->name);
+    }
     
     if (auto bin = std::dynamic_pointer_cast<BinaryOp>(expr)) {
         std::string left = generate_expr(bin->left);

@@ -524,6 +524,20 @@ void Interpreter::execute_function(const std::string& name, const std::vector<Va
 Value Interpreter::eval(const std::shared_ptr<AstNode>& node, const std::map<std::string, Value>& locals) {
     if (!node) return Value();
     if (auto lit = std::dynamic_pointer_cast<Literal>(node)) return lit->value;
+    if (auto builtin = std::dynamic_pointer_cast<BuiltinCallExpr>(node)) {
+        if (builtin->name == "protocol") {
+            if (builtin->args.size() != 1) {
+                throw RuntimeError("Builtin 'protocol' expects 1 argument", builtin->location);
+            }
+            Value arg = eval(builtin->args[0], locals);
+            if (arg.type != ValueType::STRING) {
+                throw TypeError("Builtin 'protocol' expects a string URL", builtin->location);
+            }
+            ParsedUrl parsed = parse_url(arg.str_val, builtin->location);
+            return Value(parsed.scheme);
+        }
+        throw RuntimeError("Unknown builtin expression: " + builtin->name, builtin->location);
+    }
     if (auto id = std::dynamic_pointer_cast<Identifier>(node)) {
         // Сначала ищем в локальных переменных, потом в глобальных
         if (locals.count(id->name)) {
