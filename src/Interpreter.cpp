@@ -6,6 +6,211 @@
 #include <fstream>
 #include <filesystem>
 
+bool Interpreter::is_truthy(const Value& value) const {
+    if (value.type == ValueType::INT) {
+        return value.int_val != 0;
+    }
+    if (value.type == ValueType::FLOAT) {
+        return value.float_val != 0.0;
+    }
+    if (value.type == ValueType::STRING) {
+        return !value.str_val.empty();
+    }
+    return false;
+}
+
+void Interpreter::assign_value(const std::string& name, const Value& value, std::map<std::string, Value>& locals) {
+    if (globals.count(name)) {
+        globals[name] = value;
+    } else {
+        locals[name] = value;
+    }
+}
+
+void Interpreter::execute_block(const std::vector<std::shared_ptr<AstNode>>& body, std::map<std::string, Value>& locals) {
+    for (const auto& stmt : body) {
+        execute_statement(stmt, locals);
+    }
+}
+
+void Interpreter::execute_statement(const std::shared_ptr<AstNode>& stmt, std::map<std::string, Value>& locals) {
+    if (auto decl = std::dynamic_pointer_cast<VarDecl>(stmt)) {
+        Value val = eval(decl->expr, locals);
+        assign_value(decl->name, val, locals);
+        if (DEBUG) {
+            std::cout << "[DEBUG] Set " << (globals.count(decl->name) ? "global" : "local")
+                      << " var " << decl->name << " = " << val.to_string() << std::endl;
+        }
+        return;
+    }
+
+    if (auto print = std::dynamic_pointer_cast<PrintStmt>(stmt)) {
+        size_t fmt_idx = 0;
+        for (const auto& arg : print->args) {
+            Value v = eval(arg, locals);
+            std::string fmt = fmt_idx < print->formats.size() ? print->formats[fmt_idx++] : "";
+            std::cout << v.to_string(fmt);
+        }
+        if (!print->is_printg) {
+            std::cout << std::endl;
+        }
+        return;
+    }
+
+    if (auto call = std::dynamic_pointer_cast<CallStmt>(stmt)) {
+        std::vector<Value> args;
+        for (const auto& arg : call->args) {
+            args.push_back(eval(arg, locals));
+        }
+        if (DEBUG) {
+            std::cout << "[DEBUG] Calling " << call->func_name << " with " << args.size() << " args" << std::endl;
+        }
+        try {
+            execute_function(call->func_name, args);
+        } catch (CompilerError& e) {
+            e.traceback.push_back(call->location);
+            throw;
+        }
+        return;
+    }
+
+    if (auto if_stmt = std::dynamic_pointer_cast<IfStmt>(stmt)) {
+        const auto& body_to_execute = is_truthy(eval(if_stmt->condition, locals))
+            ? if_stmt->then_body
+            : if_stmt->else_body;
+        execute_block(body_to_execute, locals);
+        return;
+    }
+
+    if (auto while_stmt = std::dynamic_pointer_cast<WhileStmt>(stmt)) {
+        while (is_truthy(eval(while_stmt->condition, locals))) {
+            execute_block(while_stmt->body, locals);
+        }
+        return;
+    }
+
+    if (auto input = std::dynamic_pointer_cast<InputStmt>(stmt)) {
+        Value val;
+
+        if (!input->prompt.empty()) {
+            std::cout << input->prompt;
+        } else {
+            std::cout << "> ";
+        }
+        std::cout.flush();
+
+        if (input->format == "{int}") {
+            long long x;
+            if (std::cin >> x) {
+                val = Value(x);
+            } else {
+                val = Value(0LL);
+                std::cin.clear();
+                std::cin.ignore(10000, '\n');
+            }
+        } else if (input->format == "{float}") {
+            double x;
+            if (std::cin >> x) {
+                val = Value(x);
+            } else {
+                val = Value(0.0);
+                std::cin.clear();
+                std::cin.ignore(10000, '\n');
+            }
+        } else if (input->format == "{string}") {
+            std::string x;
+            if (std::cin.peek() == '\n') {
+                std::cin.ignore();
+            }
+            std::getline(std::cin, x);
+            val = Value(x);
+        }
+
+        std::string var_name = input->var_name.empty() ? "input" : input->var_name;
+        assign_value(var_name, val, locals);
+        if (DEBUG) {
+            std::cout << "[DEBUG] Input saved to " << (globals.count(var_name) ? "global" : "local")
+                      << " '" << var_name << "' = " << val.to_string() << std::endl;
+        }
+        return;
+    }
+
+    if (auto file_op = std::dynamic_pointer_cast<FileOp>(stmt)) {
+        Value file_path_val = eval(file_op->file_path, locals);
+        if (file_path_val.type != ValueType::STRING) {
+            throw TypeError("File path must be a string", file_op->location);
+        }
+        std::string file_path = file_path_val.str_val;
+
+        switch (file_op->operation) {
+            case T_CREATE: {
+                std::ofstream file(file_path, std::ios::out);
+                if (!file.is_open()) {
+                    throw RuntimeError("Failed to create file: " + file_path, file_op->location);
+                }
+                file.close();
+                if (DEBUG) std::cout << "[DEBUG] Created file: " << file_path << std::endl;
+                break;
+            }
+            case T_WRITE: {
+                if (!file_op->data) {
+                    throw SemanticError("Write operation requires data argument", file_op->location);
+                }
+                Value data_val = eval(file_op->data, locals);
+                std::ofstream file(file_path, std::ios::out | std::ios::app);
+                if (!file.is_open()) {
+                    throw RuntimeError("Failed to open file for writing: " + file_path, file_op->location);
+                }
+                file << data_val.to_string();
+                file.close();
+                if (DEBUG) std::cout << "[DEBUG] Wrote to file: " << file_path << std::endl;
+                break;
+            }
+            case T_READ: {
+                std::ifstream file(file_path);
+                if (!file.is_open()) {
+                    throw RuntimeError("Failed to open file for reading: " + file_path, file_op->location);
+                }
+                std::string content;
+                std::string line;
+                while (std::getline(file, line)) {
+                    if (!content.empty()) content += "\n";
+                    content += line;
+                }
+                file.close();
+                if (DEBUG) {
+                    std::cout << "[DEBUG] Read from file: " << file_path << " (" << content.size() << " bytes)" << std::endl;
+                }
+                std::cout << content << std::endl;
+                break;
+            }
+            case T_CLOSE: {
+                if (open_files.count(file_path)) {
+                    open_files[file_path]->close();
+                    open_files.erase(file_path);
+                    if (DEBUG) std::cout << "[DEBUG] Closed file: " << file_path << std::endl;
+                }
+                break;
+            }
+            case T_DELETE: {
+                if (std::filesystem::exists(file_path)) {
+                    if (open_files.count(file_path)) {
+                        open_files[file_path]->close();
+                        open_files.erase(file_path);
+                    }
+                    std::filesystem::remove(file_path);
+                    if (DEBUG) std::cout << "[DEBUG] Deleted file: " << file_path << std::endl;
+                } else {
+                    throw RuntimeError("File does not exist: " + file_path, file_op->location);
+                }
+                break;
+            }
+            default:
+                throw SemanticError("Unknown file operation", file_op->location);
+        }
+    }
+}
+
 void Interpreter::run(const std::vector<std::shared_ptr<AstNode>>& program) {
     // Сначала обрабатываем все функции и глобальные переменные
     for (const auto& node : program) {
@@ -44,342 +249,11 @@ void Interpreter::execute_function(const std::string& name, const std::vector<Va
     }
 
     try {
-        for (const auto& stmt : func->body) {
-            if (auto decl = std::dynamic_pointer_cast<VarDecl>(stmt)) {
-            Value val = eval(decl->expr, locals);
-            // Если переменная уже существует глобально, изменяем глобальную
-            // Иначе создаем локальную переменную
-            if (globals.count(decl->name)) {
-                globals[decl->name] = val;
-                if (DEBUG) std::cout << "[DEBUG] Set global var " << decl->name << " = " << val.to_string() << std::endl;
-            } else {
-                locals[decl->name] = val;
-                if (DEBUG) std::cout << "[DEBUG] Set local var " << decl->name << " = " << val.to_string() << std::endl;
-            }
-            } else if (auto print = std::dynamic_pointer_cast<PrintStmt>(stmt)) {
-            size_t fmt_idx = 0;
-            for (const auto& arg : print->args) {
-                Value v = eval(arg, locals);
-                std::string fmt = fmt_idx < print->formats.size() ? print->formats[fmt_idx++] : "";
-                std::string output = v.to_string(fmt);
-                std::cout << output;
-            }
-            // printg не добавляет перенос строки в конце, но добавляем его для корректного отображения
-            if (!print->is_printg) {
-                std::cout << std::endl;
-            }
-            } else if (auto call = std::dynamic_pointer_cast<CallStmt>(stmt)) {
-            std::vector<Value> args;
-            for (const auto& a : call->args) args.push_back(eval(a, locals));
-            if (DEBUG) std::cout << "[DEBUG] Calling " << call->func_name << " with " << args.size() << " args" << std::endl;
-            try {
-                execute_function(call->func_name, args);
-            } catch (CompilerError& e) {
-                e.traceback.push_back(call->location);
-                throw;
-            }
-            } else if (auto if_stmt = std::dynamic_pointer_cast<IfStmt>(stmt)) {
-            Value cond_val = eval(if_stmt->condition, locals);
-            bool condition_true = false;
-            
-            // Проверяем условие
-            if (cond_val.type == ValueType::INT) {
-                condition_true = (cond_val.int_val != 0);
-            } else if (cond_val.type == ValueType::FLOAT) {
-                condition_true = (cond_val.float_val != 0.0);
-            } else if (cond_val.type == ValueType::STRING) {
-                condition_true = !cond_val.str_val.empty();
-            }
-            
-            // Выполняем соответствующее тело
-            const auto& body_to_execute = condition_true ? if_stmt->then_body : if_stmt->else_body;
-            for (const auto& s : body_to_execute) {
-                // Рекурсивно выполняем операторы из тела if/else
-                if (auto decl = std::dynamic_pointer_cast<VarDecl>(s)) {
-                    Value val = eval(decl->expr, locals);
-                    if (globals.count(decl->name)) {
-                        globals[decl->name] = val;
-                    } else {
-                        locals[decl->name] = val;
-                    }
-                } else if (auto print = std::dynamic_pointer_cast<PrintStmt>(s)) {
-                    size_t fmt_idx = 0;
-                    for (const auto& arg : print->args) {
-                        Value v = eval(arg, locals);
-                        std::string fmt = fmt_idx < print->formats.size() ? print->formats[fmt_idx++] : "";
-                        std::cout << v.to_string(fmt);
-                    }
-                    if (!print->is_printg) {
-                        std::cout << std::endl;
-                    } else {
-                        std::cout << std::endl;
-                    }
-                } else if (auto call = std::dynamic_pointer_cast<CallStmt>(s)) {
-                    std::vector<Value> args;
-                    for (const auto& a : call->args) args.push_back(eval(a, locals));
-                    try {
-                        execute_function(call->func_name, args);
-                    } catch (CompilerError& e) {
-                        e.traceback.push_back(call->location);
-                        throw;
-                    }
-                } else if (auto input = std::dynamic_pointer_cast<InputStmt>(s)) {
-                    Value val;
-                    if (!input->prompt.empty()) {
-                        std::cout << input->prompt;
-                    } else {
-                        std::cout << "> ";
-                    }
-                    std::cout.flush();
-                    if (input->format == "{int}") {
-                        long long x;
-                        if (std::cin.peek() == '\n') std::cin.ignore();
-                        std::cin >> x;
-                        val = Value(x);
-                    } else if (input->format == "{float}") {
-                        double x;
-                        if (std::cin.peek() == '\n') std::cin.ignore();
-                        std::cin >> x;
-                        val = Value(x);
-                    } else if (input->format == "{string}") {
-                        std::string x;
-                        if (std::cin.peek() == '\n') std::cin.ignore();
-                        std::getline(std::cin, x);
-                        val = Value(x);
-                    }
-                    std::string var_name = input->var_name.empty() ? "input" : input->var_name;
-                    if (globals.count(var_name)) {
-                        globals[var_name] = val;
-                    } else {
-                        locals[var_name] = val;
-                    }
-                } else if (auto nested_if = std::dynamic_pointer_cast<IfStmt>(s)) {
-                    // Рекурсивно обрабатываем вложенные if
-                    Value nested_cond = eval(nested_if->condition, locals);
-                    bool nested_true = false;
-                    if (nested_cond.type == ValueType::INT) {
-                        nested_true = (nested_cond.int_val != 0);
-                    } else if (nested_cond.type == ValueType::FLOAT) {
-                        nested_true = (nested_cond.float_val != 0.0);
-                    } else if (nested_cond.type == ValueType::STRING) {
-                        nested_true = !nested_cond.str_val.empty();
-                    }
-                    const auto& nested_body = nested_true ? nested_if->then_body : nested_if->else_body;
-                    for (const auto& ns : nested_body) {
-                        // Рекурсивно выполняем вложенные операторы
-                        if (auto decl = std::dynamic_pointer_cast<VarDecl>(ns)) {
-                            Value val = eval(decl->expr, locals);
-                            if (globals.count(decl->name)) {
-                                globals[decl->name] = val;
-                            } else {
-                                locals[decl->name] = val;
-                            }
-                        } else if (auto print = std::dynamic_pointer_cast<PrintStmt>(ns)) {
-                            size_t fmt_idx = 0;
-                            for (const auto& arg : print->args) {
-                                Value v = eval(arg, locals);
-                                std::string fmt = fmt_idx < print->formats.size() ? print->formats[fmt_idx++] : "";
-                                std::cout << v.to_string(fmt);
-                            }
-                            if (!print->is_printg) {
-                                std::cout << std::endl;
-                            } else {
-                                std::cout << std::endl;
-                            }
-                        } else if (auto call = std::dynamic_pointer_cast<CallStmt>(ns)) {
-                            std::vector<Value> args;
-                            for (const auto& a : call->args) args.push_back(eval(a, locals));
-                            try {
-                                execute_function(call->func_name, args);
-                            } catch (CompilerError& e) {
-                                e.traceback.push_back(call->location);
-                                throw;
-                            }
-                        } else if (auto file_op = std::dynamic_pointer_cast<FileOp>(ns)) {
-                            // Обработка файловых операций в вложенных if
-                            Value file_path_val = eval(file_op->file_path, locals);
-                            if (file_path_val.type != ValueType::STRING) {
-                                throw TypeError("File path must be a string", file_op->location);
-                            }
-                            std::string file_path = file_path_val.str_val;
-                            
-                            // Простая обработка (полная реализация уже есть выше)
-                            if (file_op->operation == T_CREATE) {
-                                std::ofstream file(file_path, std::ios::out);
-                                if (!file.is_open()) {
-                                    throw RuntimeError("Failed to create file: " + file_path, file_op->location);
-                                }
-                                file.close();
-                            } else if (file_op->operation == T_WRITE && file_op->data) {
-                                Value data_val = eval(file_op->data, locals);
-                                std::ofstream file(file_path, std::ios::out | std::ios::app);
-                                if (!file.is_open()) {
-                                    throw RuntimeError("Failed to open file for writing: " + file_path, file_op->location);
-                                }
-                                file << data_val.to_string();
-                                file.close();
-                            } else if (file_op->operation == T_READ) {
-                                std::ifstream file(file_path);
-                                if (!file.is_open()) {
-                                    throw RuntimeError("Failed to open file for reading: " + file_path, file_op->location);
-                                }
-                                std::string content;
-                                std::string line;
-                                while (std::getline(file, line)) {
-                                    if (!content.empty()) content += "\n";
-                                    content += line;
-                                }
-                                file.close();
-                                std::cout << content << std::endl;
-                            } else if (file_op->operation == T_DELETE) {
-                                if (std::filesystem::exists(file_path)) {
-                                    if (open_files.count(file_path)) {
-                                        open_files[file_path]->close();
-                                        open_files.erase(file_path);
-                                    }
-                                    std::filesystem::remove(file_path);
-                                } else {
-                                    throw RuntimeError("File does not exist: " + file_path, file_op->location);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            } else if (auto input = std::dynamic_pointer_cast<InputStmt>(stmt)) {
-            Value val;
-
-            // Выводим промпт, если он задан
-            if (!input->prompt.empty()) {
-                std::cout << input->prompt;
-            } else {
-                std::cout << "> ";
-            }
-            std::cout.flush();  // Сбрасываем буфер, чтобы промпт сразу отобразился
-
-            if (input->format == "{int}") {
-                long long x;
-                if (std::cin >> x) {
-                    val = Value(x);
-                } else {
-                    val = Value(0LL);  // если ошибка ввода
-                    std::cin.clear();
-                    std::cin.ignore(10000, '\n');
-                }
-            } else if (input->format == "{float}") {
-                double x;
-                if (std::cin >> x) {
-                    val = Value(x);
-                } else {
-                    val = Value(0.0);
-                    std::cin.clear();
-                    std::cin.ignore(10000, '\n');
-                }
-            } else if (input->format == "{string}") {
-                std::string x;
-                // Очищаем буфер только если есть данные
-                if (std::cin.peek() == '\n') {
-                    std::cin.ignore();  // пропускаем оставшийся перенос строки
-                }
-                std::getline(std::cin, x);
-                val = Value(x);
-            }
-
-            // Сохраняем в указанную переменную (локальную или глобальную)
-            std::string var_name = input->var_name.empty() ? "input" : input->var_name;
-            if (globals.count(var_name)) {
-                globals[var_name] = val;
-                if (DEBUG) std::cout << "[DEBUG] Input saved to global '" << var_name << "' = " << val.to_string() << std::endl;
-            } else {
-                locals[var_name] = val;
-                if (DEBUG) std::cout << "[DEBUG] Input saved to local '" << var_name << "' = " << val.to_string() << std::endl;
-            }
-            } else if (auto file_op = std::dynamic_pointer_cast<FileOp>(stmt)) {
-            // Обработка файловых операций
-            Value file_path_val = eval(file_op->file_path, locals);
-            if (file_path_val.type != ValueType::STRING) {
-                throw TypeError("File path must be a string", file_op->location);
-            }
-            std::string file_path = file_path_val.str_val;
-            
-            switch (file_op->operation) {
-                case T_CREATE: {
-                    // Создание файла
-                    std::ofstream file(file_path, std::ios::out);
-                    if (!file.is_open()) {
-                        throw RuntimeError("Failed to create file: " + file_path, file_op->location);
-                    }
-                    file.close();
-                    if (DEBUG) std::cout << "[DEBUG] Created file: " << file_path << std::endl;
-                    break;
-                }
-                case T_WRITE: {
-                    // Запись в файл
-                    if (!file_op->data) {
-                        throw SemanticError("Write operation requires data argument", file_op->location);
-                    }
-                    Value data_val = eval(file_op->data, locals);
-                    std::string data_str = data_val.to_string();
-                    
-                    std::ofstream file(file_path, std::ios::out | std::ios::app);
-                    if (!file.is_open()) {
-                        throw RuntimeError("Failed to open file for writing: " + file_path, file_op->location);
-                    }
-                    file << data_str;
-                    file.close();
-                    if (DEBUG) std::cout << "[DEBUG] Wrote to file: " << file_path << std::endl;
-                    break;
-                }
-                case T_READ: {
-                    // Чтение из файла
-                    std::ifstream file(file_path);
-                    if (!file.is_open()) {
-                        throw RuntimeError("Failed to open file for reading: " + file_path, file_op->location);
-                    }
-                    std::string content;
-                    std::string line;
-                    while (std::getline(file, line)) {
-                        if (!content.empty()) content += "\n";
-                        content += line;
-                    }
-                    file.close();
-                    // Сохраняем результат в переменную (можно расширить для сохранения в переменную)
-                    if (DEBUG) std::cout << "[DEBUG] Read from file: " << file_path << " (" << content.size() << " bytes)" << std::endl;
-                    // Пока просто выводим содержимое (можно расширить для сохранения в переменную)
-                    std::cout << content << std::endl;
-                    break;
-                }
-                case T_CLOSE: {
-                    // Закрытие файла (если он был открыт через другой механизм)
-                    if (open_files.count(file_path)) {
-                        open_files[file_path]->close();
-                        open_files.erase(file_path);
-                        if (DEBUG) std::cout << "[DEBUG] Closed file: " << file_path << std::endl;
-                    }
-                    break;
-                }
-                case T_DELETE: {
-                    // Удаление файла
-                    if (std::filesystem::exists(file_path)) {
-                        if (open_files.count(file_path)) {
-                            open_files[file_path]->close();
-                            open_files.erase(file_path);
-                        }
-                        std::filesystem::remove(file_path);
-                        if (DEBUG) std::cout << "[DEBUG] Deleted file: " << file_path << std::endl;
-                    } else {
-                        throw RuntimeError("File does not exist: " + file_path, file_op->location);
-                    }
-                    break;
-                }
-                default:
-                    throw SemanticError("Unknown file operation", file_op->location);
-            }
-            }
-        }
+        execute_block(func->body, locals);
     } catch (CompilerError& e) {
-        // Добавляем traceback
-        e.traceback = call_stack;
+        if (e.traceback.empty()) {
+            e.traceback = call_stack;
+        }
         call_stack.pop_back();
         throw;
     }

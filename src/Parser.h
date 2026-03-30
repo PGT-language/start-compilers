@@ -24,6 +24,7 @@ class Parser {
     std::shared_ptr<AstNode> parse_mul_div();
     std::shared_ptr<AstNode> parse_primary();
     std::shared_ptr<IfStmt> parse_if();
+    std::shared_ptr<WhileStmt> parse_while();
     std::shared_ptr<PrintStmt> parse_print();
     std::shared_ptr<InputStmt> parse_input();
     std::shared_ptr<CallStmt> parse_call();

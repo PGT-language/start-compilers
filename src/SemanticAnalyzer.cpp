@@ -177,6 +177,8 @@ void SemanticAnalyzer::analyze_statement(const std::shared_ptr<AstNode>& stmt) {
         analyze_input(input);
     } else if (auto if_stmt = std::dynamic_pointer_cast<IfStmt>(stmt)) {
         analyze_if(if_stmt);
+    } else if (auto while_stmt = std::dynamic_pointer_cast<WhileStmt>(stmt)) {
+        analyze_while(while_stmt);
     } else if (auto call = std::dynamic_pointer_cast<CallStmt>(stmt)) {
         analyze_call(call);
     } else if (auto file_op = std::dynamic_pointer_cast<FileOp>(stmt)) {
@@ -264,6 +266,24 @@ void SemanticAnalyzer::analyze_if(const std::shared_ptr<IfStmt>& if_stmt) {
     // Входим в область видимости else
     enter_scope();
     for (const auto& stmt : if_stmt->else_body) {
+        analyze_statement(stmt);
+    }
+    exit_scope();
+}
+
+void SemanticAnalyzer::analyze_while(const std::shared_ptr<WhileStmt>& while_stmt) {
+    try {
+        VarType cond_type = infer_expr_type(while_stmt->condition);
+        if (cond_type != VarType::INT && cond_type != VarType::UNKNOWN &&
+            cond_type != VarType::FLOAT && cond_type != VarType::STRING) {
+            throw TypeError("While condition must be a boolean expression (int)", while_stmt->condition->location);
+        }
+    } catch (const UndefinedError&) {
+        // Пропускаем ошибки неопределенных переменных в условиях - они будут проверяться во время выполнения
+    }
+
+    enter_scope();
+    for (const auto& stmt : while_stmt->body) {
         analyze_statement(stmt);
     }
     exit_scope();

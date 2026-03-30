@@ -152,6 +152,20 @@ void CodeGen::generate_if(const std::shared_ptr<IfStmt>& if_stmt) {
     code << "\n";
 }
 
+void CodeGen::generate_while(const std::shared_ptr<WhileStmt>& while_stmt) {
+    write_indent();
+    code << "while (" << generate_expr(while_stmt->condition) << ") {\n";
+    indent_level++;
+
+    for (const auto& stmt : while_stmt->body) {
+        generate_statement(stmt);
+    }
+
+    indent_level--;
+    write_indent();
+    code << "}\n";
+}
+
 void CodeGen::generate_file_op(const std::shared_ptr<FileOp>& file_op) {
     write_indent();
     std::string file_path = generate_expr(file_op->file_path);
@@ -200,6 +214,8 @@ void CodeGen::generate_statement(const std::shared_ptr<AstNode>& stmt) {
         generate_input(input);
     } else if (auto if_stmt = std::dynamic_pointer_cast<IfStmt>(stmt)) {
         generate_if(if_stmt);
+    } else if (auto while_stmt = std::dynamic_pointer_cast<WhileStmt>(stmt)) {
+        generate_while(while_stmt);
     } else if (auto call = std::dynamic_pointer_cast<CallStmt>(stmt)) {
         generate_call(call);
     } else if (auto file_op = std::dynamic_pointer_cast<FileOp>(stmt)) {

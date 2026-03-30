@@ -176,6 +176,9 @@ std::shared_ptr<AstNode> Parser::parse_statement() {
     if (current().type == T_IF) {
         return parse_if();
     }
+    if (current().type == T_WHILE) {
+        return parse_while();
+    }
     // Проверяем файловые операции: create::file, write::file, read::file, close::file, delete::file
     if ((current().type == T_CREATE || current().type == T_WRITE || current().type == T_READ || 
          current().type == T_CLOSE || current().type == T_DELETE) && 
@@ -283,6 +286,13 @@ std::shared_ptr<AstNode> Parser::parse_primary() {
         auto lit = std::make_shared<Literal>();
         lit->location = SourceLocation(current().line, 0);
         lit->value = Value(current().value);
+        advance();
+        return lit;
+    }
+    if (current().type == T_TRUE || current().type == T_FALSE) {
+        auto lit = std::make_shared<Literal>();
+        lit->location = SourceLocation(current().line, 0);
+        lit->value = Value(current().type == T_TRUE ? 1LL : 0LL);
         advance();
         return lit;
     }
@@ -617,4 +627,56 @@ std::shared_ptr<IfStmt> Parser::parse_if() {
     }
     
     return if_stmt;
+}
+
+std::shared_ptr<WhileStmt> Parser::parse_while() {
+    int while_line = current().line;
+    advance(); // while
+
+    std::shared_ptr<AstNode> condition;
+    bool has_parentheses = false;
+
+    if (current().type == T_LPAREN) {
+        has_parentheses = true;
+        advance(); // (
+    }
+
+    condition = parse_expr();
+    if (!condition) {
+        throw SyntaxError("Expected condition after 'while', got: " + current().value,
+                         SourceLocation(current().line, 0));
+    }
+
+    if (has_parentheses) {
+        if (current().type != T_RPAREN) {
+            throw SyntaxError("Expected ')' after while condition, got: " + current().value,
+                             SourceLocation(current().line, 0));
+        }
+        advance(); // )
+    }
+
+    if (current().type != T_LBRACE) {
+        throw SyntaxError("Expected '{' after while condition, got: " + current().value,
+                         SourceLocation(current().line, 0));
+    }
+    advance(); // {
+
+    auto while_stmt = std::make_shared<WhileStmt>();
+    while_stmt->location = SourceLocation(while_line, 0);
+    while_stmt->condition = condition;
+
+    while (!is_eof() && current().type != T_RBRACE) {
+        auto stmt = parse_statement();
+        if (stmt) {
+            while_stmt->body.push_back(stmt);
+        } else {
+            advance();
+        }
+    }
+
+    if (current().type == T_RBRACE) {
+        advance(); // }
+    }
+
+    return while_stmt;
 }

@@ -60,6 +60,11 @@ struct IfStmt : AstNode {
     std::vector<std::shared_ptr<AstNode>> else_body;  // тело else (может быть пустым)
 };
 
+struct WhileStmt : AstNode {
+    std::shared_ptr<AstNode> condition;  // условие цикла
+    std::vector<std::shared_ptr<AstNode>> body;  // тело цикла
+};
+
 struct FileOp : AstNode {
     TokenType operation;  // T_CREATE, T_WRITE, T_READ, T_CLOSE, T_DELETE
     std::shared_ptr<AstNode> file_path;  // путь к файлу (выражение)

@@ -57,6 +57,7 @@ class SemanticAnalyzer {
     void analyze_print(const std::shared_ptr<PrintStmt>& print);
     void analyze_input(const std::shared_ptr<InputStmt>& input);
     void analyze_if(const std::shared_ptr<IfStmt>& if_stmt);
+    void analyze_while(const std::shared_ptr<WhileStmt>& while_stmt);
     void analyze_call(const std::shared_ptr<CallStmt>& call);
     void analyze_file_op(const std::shared_ptr<FileOp>& file_op);
     
