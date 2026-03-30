@@ -147,10 +147,34 @@ std::string Interpreter::perform_http_request(const std::string& transport, cons
             close(sockfd);
             throw RuntimeError("Failed to initialize TLS context", loc);
         }
-        if (SSL_CTX_set_default_verify_paths(ssl_ctx) != 1) {
+
+        bool certs_loaded = (SSL_CTX_set_default_verify_paths(ssl_ctx) == 1);
+        const char* cert_files[] = {
+            "/etc/ssl/certs/ca-certificates.crt",
+            "/etc/ssl/cert.pem",
+            "/etc/pki/tls/certs/ca-bundle.crt",
+            "/etc/ssl/ca-bundle.pem"
+        };
+        const char* cert_dirs[] = {
+            "/etc/ssl/certs",
+            "/etc/pki/tls/certs"
+        };
+
+        for (const char* cert_file : cert_files) {
+            if (!certs_loaded && std::filesystem::exists(cert_file)) {
+                certs_loaded = (SSL_CTX_load_verify_locations(ssl_ctx, cert_file, nullptr) == 1);
+            }
+        }
+        for (const char* cert_dir : cert_dirs) {
+            if (!certs_loaded && std::filesystem::exists(cert_dir)) {
+                certs_loaded = (SSL_CTX_load_verify_locations(ssl_ctx, nullptr, cert_dir) == 1);
+            }
+        }
+
+        if (!certs_loaded) {
             SSL_CTX_free(ssl_ctx);
             close(sockfd);
-            throw RuntimeError("Failed to load system TLS certificates", loc);
+            throw RuntimeError("Failed to load Linux CA certificates. Install/update ca-certificates for your system.", loc);
         }
 
         ssl = SSL_new(ssl_ctx);
@@ -161,7 +185,7 @@ std::string Interpreter::perform_http_request(const std::string& transport, cons
         }
 
         SSL_set_tlsext_host_name(ssl, parsed.host.c_str());
-        SSL_set_verify(ssl, SSL_VERIFY_PEER, nullptr);
+        SSL_CTX_set_verify(ssl_ctx, SSL_VERIFY_PEER, nullptr);
         X509_VERIFY_PARAM* verify_params = SSL_get0_param(ssl);
         X509_VERIFY_PARAM_set1_host(verify_params, parsed.host.c_str(), 0);
 
@@ -173,8 +197,16 @@ std::string Interpreter::perform_http_request(const std::string& transport, cons
         }
 
         if (SSL_connect(ssl) != 1) {
+            long verify_result = SSL_get_verify_result(ssl);
             unsigned long err = ERR_get_error();
-            std::string err_msg = err != 0 ? ERR_error_string(err, nullptr) : "TLS handshake failed";
+            std::string err_msg;
+            if (verify_result != X509_V_OK) {
+                err_msg = X509_verify_cert_error_string(verify_result);
+            } else if (err != 0) {
+                err_msg = ERR_error_string(err, nullptr);
+            } else {
+                err_msg = "TLS handshake failed";
+            }
             SSL_free(ssl);
             SSL_CTX_free(ssl_ctx);
             close(sockfd);
