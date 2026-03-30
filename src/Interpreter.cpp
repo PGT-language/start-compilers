@@ -10,6 +10,8 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <unistd.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 
 bool Interpreter::is_truthy(const Value& value) const {
     if (value.type == ValueType::INT) {
@@ -80,12 +82,17 @@ std::string Interpreter::extract_http_body(const std::string& response) const {
     return response;
 }
 
-std::string Interpreter::perform_http_request(const std::string& method, const std::string& url,
-                                              const std::string& body, const SourceLocation& loc) const {
+std::string Interpreter::perform_http_request(const std::string& transport, const std::string& method,
+                                              const std::string& url, const std::string& body,
+                                              const SourceLocation& loc) const {
     ParsedUrl parsed = parse_url(url, loc);
-    if (parsed.scheme != "http") {
-        throw RuntimeError("Only plain HTTP is supported in the current Linux network stack", loc);
+    if (transport != parsed.scheme) {
+        throw RuntimeError("Network transport and URL scheme must match", loc);
     }
+    if (parsed.scheme != "http" && parsed.scheme != "https") {
+        throw RuntimeError("Only HTTP and HTTPS are supported in the current Linux network stack", loc);
+    }
+    bool use_tls = (parsed.scheme == "https");
 
     struct addrinfo hints {};
     std::memset(&hints, 0, sizeof(hints));
@@ -130,10 +137,62 @@ std::string Interpreter::perform_http_request(const std::string& method, const s
         request += body;
     }
 
+    SSL_CTX* ssl_ctx = nullptr;
+    SSL* ssl = nullptr;
+
+    if (use_tls) {
+        OPENSSL_init_ssl(0, nullptr);
+        ssl_ctx = SSL_CTX_new(TLS_client_method());
+        if (!ssl_ctx) {
+            close(sockfd);
+            throw RuntimeError("Failed to initialize TLS context", loc);
+        }
+        if (SSL_CTX_set_default_verify_paths(ssl_ctx) != 1) {
+            SSL_CTX_free(ssl_ctx);
+            close(sockfd);
+            throw RuntimeError("Failed to load system TLS certificates", loc);
+        }
+
+        ssl = SSL_new(ssl_ctx);
+        if (!ssl) {
+            SSL_CTX_free(ssl_ctx);
+            close(sockfd);
+            throw RuntimeError("Failed to create TLS session", loc);
+        }
+
+        SSL_set_tlsext_host_name(ssl, parsed.host.c_str());
+        SSL_set_verify(ssl, SSL_VERIFY_PEER, nullptr);
+        X509_VERIFY_PARAM* verify_params = SSL_get0_param(ssl);
+        X509_VERIFY_PARAM_set1_host(verify_params, parsed.host.c_str(), 0);
+
+        if (SSL_set_fd(ssl, sockfd) != 1) {
+            SSL_free(ssl);
+            SSL_CTX_free(ssl_ctx);
+            close(sockfd);
+            throw RuntimeError("Failed to bind TLS session to socket", loc);
+        }
+
+        if (SSL_connect(ssl) != 1) {
+            unsigned long err = ERR_get_error();
+            std::string err_msg = err != 0 ? ERR_error_string(err, nullptr) : "TLS handshake failed";
+            SSL_free(ssl);
+            SSL_CTX_free(ssl_ctx);
+            close(sockfd);
+            throw RuntimeError("Failed to establish TLS connection: " + err_msg, loc);
+        }
+    }
+
     size_t total_sent = 0;
     while (total_sent < request.size()) {
-        ssize_t sent = send(sockfd, request.data() + total_sent, request.size() - total_sent, 0);
+        int sent = 0;
+        if (use_tls) {
+            sent = SSL_write(ssl, request.data() + total_sent, static_cast<int>(request.size() - total_sent));
+        } else {
+            sent = static_cast<int>(send(sockfd, request.data() + total_sent, request.size() - total_sent, 0));
+        }
         if (sent <= 0) {
+            if (ssl) SSL_free(ssl);
+            if (ssl_ctx) SSL_CTX_free(ssl_ctx);
             close(sockfd);
             throw RuntimeError("Failed to send HTTP request", loc);
         }
@@ -143,8 +202,15 @@ std::string Interpreter::perform_http_request(const std::string& method, const s
     std::string response;
     char buffer[4096];
     while (true) {
-        ssize_t received = recv(sockfd, buffer, sizeof(buffer), 0);
+        int received = 0;
+        if (use_tls) {
+            received = SSL_read(ssl, buffer, sizeof(buffer));
+        } else {
+            received = static_cast<int>(recv(sockfd, buffer, sizeof(buffer), 0));
+        }
         if (received < 0) {
+            if (ssl) SSL_free(ssl);
+            if (ssl_ctx) SSL_CTX_free(ssl_ctx);
             close(sockfd);
             throw RuntimeError("Failed to receive HTTP response", loc);
         }
@@ -154,6 +220,8 @@ std::string Interpreter::perform_http_request(const std::string& method, const s
         response.append(buffer, static_cast<size_t>(received));
     }
 
+    if (ssl) SSL_free(ssl);
+    if (ssl_ctx) SSL_CTX_free(ssl_ctx);
     close(sockfd);
     return extract_http_body(response);
 }
@@ -348,11 +416,7 @@ void Interpreter::execute_statement(const std::shared_ptr<AstNode>& stmt, std::m
             throw TypeError("Network URL must be a string", net_op->location);
         }
 
-        if (net_op->transport == "https") {
-            throw RuntimeError("HTTPS is not supported yet in the current Linux-only network stack", net_op->location);
-        }
-
-        if (net_op->transport != "http") {
+        if (net_op->transport != "http" && net_op->transport != "https") {
             throw RuntimeError("Unsupported network transport: " + net_op->transport, net_op->location);
         }
 
@@ -369,7 +433,7 @@ void Interpreter::execute_statement(const std::shared_ptr<AstNode>& stmt, std::m
         }
 
         std::string method = net_op->method == "post" ? "POST" : "GET";
-        std::string response = perform_http_request(method, url_val.str_val, body, net_op->location);
+        std::string response = perform_http_request(net_op->transport, method, url_val.str_val, body, net_op->location);
         std::cout << response << std::endl;
         return;
     }

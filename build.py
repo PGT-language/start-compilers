@@ -13,6 +13,7 @@ source_files = [
 
 output_executable = "pgt"
 object_files = []
+link_libraries = ["-lssl", "-lcrypto"]
 
 try:
     # Compile source files into object files
@@ -23,7 +24,7 @@ try:
         object_files.append(object_file)
 
     # Link object files into an executable
-    link_command = ["g++", "-std=c++17", "-o", output_executable] + object_files
+    link_command = ["g++", "-std=c++17", "-o", output_executable] + object_files + link_libraries
     subprocess.run(link_command, check=True)
     print(f"Compilation successful. Executable '{output_executable}' created.")
 
