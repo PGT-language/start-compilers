@@ -59,6 +59,7 @@ class SemanticAnalyzer {
     void analyze_if(const std::shared_ptr<IfStmt>& if_stmt);
     void analyze_while(const std::shared_ptr<WhileStmt>& while_stmt);
     void analyze_call(const std::shared_ptr<CallStmt>& call);
+    void analyze_net_op(const std::shared_ptr<NetOp>& net_op);
     void analyze_file_op(const std::shared_ptr<FileOp>& file_op);
     
 public:

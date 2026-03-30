@@ -181,6 +181,8 @@ void SemanticAnalyzer::analyze_statement(const std::shared_ptr<AstNode>& stmt) {
         analyze_while(while_stmt);
     } else if (auto call = std::dynamic_pointer_cast<CallStmt>(stmt)) {
         analyze_call(call);
+    } else if (auto net_op = std::dynamic_pointer_cast<NetOp>(stmt)) {
+        analyze_net_op(net_op);
     } else if (auto file_op = std::dynamic_pointer_cast<FileOp>(stmt)) {
         analyze_file_op(file_op);
     }
@@ -304,6 +306,34 @@ void SemanticAnalyzer::analyze_call(const std::shared_ptr<CallStmt>& call) {
     // Анализируем аргументы
     for (const auto& arg : call->args) {
         analyze_expr(arg);
+    }
+}
+
+void SemanticAnalyzer::analyze_net_op(const std::shared_ptr<NetOp>& net_op) {
+    if (net_op->transport != "http" && net_op->transport != "https") {
+        throw SemanticError("Unsupported network transport: '" + net_op->transport + "'", net_op->location);
+    }
+    if (net_op->method != "get" && net_op->method != "post") {
+        throw SemanticError("Unsupported network method: '" + net_op->method + "'", net_op->location);
+    }
+
+    analyze_expr(net_op->url);
+    VarType url_type = infer_expr_type(net_op->url);
+    if (url_type != VarType::STRING && url_type != VarType::UNKNOWN) {
+        throw TypeError("Network URL must be a string", net_op->location);
+    }
+
+    if (net_op->method == "post") {
+        if (!net_op->data) {
+            throw SemanticError("Network POST requires a body argument", net_op->location);
+        }
+        analyze_expr(net_op->data);
+        VarType data_type = infer_expr_type(net_op->data);
+        if (data_type != VarType::STRING && data_type != VarType::UNKNOWN) {
+            throw TypeError("Network POST body must be a string", net_op->location);
+        }
+    } else if (net_op->data) {
+        throw SemanticError("Network GET does not accept a body argument", net_op->location);
     }
 }
 

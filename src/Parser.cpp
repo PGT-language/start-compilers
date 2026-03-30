@@ -186,6 +186,10 @@ std::shared_ptr<AstNode> Parser::parse_statement() {
         pos + 2 < tokens.size() && tokens[pos + 2].type == T_FILE) {
         return parse_file_op();
     }
+    if (current().type == T_IDENTIFIER && current().value == "net" &&
+        pos + 1 < tokens.size() && tokens[pos + 1].type == T_COLON_COLON) {
+        return parse_net_op();
+    }
     if (current().type == T_IDENTIFIER && pos + 1 < tokens.size() && tokens[pos + 1].type == T_PLUS) {
         return parse_var_decl();
     }
@@ -564,6 +568,68 @@ std::shared_ptr<FileOp> Parser::parse_file_op() {
     advance(); // )
     
     return file_op;
+}
+
+std::shared_ptr<NetOp> Parser::parse_net_op() {
+    int op_line = current().line;
+    advance(); // net
+
+    if (current().type != T_COLON_COLON) {
+        throw SyntaxError("Expected '::' after 'net', got: " + current().value,
+                         SourceLocation(current().line, 0));
+    }
+    advance(); // ::
+
+    if (current().type != T_IDENTIFIER) {
+        throw SyntaxError("Expected transport after 'net::', got: " + current().value,
+                         SourceLocation(current().line, 0));
+    }
+    std::string transport = current().value;
+    advance(); // http / https
+
+    if (current().type != T_COLON_COLON) {
+        throw SyntaxError("Expected '::' after network transport, got: " + current().value,
+                         SourceLocation(current().line, 0));
+    }
+    advance(); // ::
+
+    if (current().type != T_IDENTIFIER) {
+        throw SyntaxError("Expected network method after transport, got: " + current().value,
+                         SourceLocation(current().line, 0));
+    }
+    std::string method = current().value;
+    advance(); // get / post
+
+    if (current().type != T_LPAREN) {
+        throw SyntaxError("Expected '(' after network method, got: " + current().value,
+                         SourceLocation(current().line, 0));
+    }
+    advance(); // (
+
+    auto net_op = std::make_shared<NetOp>();
+    net_op->location = SourceLocation(op_line, 0);
+    net_op->transport = transport;
+    net_op->method = method;
+    net_op->data = nullptr;
+
+    net_op->url = parse_expr();
+    if (!net_op->url) {
+        throw SyntaxError("Expected URL in network operation, got: " + current().value,
+                         SourceLocation(current().line, 0));
+    }
+
+    if (method == "post" && current().type == T_COMMA) {
+        advance(); // ,
+        net_op->data = parse_expr();
+    }
+
+    if (current().type != T_RPAREN) {
+        throw SyntaxError("Expected ')' after network operation arguments, got: " + current().value,
+                         SourceLocation(current().line, 0));
+    }
+    advance(); // )
+
+    return net_op;
 }
 
 std::shared_ptr<IfStmt> Parser::parse_if() {

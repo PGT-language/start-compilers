@@ -5,6 +5,11 @@
 #include <limits>
 #include <fstream>
 #include <filesystem>
+#include <cstring>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <unistd.h>
 
 bool Interpreter::is_truthy(const Value& value) const {
     if (value.type == ValueType::INT) {
@@ -25,6 +30,132 @@ void Interpreter::assign_value(const std::string& name, const Value& value, std:
     } else {
         locals[name] = value;
     }
+}
+
+Interpreter::ParsedUrl Interpreter::parse_url(const std::string& url, const SourceLocation& loc) const {
+    ParsedUrl parsed;
+
+    size_t scheme_end = url.find("://");
+    if (scheme_end == std::string::npos) {
+        throw RuntimeError("Invalid URL, expected scheme://host/path", loc);
+    }
+
+    parsed.scheme = url.substr(0, scheme_end);
+    size_t host_start = scheme_end + 3;
+    size_t path_start = url.find('/', host_start);
+    std::string host_port = path_start == std::string::npos
+        ? url.substr(host_start)
+        : url.substr(host_start, path_start - host_start);
+
+    if (host_port.empty()) {
+        throw RuntimeError("Invalid URL, missing host", loc);
+    }
+
+    size_t colon_pos = host_port.rfind(':');
+    if (colon_pos != std::string::npos) {
+        parsed.host = host_port.substr(0, colon_pos);
+        parsed.port = host_port.substr(colon_pos + 1);
+    } else {
+        parsed.host = host_port;
+        parsed.port = parsed.scheme == "https" ? "443" : "80";
+    }
+
+    parsed.path = path_start == std::string::npos ? "/" : url.substr(path_start);
+    if (parsed.path.empty()) {
+        parsed.path = "/";
+    }
+
+    return parsed;
+}
+
+std::string Interpreter::extract_http_body(const std::string& response) const {
+    size_t header_end = response.find("\r\n\r\n");
+    if (header_end != std::string::npos) {
+        return response.substr(header_end + 4);
+    }
+    header_end = response.find("\n\n");
+    if (header_end != std::string::npos) {
+        return response.substr(header_end + 2);
+    }
+    return response;
+}
+
+std::string Interpreter::perform_http_request(const std::string& method, const std::string& url,
+                                              const std::string& body, const SourceLocation& loc) const {
+    ParsedUrl parsed = parse_url(url, loc);
+    if (parsed.scheme != "http") {
+        throw RuntimeError("Only plain HTTP is supported in the current Linux network stack", loc);
+    }
+
+    struct addrinfo hints {};
+    std::memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+
+    struct addrinfo* result = nullptr;
+    int status = getaddrinfo(parsed.host.c_str(), parsed.port.c_str(), &hints, &result);
+    if (status != 0) {
+        throw RuntimeError("Failed to resolve host '" + parsed.host + "': " + gai_strerror(status), loc);
+    }
+
+    int sockfd = -1;
+    for (struct addrinfo* rp = result; rp != nullptr; rp = rp->ai_next) {
+        sockfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        if (sockfd == -1) {
+            continue;
+        }
+        if (connect(sockfd, rp->ai_addr, rp->ai_addrlen) == 0) {
+            break;
+        }
+        close(sockfd);
+        sockfd = -1;
+    }
+    freeaddrinfo(result);
+
+    if (sockfd == -1) {
+        throw RuntimeError("Failed to connect to '" + parsed.host + ":" + parsed.port + "'", loc);
+    }
+
+    std::string request = method + " " + parsed.path + " HTTP/1.1\r\n";
+    request += "Host: " + parsed.host + "\r\n";
+    request += "User-Agent: PGT/0.1\r\n";
+    request += "Connection: close\r\n";
+
+    if (method == "POST") {
+        request += "Content-Type: text/plain; charset=utf-8\r\n";
+        request += "Content-Length: " + std::to_string(body.size()) + "\r\n";
+    }
+    request += "\r\n";
+    if (method == "POST") {
+        request += body;
+    }
+
+    size_t total_sent = 0;
+    while (total_sent < request.size()) {
+        ssize_t sent = send(sockfd, request.data() + total_sent, request.size() - total_sent, 0);
+        if (sent <= 0) {
+            close(sockfd);
+            throw RuntimeError("Failed to send HTTP request", loc);
+        }
+        total_sent += static_cast<size_t>(sent);
+    }
+
+    std::string response;
+    char buffer[4096];
+    while (true) {
+        ssize_t received = recv(sockfd, buffer, sizeof(buffer), 0);
+        if (received < 0) {
+            close(sockfd);
+            throw RuntimeError("Failed to receive HTTP response", loc);
+        }
+        if (received == 0) {
+            break;
+        }
+        response.append(buffer, static_cast<size_t>(received));
+    }
+
+    close(sockfd);
+    return extract_http_body(response);
 }
 
 void Interpreter::execute_block(const std::vector<std::shared_ptr<AstNode>>& body, std::map<std::string, Value>& locals) {
@@ -208,6 +339,39 @@ void Interpreter::execute_statement(const std::shared_ptr<AstNode>& stmt, std::m
             default:
                 throw SemanticError("Unknown file operation", file_op->location);
         }
+        return;
+    }
+
+    if (auto net_op = std::dynamic_pointer_cast<NetOp>(stmt)) {
+        Value url_val = eval(net_op->url, locals);
+        if (url_val.type != ValueType::STRING) {
+            throw TypeError("Network URL must be a string", net_op->location);
+        }
+
+        if (net_op->transport == "https") {
+            throw RuntimeError("HTTPS is not supported yet in the current Linux-only network stack", net_op->location);
+        }
+
+        if (net_op->transport != "http") {
+            throw RuntimeError("Unsupported network transport: " + net_op->transport, net_op->location);
+        }
+
+        std::string body;
+        if (net_op->method == "post") {
+            if (!net_op->data) {
+                throw RuntimeError("POST requires a body argument", net_op->location);
+            }
+            Value body_val = eval(net_op->data, locals);
+            if (body_val.type != ValueType::STRING) {
+                throw TypeError("Network POST body must be a string", net_op->location);
+            }
+            body = body_val.str_val;
+        }
+
+        std::string method = net_op->method == "post" ? "POST" : "GET";
+        std::string response = perform_http_request(method, url_val.str_val, body, net_op->location);
+        std::cout << response << std::endl;
+        return;
     }
 }
 

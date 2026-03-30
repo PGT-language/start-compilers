@@ -65,6 +65,13 @@ struct WhileStmt : AstNode {
     std::vector<std::shared_ptr<AstNode>> body;  // тело цикла
 };
 
+struct NetOp : AstNode {
+    std::string transport;  // http или https
+    std::string method;  // get или post
+    std::shared_ptr<AstNode> url;
+    std::shared_ptr<AstNode> data;  // только для post, иначе nullptr
+};
+
 struct FileOp : AstNode {
     TokenType operation;  // T_CREATE, T_WRITE, T_READ, T_CLOSE, T_DELETE
     std::shared_ptr<AstNode> file_path;  // путь к файлу (выражение)

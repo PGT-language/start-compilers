@@ -1,6 +1,7 @@
 #include "CodeGen.h"
 #include <iostream>
 #include <fstream>
+#include <stdexcept>
 
 void CodeGen::write_indent() {
     for (int i = 0; i < indent_level; ++i) {
@@ -191,6 +192,14 @@ void CodeGen::generate_file_op(const std::shared_ptr<FileOp>& file_op) {
     }
 }
 
+void CodeGen::generate_net_op(const std::shared_ptr<NetOp>& net_op) {
+    write_indent();
+    code << "fprintf(stderr, \"Network operation '" << net_op->transport << "::" << net_op->method
+         << "' is not supported by the C backend yet\\n\");\n";
+    write_indent();
+    code << "exit(1);\n";
+}
+
 void CodeGen::generate_call(const std::shared_ptr<CallStmt>& call) {
     write_indent();
     std::string func_name = call->func_name;
@@ -218,6 +227,8 @@ void CodeGen::generate_statement(const std::shared_ptr<AstNode>& stmt) {
         generate_while(while_stmt);
     } else if (auto call = std::dynamic_pointer_cast<CallStmt>(stmt)) {
         generate_call(call);
+    } else if (auto net_op = std::dynamic_pointer_cast<NetOp>(stmt)) {
+        generate_net_op(net_op);
     } else if (auto file_op = std::dynamic_pointer_cast<FileOp>(stmt)) {
         generate_file_op(file_op);
     }

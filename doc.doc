@@ -61,10 +61,10 @@ return 1 // окончание function
 
 return 0 // окончание программы
 
-net::http::get("https://example.com") // получение данных по url
+net::http::get("http://example.com") // получение данных по url, пока только Linux-only HTTP
 
-net::http::post("https://example.com", "{data}") // отправка данных по url
+net::http::post("http://example.com", "{data}") // отправка данных по url, пока только Linux-only HTTP
 
-net::https::get("https://example.com") // получение данных по url только по https
+net::https::get("https://example.com") // синтаксис есть, но HTTPS пока не реализован
 
-net::https::post("https://example.com", "{data}") // отправка данных по url только по https
+net::https::post("https://example.com", "{data}") // синтаксис есть, но HTTPS пока не реализован

@@ -27,6 +27,7 @@ class CodeGen {
     void generate_if(const std::shared_ptr<IfStmt>& if_stmt);
     void generate_while(const std::shared_ptr<WhileStmt>& while_stmt);
     void generate_file_op(const std::shared_ptr<FileOp>& file_op);
+    void generate_net_op(const std::shared_ptr<NetOp>& net_op);
     void generate_var_decl(const std::shared_ptr<VarDecl>& decl);
     void generate_call(const std::shared_ptr<CallStmt>& call);
     

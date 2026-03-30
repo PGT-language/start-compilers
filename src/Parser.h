@@ -30,6 +30,7 @@ class Parser {
     std::shared_ptr<CallStmt> parse_call();
     std::shared_ptr<CallStmt> parse_function_call();
     std::shared_ptr<FileOp> parse_file_op();
+    std::shared_ptr<NetOp> parse_net_op();
     std::shared_ptr<ImportStmt> parse_import();
 
 public:
