@@ -166,10 +166,11 @@ int main(int argc, char** argv) {
             std::string parsed_package_name = parser.parsed_package_name();
             std::string current_dir = get_directory(current_file);
             if (directory_packages.count(current_dir) && directory_packages[current_dir] != parsed_package_name) {
-                std::cerr << "Error: Import error: directory '" << current_dir << "' mixes package '"
-                          << directory_packages[current_dir] << "' from '" << directory_package_sources[current_dir]
-                          << "' with package '" << parsed_package_name << "' from '" << current_file
-                          << "'. Like in Go, one directory may contain only one package.\n";
+                SemanticError err("Interpreter import error: packages '" + directory_packages[current_dir] +
+                                  "' and '" + parsed_package_name + "' cannot live in the same root directory. "
+                                  "Move package '" + parsed_package_name + "' into its own subdirectory.",
+                                  SourceLocation(1, 0, current_file));
+                std::cerr << err.get_traceback();
                 return 1;
             }
             directory_packages[current_dir] = parsed_package_name;
@@ -234,15 +235,18 @@ int main(int argc, char** argv) {
                     const std::string& current_package = file_packages[file];
                     const std::string& imported_package = file_packages[import_path];
                     if (imported_package == "main") {
-                        SemanticError err("Import error: package 'main' cannot be imported. Move shared code into a non-main package in a subdirectory.",
-                                          import->location);
+                        SemanticError err("Interpreter import error: package 'main' cannot be imported. "
+                                          "Move shared code into a separate package.",
+                                          SourceLocation(import->location.line, import->location.column, file));
                         std::cerr << err.get_traceback();
                         return 1;
                     }
                     if (get_directory(file) == get_directory(import_path) && current_package != imported_package) {
-                        SemanticError err("Import error: cannot import package '" + imported_package + "' from the same directory as package '" +
-                                          current_package + "'. Like in Go, move package '" + imported_package + "' into its own subdirectory.",
-                                          import->location);
+                        SemanticError err("Interpreter import error: ay-ay-ay, you cannot import package '" +
+                                          imported_package + "' from the root directory of package '" +
+                                          current_package + "'. Move package '" + imported_package +
+                                          "' into its own subdirectory.",
+                                          SourceLocation(import->location.line, import->location.column, file));
                         std::cerr << err.get_traceback();
                         return 1;
                     }
