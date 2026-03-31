@@ -65,6 +65,9 @@ int main(int argc, char** argv) {
         // Система загрузки мультифайлов
         std::set<std::string> loaded_files;
         std::map<std::string, std::vector<std::shared_ptr<AstNode>>> file_asts;
+        std::map<std::string, std::string> file_packages;
+        std::map<std::string, std::string> directory_packages;
+        std::map<std::string, std::string> directory_package_sources;
         std::vector<std::string> files_to_load = {filename};
 
         // Функция для получения директории файла
@@ -155,6 +158,24 @@ int main(int argc, char** argv) {
             }
             if (DEBUG) std::cout << "[DEBUG] Parsed " << program.size() << " nodes" << std::endl;
 
+            if (!parser.found_package_decl()) {
+                std::cerr << "Error: Missing 'package <name>' declaration in file '" << current_file << "'\n";
+                return 1;
+            }
+
+            std::string parsed_package_name = parser.parsed_package_name();
+            std::string current_dir = get_directory(current_file);
+            if (directory_packages.count(current_dir) && directory_packages[current_dir] != parsed_package_name) {
+                std::cerr << "Error: Import error: directory '" << current_dir << "' mixes package '"
+                          << directory_packages[current_dir] << "' from '" << directory_package_sources[current_dir]
+                          << "' with package '" << parsed_package_name << "' from '" << current_file
+                          << "'. Like in Go, one directory may contain only one package.\n";
+                return 1;
+            }
+            directory_packages[current_dir] = parsed_package_name;
+            directory_package_sources[current_dir] = current_file;
+            file_packages[current_file] = parsed_package_name;
+
             // Проверяем обязательные элементы для главного файла
             if (current_file == filename) {
                 if (!parser.found_package_main()) {
@@ -208,6 +229,21 @@ int main(int argc, char** argv) {
                     std::string import_path = resolve_import_path(get_directory(file), import->file_path);
                     if (!file_functions.count(import_path)) {
                         std::cerr << "Error: Cannot find imported file: " << import_path << "\n";
+                        return 1;
+                    }
+                    const std::string& current_package = file_packages[file];
+                    const std::string& imported_package = file_packages[import_path];
+                    if (imported_package == "main") {
+                        SemanticError err("Import error: package 'main' cannot be imported. Move shared code into a non-main package in a subdirectory.",
+                                          import->location);
+                        std::cerr << err.get_traceback();
+                        return 1;
+                    }
+                    if (get_directory(file) == get_directory(import_path) && current_package != imported_package) {
+                        SemanticError err("Import error: cannot import package '" + imported_package + "' from the same directory as package '" +
+                                          current_package + "'. Like in Go, move package '" + imported_package + "' into its own subdirectory.",
+                                          import->location);
+                        std::cerr << err.get_traceback();
                         return 1;
                     }
                     const auto& available_funcs = file_functions[import_path];

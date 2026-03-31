@@ -24,7 +24,8 @@ void Parser::advance() { if (!is_eof()) ++pos; }
 
 std::vector<std::shared_ptr<AstNode>> Parser::parse_program() {
     // Сбрасываем флаги для нового парсинга
-    has_package_main = false;
+    has_package_decl = false;
+    package_name.clear();
     has_return_zero = false;
     
     std::vector<std::shared_ptr<AstNode>> nodes;
@@ -44,10 +45,11 @@ std::vector<std::shared_ptr<AstNode>> Parser::parse_program() {
         
         if (current().type == T_PACKAGE) {
             advance(); // package
-            if (current().type == T_IDENTIFIER && current().value == "main") {
-                has_package_main = true;
+            if (current().type == T_IDENTIFIER) {
+                has_package_decl = true;
+                package_name = current().value;
             }
-            advance(); // main или другое значение
+            if (!is_eof()) advance(); // main или другое значение
         } else if (current().type == T_FROM) {
             auto import = parse_import();
             if (import) nodes.push_back(import);
@@ -509,6 +511,7 @@ std::shared_ptr<CallStmt> Parser::parse_function_call() {
 }
 
 std::shared_ptr<ImportStmt> Parser::parse_import() {
+    int import_line = current().line;
     advance(); // from
     
     std::string file_path;
@@ -528,6 +531,7 @@ std::shared_ptr<ImportStmt> Parser::parse_import() {
     advance(); // import
     
     auto import = std::make_shared<ImportStmt>();
+    import->location = SourceLocation(import_line, 0);
     import->file_path = file_path;
     
     // Парсим список функций для импорта (разделенных запятыми)
