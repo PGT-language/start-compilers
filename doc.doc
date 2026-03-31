@@ -1,8 +1,8 @@
-package // названия пакета к примеру main как в >Go
+package // названия пакета к примеру main как в >Go {реализовано}
 
-package main // только главный входной файл
+package main // только главный входной файл {реализовано}
 
-package cli // библиотечный пакет, лучше держать в отдельной директории
+package cli // библиотечный пакет, лучше держать в отдельной директории {реализовано}
 
 // как в Go: одна директория = один пакет
 // если в той же директории, где package main, создать package cli и импортировать его,
@@ -12,53 +12,53 @@ package cli // библиотечный пакет, лучше держать в
 // test-cli.pgt -> package main
 // cli/create-file.pgt -> package cli
 
-from // путь к файлу import // импортируем что то из файла
+from // путь к файлу import // импортируем что то из файла {реализовано}
 
-function(что то) // как в go 
+function(что то) // как в go {реализовано}
 
-function(main) // вход в програму
+function(main) // вход в програму {реализовано}
 
-if // 
+if // {реализовано}
 
-else // 
+else // {реализовано}
 
-while // цикл
+while // цикл {реализовано}
 
-true // логическая истина
+true // логическая истина {реализовано}
 
-false // логическая ложь
+false // логическая ложь {реализовано}
 
-int //
+int // {реализовано}
 
-float //
+float // {реализовано}
 
-string //
+string // {реализовано}
 
-print // 
+print // {реализовано}
 
-println //
+println // {реализовано}
 
-create::file("c") // создания файла
+create::file("c") // создания файла {реализовано}
 
-write::file("w") // запись файла
+write::file("w") // запись файла {реализовано}
 
-read::file("r") // чтение файла
+read::file("r") // чтение файла {реализовано}
 
-close::file("h") // закрытие файла
+close::file("h") // закрытие файла {реализовано}
 
-delete::file("d") // удаление файла
+delete::file("d") // удаление файла {реализовано}
 
-call(test) // название точки вызова вот так
+call(test) // название точки вызова вот так call(имя функции) {реализовано}
 
-print(arg, "{int}") // посли вызова функции мы печатаем что находыться в function 
+print(arg, "{int}") // посли вызова функции мы печатаем что находыться в function  {arg} и указываем тип данных {int} {реализовано}
 
-cout(input, "{int}") // для работы с пользовательским вводом
+cout(input, "{int}") // для работы с пользовательским вводом {реализовано}
 
-while true {
-    print("loop")
-} // бесконечный цикл, пока без break
+while true { {реализовано}
+    print("loop") {реализовано}
+} // бесконечный цикл, пока без break {реализовано}
 
-printg("
+printg(" {реализовано}
     какой то много строчный тест
     Test,
     Test,
@@ -69,18 +69,18 @@ printg("
     Test,
 ")
 
-return 1 // окончание function
+return 1 // окончание function {реализовано}
 
-return 0 // окончание программы
+return 0 // окончание программы {реализовано}
 
-net::get("https://example.com") // transport выбирается автоматически из URL
+net::get("https://example.com") // transport выбирается автоматически из URL {реализовано}
 
-net::post("https://example.com", "{data}") // transport выбирается автоматически из URL
+net::post("https://example.com", "{data}") // transport выбирается автоматически из URL {реализовано}
 
-net::http::get("http://example.com") // получение данных по url, Linux-only
+net::http::get("http://example.com") // получение данных по url, Linux-only через libcurl {реализовано}
 
-net::http::post("http://example.com", "{data}") // отправка данных по url, Linux-only
+net::http::post("http://example.com", "{data}") // отправка данных по url, Linux-only через libcurl {реализовано}
 
-net::https::get("https://example.com") // получение данных по https, Linux-only через OpenSSL
+net::https::get("https://example.com") // получение данных по https, Linux-only через OpenSSL {реализовано}
 
-net::https::post("https://example.com", "{data}") // отправка данных по https, Linux-only через OpenSSL
+net::https::post("https://example.com", "{data}") // отправка данных по https, Linux-only через OpenSSL {реализовано}
