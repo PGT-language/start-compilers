@@ -107,6 +107,16 @@ VarType SemanticAnalyzer::infer_expr_type(const std::shared_ptr<AstNode>& node) 
             }
             return VarType::STRING;
         }
+        if (builtin->name == "open_log") {
+            if (builtin->args.size() != 1) {
+                throw SemanticError("Builtin 'open_log' expects 1 argument", builtin->location);
+            }
+            VarType arg_type = infer_expr_type(builtin->args[0]);
+            if (arg_type != VarType::STRING && arg_type != VarType::UNKNOWN) {
+                throw TypeError("Builtin 'open_log' expects a string path", builtin->location);
+            }
+            return VarType::BOOL;
+        }
         throw SemanticError("Unknown builtin expression: '" + builtin->name + "'", builtin->location);
     }
     if (auto id = std::dynamic_pointer_cast<Identifier>(node)) {
