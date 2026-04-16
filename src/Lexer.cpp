@@ -71,7 +71,7 @@ Token Lexer::next_token() {
             get();
             std::string str;
             bool is_first_char = true;
-            
+
             // Пропускаем первый перенос строки и пробелы/табуляции после открывающей кавычки
             if (peek() == '\n' || peek() == '\r') {
                 if (peek() == '\n') line++;
@@ -82,7 +82,7 @@ Token Lexer::next_token() {
                 }
                 is_first_char = false;
             }
-            
+
             size_t iterations = 0;
             size_t last_pos = pos;
             while (peek() != 0) {
@@ -92,7 +92,7 @@ Token Lexer::next_token() {
                     std::cerr << "Error: Infinite loop in string lexer at line " << line << std::endl;
                     break;
                 }
-                
+
                 // Проверяем, не застряли ли мы на одном месте
                 if (pos == last_pos && iterations > 1000) {
                     std::cerr << "Error: Lexer stuck at position " << pos << " in string" << std::endl;
@@ -121,7 +121,7 @@ Token Lexer::next_token() {
                     }
                     continue;
                 }
-                
+
                 if (peek() == '"') {
                     // Проверяем контекст после закрывающей кавычки
                     // Сохраняем текущую позицию

@@ -544,7 +544,7 @@ void Interpreter::execute_function(const std::string& name, const std::vector<Va
         throw UndefinedError(name, "function", SourceLocation());
     }
     auto func = functions[name];
-    
+
     // Добавляем текущую функцию в стек вызовов
     call_stack.push_back(func->location);
 
@@ -607,12 +607,12 @@ Value Interpreter::eval(const std::shared_ptr<AstNode>& node, const std::map<std
     if (auto bin = std::dynamic_pointer_cast<BinaryOp>(node)) {
         Value l = eval(bin->left, locals);
         Value r = eval(bin->right, locals);
-        
+
         // Операторы сравнения
-        if (bin->op == T_GREATER || bin->op == T_LESS || bin->op == T_GREATER_EQUAL || 
+        if (bin->op == T_GREATER || bin->op == T_LESS || bin->op == T_GREATER_EQUAL ||
             bin->op == T_LESS_EQUAL || bin->op == T_EQUAL_EQUAL || bin->op == T_NOT_EQUAL) {
             bool result = false;
-            
+
             // Сравнение строк
             if (l.type == ValueType::STRING && r.type == ValueType::STRING) {
                 int cmp = l.str_val.compare(r.str_val);
@@ -650,12 +650,12 @@ Value Interpreter::eval(const std::shared_ptr<AstNode>& node, const std::map<std
                     else if (l.type == ValueType::INT) lv = l.int_val;
                     else if (l.type == ValueType::BOOL) lv = l.bool_val ? 1.0 : 0.0;
                     else lv = 0.0;
-                    
+
                     if (r.type == ValueType::FLOAT) rv = r.float_val;
                     else if (r.type == ValueType::INT) rv = r.int_val;
                     else if (r.type == ValueType::BOOL) rv = r.bool_val ? 1.0 : 0.0;
                     else rv = 0.0;
-                
+
                     switch (bin->op) {
                         case T_GREATER: result = (lv > rv); break;
                         case T_LESS: result = (lv < rv); break;
@@ -668,7 +668,7 @@ Value Interpreter::eval(const std::shared_ptr<AstNode>& node, const std::map<std
             }
             return Value(result ? 1LL : 0LL);
         }
-        
+
         // Арифметические операции
         if (l.type == ValueType::FLOAT || r.type == ValueType::FLOAT) {
             double lv = (l.type == ValueType::FLOAT) ? l.float_val : (l.type == ValueType::BOOL ? (l.bool_val ? 1.0 : 0.0) : l.int_val);

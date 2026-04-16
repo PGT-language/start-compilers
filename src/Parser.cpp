@@ -40,7 +40,7 @@ std::vector<std::shared_ptr<AstNode>> Parser::parse_program() {
     has_package_decl = false;
     package_name.clear();
     has_return_zero = false;
-    
+
     std::vector<std::shared_ptr<AstNode>> nodes;
     size_t last_pos = pos;
     size_t iterations = 0;
@@ -55,7 +55,7 @@ std::vector<std::shared_ptr<AstNode>> Parser::parse_program() {
             iterations = 0;
         }
         last_pos = pos;
-        
+
         if (current().type == T_PACKAGE) {
             int package_line = current().line;
             advance(); // package
@@ -150,14 +150,14 @@ std::shared_ptr<FunctionDef> Parser::parse_function() {
             iterations = 0;
         }
         last_pos = pos;
-        
+
         size_t start_pos = pos;
         try {
             auto stmt = parse_statement();
             // Проверяем, является ли это return 1 (проверяем после парсинга, если stmt == nullptr)
             if (!stmt && start_pos < tokens.size() && tokens[start_pos].type == T_RETURN) {
                 size_t check_pos = start_pos + 1; // позиция после return
-                if (check_pos < tokens.size() && tokens[check_pos].type == T_NUMBER && 
+                if (check_pos < tokens.size() && tokens[check_pos].type == T_NUMBER &&
                     tokens[check_pos].value == "1") {
                     func->has_return_one = true;
                 }
@@ -169,18 +169,18 @@ std::shared_ptr<FunctionDef> Parser::parse_function() {
             if (pos == start_pos) {
                 // Проверяем, не является ли это попыткой вызвать файловую операцию с ошибкой
                 std::string token_val = current().value;
-                if (current().type == T_IDENTIFIER && 
-                    (token_val.find("write") != std::string::npos || 
+                if (current().type == T_IDENTIFIER &&
+                    (token_val.find("write") != std::string::npos ||
                      token_val.find("create") != std::string::npos ||
                      token_val.find("read") != std::string::npos ||
                      token_val.find("close") != std::string::npos ||
                      token_val.find("delete") != std::string::npos)) {
                     // Похоже на опечатку в файловой операции
-                    throw SyntaxError("Unknown file operation: '" + token_val + "'. Did you mean 'write', 'create', 'read', 'close', or 'delete'?", 
+                    throw SyntaxError("Unknown file operation: '" + token_val + "'. Did you mean 'write', 'create', 'read', 'close', or 'delete'?",
                                      SourceLocation(current().line, 0));
                 }
                 // Выбрасываем ошибку синтаксиса
-                throw SyntaxError("Unexpected token: '" + current().value + "' at line " + std::to_string(current().line), 
+                throw SyntaxError("Unexpected token: '" + current().value + "' at line " + std::to_string(current().line),
                                  SourceLocation(current().line, 0));
             } else {
                 // Позиция изменилась, просто продолжаем (возможно, это был return или другой оператор)
@@ -216,8 +216,8 @@ std::shared_ptr<AstNode> Parser::parse_statement() {
         return parse_while();
     }
     // Проверяем файловые операции: create::file, write::file, read::file, close::file, delete::file
-    if ((current().type == T_CREATE || current().type == T_WRITE || current().type == T_READ || 
-         current().type == T_CLOSE || current().type == T_DELETE) && 
+    if ((current().type == T_CREATE || current().type == T_WRITE || current().type == T_READ ||
+         current().type == T_CLOSE || current().type == T_DELETE) &&
         pos + 1 < tokens.size() && tokens[pos + 1].type == T_COLON_COLON &&
         pos + 2 < tokens.size() && tokens[pos + 2].type == T_FILE) {
         return parse_file_op();
@@ -233,7 +233,7 @@ std::shared_ptr<AstNode> Parser::parse_statement() {
         return parse_function_call();  // func1()
     }
     if (current().type == T_CALL) return parse_call();
-    if (current().type == T_RETURN) { 
+    if (current().type == T_RETURN) {
         advance(); // return
         // Пропускаем выражение после return, если оно есть (до закрывающей скобки или конца функции)
         if (!is_eof() && current().type != T_RBRACE) {
@@ -243,7 +243,7 @@ std::shared_ptr<AstNode> Parser::parse_statement() {
                 // Если не удалось распарсить, просто пропускаем
             }
         }
-        return nullptr; 
+        return nullptr;
     }
     return nullptr;
 }
@@ -266,7 +266,7 @@ std::shared_ptr<AstNode> Parser::parse_expr() { return parse_comparison(); }
 
 std::shared_ptr<AstNode> Parser::parse_comparison() {
     auto node = parse_add_sub();
-    while (!is_eof() && (current().type == T_GREATER || current().type == T_LESS || 
+    while (!is_eof() && (current().type == T_GREATER || current().type == T_LESS ||
                          current().type == T_GREATER_EQUAL || current().type == T_LESS_EQUAL ||
                          current().type == T_EQUAL_EQUAL || current().type == T_NOT_EQUAL)) {
         int op_line = current().line;
@@ -410,20 +410,20 @@ std::shared_ptr<PrintStmt> Parser::parse_print() {
         p->args.push_back(arg);
         p->formats.emplace_back(); // Добавляем пустой формат по умолчанию
         if (DEBUG) std::cout << "[DEBUG] parse_print: parsed arg, current token: " << current().type << " (" << current().value << ")" << std::endl;
-        
+
         // Проверяем, есть ли после аргумента запятая
         if (current().type == T_COMMA) {
             advance();
-            
+
             // Проверяем, является ли следующий токен строкой формата (начинается с "{")
             // Это может быть формат для предыдущего аргумента
-            if (current().type == T_STRING_LITERAL && 
-                current().value.size() >= 2 && 
+            if (current().type == T_STRING_LITERAL &&
+                current().value.size() >= 2 &&
                 current().value[0] == '{' && current().value.back() == '}') {
                 // Это формат для предыдущего аргумента
                 p->formats.back() = current().value;
                 advance();
-                
+
                 // Если после формата есть еще запятая, значит есть еще аргументы
                 if (current().type == T_COMMA) {
                     advance();
@@ -442,7 +442,7 @@ std::shared_ptr<PrintStmt> Parser::parse_print() {
         }
     }
     if (current().type != T_RPAREN) {
-        throw SyntaxError("Expected ')' after print arguments, got: " + current().value, 
+        throw SyntaxError("Expected ')' after print arguments, got: " + current().value,
                          SourceLocation(current().line, 0));
     }
     advance(); // )
@@ -453,9 +453,9 @@ std::shared_ptr<PrintStmt> Parser::parse_print() {
 std::shared_ptr<InputStmt> Parser::parse_input() {
     advance(); // cout
     advance(); // (
-    
+
     auto input = std::make_shared<InputStmt>();
-    
+
     // Проверяем, что следующий токен - идентификатор (имя переменной) или input
     if (current().type == T_INPUT) {
         input->var_name = "input";
@@ -466,9 +466,9 @@ std::shared_ptr<InputStmt> Parser::parse_input() {
     } else {
         return nullptr;
     }
-    
+
     advance(); // ,
-    
+
     input->format = current().value;
     advance(); // "{int}", "{float}" или "{string}"
     advance(); // )
@@ -481,7 +481,7 @@ std::shared_ptr<CallStmt> Parser::parse_call() {
     int call_line = current().line;
     advance(); // call
     advance(); // (
-    
+
     std::string name;
     if (current().type == T_STRING_LITERAL) {
         name = current().value;
@@ -490,11 +490,11 @@ std::shared_ptr<CallStmt> Parser::parse_call() {
         name = current().value;
         advance();
     }
-    
+
     auto call = std::make_shared<CallStmt>();
     call->location = SourceLocation(call_line, 0);
     call->func_name = name;
-    
+
     if (current().type == T_COMMA) {
         advance();
         while (!is_eof() && current().type != T_RPAREN) {
@@ -515,11 +515,11 @@ std::shared_ptr<CallStmt> Parser::parse_function_call() {
     std::string name = current().value;
     advance(); // identifier
     advance(); // (
-    
+
     auto call = std::make_shared<CallStmt>();
     call->location = SourceLocation(call_line, 0);
     call->func_name = name;
-    
+
     // Парсим аргументы, если они есть
     if (current().type != T_RPAREN) {
         call->args.push_back(parse_expr());
@@ -535,7 +535,7 @@ std::shared_ptr<CallStmt> Parser::parse_function_call() {
 std::shared_ptr<ImportStmt> Parser::parse_import() {
     int import_line = current().line;
     advance(); // from
-    
+
     std::string file_path;
     if (current().type == T_STRING_LITERAL) {
         file_path = current().value;
@@ -547,17 +547,17 @@ std::shared_ptr<ImportStmt> Parser::parse_import() {
         throw SyntaxError("Expected import path after 'from'",
                           SourceLocation(import_line, 0));
     }
-    
+
     if (current().type != T_IMPORT) {
         throw SyntaxError("Expected 'import' after import path '" + file_path + "'",
                           SourceLocation(current().line, 0));
     }
     advance(); // import
-    
+
     auto import = std::make_shared<ImportStmt>();
     import->location = SourceLocation(import_line, 0);
     import->file_path = file_path;
-    
+
     // Парсим список функций для импорта (разделенных запятыми)
     while (!is_eof()) {
         std::string import_name;
@@ -570,21 +570,21 @@ std::shared_ptr<ImportStmt> Parser::parse_import() {
         } else {
             break; // Неожиданный токен, прекращаем парсинг
         }
-        
+
         import->import_names.push_back(import_name);
-        
+
         if (current().type == T_COMMA) {
             advance(); // ,
         } else {
             break; // Больше нет функций для импорта
         }
     }
-    
+
     if (import->import_names.empty()) {
         throw SyntaxError("Expected at least one function name after 'import'",
                           SourceLocation(import_line, 0));
     }
-    
+
     if (DEBUG) {
         std::cout << "[DEBUG] Import: ";
         for (size_t i = 0; i < import->import_names.size(); ++i) {
@@ -593,7 +593,7 @@ std::shared_ptr<ImportStmt> Parser::parse_import() {
         }
         std::cout << " from " << file_path << std::endl;
     }
-    
+
     return import;
 }
 
@@ -601,30 +601,30 @@ std::shared_ptr<FileOp> Parser::parse_file_op() {
     int op_line = current().line;
     TokenType operation = current().type;  // T_CREATE, T_WRITE, T_READ, T_CLOSE, T_DELETE
     advance(); // operation
-    
+
     if (current().type != T_COLON_COLON) {
-        throw SyntaxError("Expected '::' after file operation, got: " + current().value, 
+        throw SyntaxError("Expected '::' after file operation, got: " + current().value,
                          SourceLocation(current().line, 0));
     }
     advance(); // ::
-    
+
     if (current().type != T_FILE) {
-        throw SyntaxError("Expected 'file' after '::', got: " + current().value, 
+        throw SyntaxError("Expected 'file' after '::', got: " + current().value,
                          SourceLocation(current().line, 0));
     }
     advance(); // file
-    
+
     if (current().type != T_LPAREN) {
-        throw SyntaxError("Expected '(' after 'file', got: " + current().value, 
+        throw SyntaxError("Expected '(' after 'file', got: " + current().value,
                          SourceLocation(current().line, 0));
     }
     advance(); // (
-    
+
     auto file_op = std::make_shared<FileOp>();
     file_op->location = SourceLocation(op_line, 0);
     file_op->operation = operation;
     file_op->data = nullptr;
-    
+
     // Определяем режим на основе операции
     switch (operation) {
         case T_CREATE: file_op->mode = "c"; break;
@@ -634,22 +634,22 @@ std::shared_ptr<FileOp> Parser::parse_file_op() {
         case T_DELETE: file_op->mode = "d"; break;
         default: file_op->mode = "";
     }
-    
+
     // Парсим путь к файлу (первый аргумент)
     file_op->file_path = parse_expr();
-    
+
     // Для write может быть второй аргумент - данные для записи
     if (operation == T_WRITE && current().type == T_COMMA) {
         advance(); // ,
         file_op->data = parse_expr();
     }
-    
+
     if (is_eof() || current().type != T_RPAREN) {
-        throw SyntaxError("Expected ')' after file operation arguments, got: " + current().value, 
+        throw SyntaxError("Expected ')' after file operation arguments, got: " + current().value,
                          SourceLocation(current().line, 0));
     }
     advance(); // )
-    
+
     return file_op;
 }
 
@@ -723,29 +723,29 @@ std::shared_ptr<IfStmt> Parser::parse_if() {
     int if_line = current().line;
     advance(); // if
     if (current().type != T_LPAREN) {
-        throw SyntaxError("Expected '(' after 'if', got: " + current().value, 
+        throw SyntaxError("Expected '(' after 'if', got: " + current().value,
                          SourceLocation(current().line, 0));
     }
     advance(); // (
-    
+
     auto condition = parse_expr();
-    
+
     if (current().type != T_RPAREN) {
-        throw SyntaxError("Expected ')' after if condition, got: " + current().value, 
+        throw SyntaxError("Expected ')' after if condition, got: " + current().value,
                          SourceLocation(current().line, 0));
     }
     advance(); // )
-    
+
     if (current().type != T_LBRACE) {
-        throw SyntaxError("Expected '{' after if condition, got: " + current().value, 
+        throw SyntaxError("Expected '{' after if condition, got: " + current().value,
                          SourceLocation(current().line, 0));
     }
     advance(); // {
-    
+
     auto if_stmt = std::make_shared<IfStmt>();
     if_stmt->location = SourceLocation(if_line, 0);
     if_stmt->condition = condition;
-    
+
     // Парсим тело if
     while (!is_eof() && current().type != T_RBRACE) {
         auto stmt = parse_statement();
@@ -755,7 +755,7 @@ std::shared_ptr<IfStmt> Parser::parse_if() {
             advance(); // пропускаем неизвестные токены
         }
     }
-    
+
     if (is_eof()) {
         throw SyntaxError("Expected '}' to close if block", if_stmt->location);
     }
@@ -763,7 +763,7 @@ std::shared_ptr<IfStmt> Parser::parse_if() {
     if (current().type == T_RBRACE) {
         advance(); // }
     }
-    
+
     // Проверяем наличие else
     if (current().type == T_ELSE) {
         advance(); // else
@@ -785,7 +785,7 @@ std::shared_ptr<IfStmt> Parser::parse_if() {
             }
         }
     }
-    
+
     return if_stmt;
 }
 

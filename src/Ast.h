@@ -7,9 +7,9 @@
 #include <vector>
 #include <string>
 
-struct AstNode { 
+struct AstNode {
     SourceLocation location;  // Позиция в исходном коде
-    virtual ~AstNode() = default; 
+    virtual ~AstNode() = default;
 };
 
 struct FunctionDef : AstNode {

@@ -21,7 +21,7 @@ struct VariableInfo {
     VarType type;
     SourceLocation decl_location;
     bool is_initialized;
-    
+
     VariableInfo(VarType t = VarType::UNKNOWN, const SourceLocation& loc = SourceLocation())
         : type(t), decl_location(loc), is_initialized(false) {}
 };
@@ -30,8 +30,8 @@ struct FunctionInfo {
     std::vector<VarType> param_types;
     VarType return_type;
     SourceLocation decl_location;
-    
-    FunctionInfo(const std::vector<VarType>& params = {}, VarType ret = VarType::UNKNOWN, 
+
+    FunctionInfo(const std::vector<VarType>& params = {}, VarType ret = VarType::UNKNOWN,
                  const SourceLocation& loc = SourceLocation())
         : param_types(params), return_type(ret), decl_location(loc) {}
 };
@@ -41,7 +41,7 @@ class SemanticAnalyzer {
     std::map<std::string, VariableInfo> global_vars;
     std::map<std::string, FunctionInfo> functions;
     std::vector<std::map<std::string, VariableInfo>> scopes;  // Стек областей видимости
-    
+
     // Вспомогательные функции
     VarType get_value_type(const Value& val);
     VarType type_from_name(const std::string& type_name);
@@ -52,7 +52,7 @@ class SemanticAnalyzer {
     void exit_scope();
     void declare_variable(const std::string& name, VarType type, const SourceLocation& loc);
     VariableInfo* find_variable(const std::string& name);
-    
+
     // Анализ узлов AST
     void analyze_program(const std::vector<std::shared_ptr<AstNode>>& program);
     void analyze_function(const std::shared_ptr<FunctionDef>& func);
@@ -66,7 +66,7 @@ class SemanticAnalyzer {
     void analyze_call(const std::shared_ptr<CallStmt>& call);
     void analyze_net_op(const std::shared_ptr<NetOp>& net_op);
     void analyze_file_op(const std::shared_ptr<FileOp>& file_op);
-    
+
 public:
     void analyze(const std::vector<std::shared_ptr<AstNode>>& program);
 };

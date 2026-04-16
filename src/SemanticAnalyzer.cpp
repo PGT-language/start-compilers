@@ -91,7 +91,7 @@ VarType SemanticAnalyzer::infer_expr_type(const std::shared_ptr<AstNode>& node) 
     if (auto bin = std::dynamic_pointer_cast<BinaryOp>(node)) {
         VarType left_type = infer_expr_type(bin->left);
         VarType right_type = infer_expr_type(bin->right);
-        
+
         // Для арифметических операций
         if (bin->op == T_PLUS || bin->op == T_MINUS || bin->op == T_STAR || bin->op == T_SLASH) {
             // Если один из типов UNKNOWN, возвращаем UNKNOWN (переменная может быть определена во время выполнения)
@@ -116,9 +116,9 @@ VarType SemanticAnalyzer::infer_expr_type(const std::shared_ptr<AstNode>& node) 
             }
             throw TypeError("Invalid types for arithmetic operation", bin->location);
         }
-        
+
         // Для операций сравнения всегда возвращаем INT (0 или 1)
-        if (bin->op == T_GREATER || bin->op == T_LESS || bin->op == T_EQUAL_EQUAL || 
+        if (bin->op == T_GREATER || bin->op == T_LESS || bin->op == T_EQUAL_EQUAL ||
             bin->op == T_NOT_EQUAL || bin->op == T_GREATER_EQUAL || bin->op == T_LESS_EQUAL) {
             return VarType::INT;
         }
@@ -182,7 +182,7 @@ void SemanticAnalyzer::analyze_program(const std::vector<std::shared_ptr<AstNode
             if (functions.count(func->name)) {
                 throw SemanticError("Function '" + func->name + "' already declared", func->location);
             }
-            
+
             // Регистрируем функцию
             FunctionInfo func_info;
             func_info.decl_location = func->location;
@@ -195,7 +195,7 @@ void SemanticAnalyzer::analyze_program(const std::vector<std::shared_ptr<AstNode
             functions[func->name] = func_info;
         }
     }
-    
+
     // Второй проход: анализируем тела функций и глобальные переменные
     for (const auto& node : program) {
         if (auto func = std::dynamic_pointer_cast<FunctionDef>(node)) {
@@ -211,10 +211,10 @@ void SemanticAnalyzer::analyze_function(const std::shared_ptr<FunctionDef>& func
     if (!functions.count(func->name)) {
         throw SemanticError("Function '" + func->name + "' not registered", func->location);
     }
-    
+
     // Входим в область видимости функции
     enter_scope();
-    
+
     // Объявляем параметры функции
     for (size_t i = 0; i < func->param_names.size(); ++i) {
         VarType param_type = i < func->param_types.size()
@@ -222,7 +222,7 @@ void SemanticAnalyzer::analyze_function(const std::shared_ptr<FunctionDef>& func
             : VarType::UNKNOWN;
         declare_variable(func->param_names[i], param_type, func->location);
     }
-    
+
     // Первый проход: объявляем все переменные (включая те, что создаются через cout)
     for (const auto& stmt : func->body) {
         if (auto input = std::dynamic_pointer_cast<InputStmt>(stmt)) {
@@ -231,12 +231,12 @@ void SemanticAnalyzer::analyze_function(const std::shared_ptr<FunctionDef>& func
             declare_variable(decl->name, type_from_name(decl->type_name), decl->location);
         }
     }
-    
+
     // Второй проход: анализируем использование переменных
     for (const auto& stmt : func->body) {
         analyze_statement(stmt);
     }
-    
+
     exit_scope();
 }
 
@@ -280,7 +280,7 @@ void SemanticAnalyzer::analyze_var_decl(const std::shared_ptr<VarDecl>& decl) {
         } else if (var && var->type == VarType::UNKNOWN && expr_type != VarType::UNKNOWN) {
             var->type = expr_type;
         }
-        
+
         // Отмечаем как инициализированную
         if (var) {
             var->is_initialized = true;
@@ -343,14 +343,14 @@ void SemanticAnalyzer::analyze_if(const std::shared_ptr<IfStmt>& if_stmt) {
     } catch (const UndefinedError&) {
         // Пропускаем ошибки неопределенных переменных в условиях - они будут проверяться во время выполнения
     }
-    
+
     // Входим в область видимости then
     enter_scope();
     for (const auto& stmt : if_stmt->then_body) {
         analyze_statement(stmt);
     }
     exit_scope();
-    
+
     // Входим в область видимости else
     enter_scope();
     for (const auto& stmt : if_stmt->else_body) {
@@ -381,14 +381,14 @@ void SemanticAnalyzer::analyze_call(const std::shared_ptr<CallStmt>& call) {
     if (!functions.count(call->func_name)) {
         throw UndefinedError(call->func_name, "function", call->location);
     }
-    
+
     const auto& func_info = functions[call->func_name];
     if (call->args.size() != func_info.param_types.size()) {
-        throw SemanticError("Function '" + call->func_name + "' expects " + 
+        throw SemanticError("Function '" + call->func_name + "' expects " +
                            std::to_string(func_info.param_types.size()) + " arguments, got " +
                            std::to_string(call->args.size()), call->location);
     }
-    
+
     // Анализируем аргументы
     for (size_t i = 0; i < call->args.size(); ++i) {
         const auto& arg = call->args[i];
@@ -436,15 +436,15 @@ void SemanticAnalyzer::analyze_net_op(const std::shared_ptr<NetOp>& net_op) {
 void SemanticAnalyzer::analyze_file_op(const std::shared_ptr<FileOp>& file_op) {
     // Анализируем путь к файлу (должен быть строкой)
     analyze_expr(file_op->file_path);
-    
+
     // Для write проверяем данные
     if (file_op->operation == T_WRITE && file_op->data) {
         analyze_expr(file_op->data);
     }
-    
+
     // Проверяем, что операция валидна
-    if (file_op->operation != T_CREATE && file_op->operation != T_WRITE && 
-        file_op->operation != T_READ && file_op->operation != T_CLOSE && 
+    if (file_op->operation != T_CREATE && file_op->operation != T_WRITE &&
+        file_op->operation != T_READ && file_op->operation != T_CLOSE &&
         file_op->operation != T_DELETE) {
         throw SemanticError("Invalid file operation", file_op->location);
     }
