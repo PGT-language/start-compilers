@@ -295,6 +295,73 @@ std::string Interpreter::perform_http_request(const std::string& transport, cons
     return extract_http_body(response);
 }
 
+void Interpreter::run_http_server(const std::string& host, long long port, const std::string& body, const SourceLocation& loc) const {
+    if (port <= 0 || port > 65535) {
+        throw RuntimeError("Server port must be between 1 and 65535", loc);
+    }
+
+    struct addrinfo hints {};
+    std::memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_PASSIVE;
+
+    struct addrinfo* result = nullptr;
+    std::string port_text = std::to_string(port);
+    const char* bind_host = host.empty() ? nullptr : host.c_str();
+    int status = getaddrinfo(bind_host, port_text.c_str(), &hints, &result);
+    if (status != 0) {
+        throw RuntimeError("Failed to resolve server bind address: " + std::string(gai_strerror(status)), loc);
+    }
+
+    int server_fd = -1;
+    for (struct addrinfo* rp = result; rp != nullptr; rp = rp->ai_next) {
+        server_fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        if (server_fd == -1) {
+            continue;
+        }
+
+        int yes = 1;
+        setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+        if (bind(server_fd, rp->ai_addr, rp->ai_addrlen) == 0) {
+            break;
+        }
+
+        close(server_fd);
+        server_fd = -1;
+    }
+    freeaddrinfo(result);
+
+    if (server_fd == -1) {
+        throw RuntimeError("Failed to bind local server", loc);
+    }
+    if (listen(server_fd, 16) != 0) {
+        close(server_fd);
+        throw RuntimeError("Failed to listen on local server", loc);
+    }
+
+    std::cout << "PGT server listening on http://" << (host.empty() ? "0.0.0.0" : host)
+              << ":" << port << std::endl;
+
+    while (true) {
+        int client_fd = accept(server_fd, nullptr, nullptr);
+        if (client_fd < 0) {
+            continue;
+        }
+
+        char buffer[2048];
+        recv(client_fd, buffer, sizeof(buffer), 0);
+
+        std::string response = "HTTP/1.1 200 OK\r\n";
+        response += "Content-Type: text/plain; charset=utf-8\r\n";
+        response += "Content-Length: " + std::to_string(body.size()) + "\r\n";
+        response += "Connection: close\r\n\r\n";
+        response += body;
+        send(client_fd, response.data(), response.size(), 0);
+        close(client_fd);
+    }
+}
+
 void Interpreter::execute_block(const std::vector<std::shared_ptr<AstNode>>& body, std::map<std::string, Value>& locals) {
     for (const auto& stmt : body) {
         execute_statement(stmt, locals);
@@ -499,8 +566,27 @@ void Interpreter::execute_statement(const std::shared_ptr<AstNode>& stmt, std::m
         if (!net_op->transport.empty() && net_op->transport != "http" && net_op->transport != "https") {
             throw RuntimeError("Unsupported network transport: " + net_op->transport, net_op->location);
         }
+        if (net_op->method == "serve" && net_op->transport == "https") {
+            throw RuntimeError("Local server currently supports HTTP only", net_op->location);
+        }
 
         std::string body;
+        if (net_op->method == "serve") {
+            if (!net_op->port || !net_op->data) {
+                throw RuntimeError("Server requires host, port and response body", net_op->location);
+            }
+            Value port_val = eval(net_op->port, locals);
+            if (port_val.type != ValueType::INT) {
+                throw TypeError("Server port must be an int", net_op->location);
+            }
+            Value body_val = eval(net_op->data, locals);
+            if (body_val.type != ValueType::STRING && body_val.type != ValueType::BYTES) {
+                throw TypeError("Server response body must be a string or bytes", net_op->location);
+            }
+            run_http_server(url_val.str_val, port_val.int_val, body_val.str_val, net_op->location);
+            return;
+        }
+
         if (net_op->method == "post") {
             if (!net_op->data) {
                 throw RuntimeError("POST requires a body argument", net_op->location);

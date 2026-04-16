@@ -697,6 +697,7 @@ std::shared_ptr<NetOp> Parser::parse_net_op() {
     net_op->location = SourceLocation(op_line, 0);
     net_op->transport = transport;
     net_op->method = method;
+    net_op->port = nullptr;
     net_op->data = nullptr;
 
     net_op->url = parse_expr();
@@ -705,7 +706,28 @@ std::shared_ptr<NetOp> Parser::parse_net_op() {
                          SourceLocation(current().line, 0));
     }
 
-    if (method == "post" && current().type == T_COMMA) {
+    if (method == "serve") {
+        if (current().type != T_COMMA) {
+            throw SyntaxError("Expected port argument in net::serve",
+                             SourceLocation(current().line, 0));
+        }
+        advance(); // ,
+        net_op->port = parse_expr();
+        if (!net_op->port) {
+            throw SyntaxError("Expected port in net::serve",
+                             SourceLocation(current().line, 0));
+        }
+        if (current().type != T_COMMA) {
+            throw SyntaxError("Expected response body argument in net::serve",
+                             SourceLocation(current().line, 0));
+        }
+        advance(); // ,
+        net_op->data = parse_expr();
+        if (!net_op->data) {
+            throw SyntaxError("Expected response body in net::serve",
+                             SourceLocation(current().line, 0));
+        }
+    } else if (method == "post" && current().type == T_COMMA) {
         advance(); // ,
         net_op->data = parse_expr();
     }

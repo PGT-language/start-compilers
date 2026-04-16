@@ -409,8 +409,11 @@ void SemanticAnalyzer::analyze_net_op(const std::shared_ptr<NetOp>& net_op) {
     if (!net_op->transport.empty() && net_op->transport != "http" && net_op->transport != "https") {
         throw SemanticError("Unsupported network transport: '" + net_op->transport + "'", net_op->location);
     }
-    if (net_op->method != "get" && net_op->method != "post") {
+    if (net_op->method != "get" && net_op->method != "post" && net_op->method != "serve") {
         throw SemanticError("Unsupported network method: '" + net_op->method + "'", net_op->location);
+    }
+    if (net_op->method == "serve" && net_op->transport == "https") {
+        throw SemanticError("Local server currently supports HTTP only", net_op->location);
     }
 
     analyze_expr(net_op->url);
@@ -419,7 +422,24 @@ void SemanticAnalyzer::analyze_net_op(const std::shared_ptr<NetOp>& net_op) {
         throw TypeError("Network URL must be a string", net_op->location);
     }
 
-    if (net_op->method == "post") {
+    if (net_op->method == "serve") {
+        if (!net_op->port) {
+            throw SemanticError("Network server requires a port argument", net_op->location);
+        }
+        analyze_expr(net_op->port);
+        VarType port_type = infer_expr_type(net_op->port);
+        if (port_type != VarType::INT && port_type != VarType::UNKNOWN) {
+            throw TypeError("Network server port must be an int", net_op->location);
+        }
+        if (!net_op->data) {
+            throw SemanticError("Network server requires a response body", net_op->location);
+        }
+        analyze_expr(net_op->data);
+        VarType data_type = infer_expr_type(net_op->data);
+        if (data_type != VarType::STRING && data_type != VarType::BYTES && data_type != VarType::UNKNOWN) {
+            throw TypeError("Network server response body must be a string or bytes", net_op->location);
+        }
+    } else if (net_op->method == "post") {
         if (!net_op->data) {
             throw SemanticError("Network POST requires a body argument", net_op->location);
         }
