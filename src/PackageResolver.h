@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Error.h"
+#include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -8,8 +10,10 @@
 
 struct ResolvedImport {
     std::string path;
+    std::vector<std::string> files;
     bool found = false;
     bool is_standard = false;
+    bool is_package = false;
 };
 
 class PackageResolver {
@@ -19,6 +23,10 @@ class PackageResolver {
     static bool file_exists(const std::string& path) {
         std::ifstream file(path);
         return file.good();
+    }
+
+    static bool directory_exists(const std::string& path) {
+        return std::filesystem::exists(path) && std::filesystem::is_directory(path);
     }
 
     static bool starts_with(const std::string& value, const std::string& prefix) {
@@ -65,6 +73,15 @@ class PackageResolver {
         candidates.push_back(path);
     }
 
+    static void add_directory_candidate(std::vector<std::string>& candidates,
+                                        const std::string& base,
+                                        const std::string& import_path) {
+        if (has_pgt_extension(import_path)) {
+            return;
+        }
+        add_candidate(candidates, join_path(base, import_path));
+    }
+
     static void add_import_candidates(std::vector<std::string>& candidates,
                                       const std::string& base,
                                       const std::string& import_path) {
@@ -83,12 +100,76 @@ class PackageResolver {
 
     static std::string stdlib_path_for(const std::string& import_path) {
         if (import_path == "std") {
-            return "stdlib";
+            return "src/stdlib";
         }
         if (starts_with(import_path, "std/") || starts_with(import_path, "std\\")) {
-            return (std::filesystem::path("stdlib") / import_path.substr(4)).string();
+            return (std::filesystem::path("src/stdlib") / import_path.substr(4)).string();
         }
         return import_path;
+    }
+
+    static std::vector<std::string> collect_package_files(const std::string& directory) {
+        std::vector<std::string> files;
+        for (const auto& entry : std::filesystem::directory_iterator(directory)) {
+            if (!entry.is_regular_file()) {
+                continue;
+            }
+            if (entry.path().extension() == ".pgt") {
+                files.push_back(entry.path().string());
+            }
+        }
+        std::sort(files.begin(), files.end());
+        return files;
+    }
+
+    static std::string trim(const std::string& value) {
+        size_t start = 0;
+        while (start < value.size() && std::isspace(static_cast<unsigned char>(value[start]))) {
+            start++;
+        }
+
+        size_t end = value.size();
+        while (end > start && std::isspace(static_cast<unsigned char>(value[end - 1]))) {
+            end--;
+        }
+        return value.substr(start, end - start);
+    }
+
+    static std::string package_name_from_line(const std::string& line) {
+        std::string cleaned = trim(line);
+        if (cleaned.rfind("//", 0) == 0 || cleaned.empty()) {
+            return "";
+        }
+        if (cleaned.rfind("package", 0) != 0) {
+            return "";
+        }
+
+        std::string rest = trim(cleaned.substr(7));
+        size_t end = 0;
+        while (end < rest.size() && (std::isalnum(static_cast<unsigned char>(rest[end])) || rest[end] == '_')) {
+            end++;
+        }
+        return rest.substr(0, end);
+    }
+
+    static std::string read_package_name(const std::string& file_path) {
+        std::ifstream file(file_path);
+        if (!file) {
+            return "";
+        }
+
+        std::string line;
+        while (std::getline(file, line)) {
+            std::string package_name = package_name_from_line(line);
+            if (!package_name.empty()) {
+                return package_name;
+            }
+            std::string cleaned = trim(line);
+            if (!cleaned.empty() && cleaned.rfind("//", 0) != 0) {
+                return "";
+            }
+        }
+        return "";
     }
 
 public:
@@ -119,30 +200,72 @@ public:
     }
 
     ResolvedImport resolve_import_path(const std::string& base_dir, const std::string& import_path) const {
-        std::vector<std::string> candidates;
+        std::vector<std::string> file_candidates;
+        std::vector<std::string> directory_candidates;
         bool standard = is_standard_import(import_path);
 
         if (standard) {
-            add_import_candidates(candidates, compiler_root, import_path);
-            add_import_candidates(candidates, compiler_root, stdlib_path_for(import_path));
+            add_import_candidates(file_candidates, compiler_root, import_path);
+            add_import_candidates(file_candidates, compiler_root, stdlib_path_for(import_path));
+            add_import_candidates(file_candidates, ".", stdlib_path_for(import_path));
+            add_directory_candidate(directory_candidates, compiler_root, import_path);
+            add_directory_candidate(directory_candidates, compiler_root, stdlib_path_for(import_path));
+            add_directory_candidate(directory_candidates, ".", stdlib_path_for(import_path));
         } else if (std::filesystem::path(import_path).is_absolute()) {
-            add_import_candidates(candidates, "", import_path);
+            add_import_candidates(file_candidates, "", import_path);
+            add_directory_candidate(directory_candidates, "", import_path);
         } else if (is_relative_path(import_path)) {
-            add_import_candidates(candidates, base_dir, import_path);
+            add_import_candidates(file_candidates, base_dir, import_path);
+            add_directory_candidate(directory_candidates, base_dir, import_path);
         } else {
-            add_import_candidates(candidates, base_dir, import_path);
-            add_import_candidates(candidates, project_root, import_path);
-            add_import_candidates(candidates, ".", import_path);
+            add_import_candidates(file_candidates, base_dir, import_path);
+            add_import_candidates(file_candidates, project_root, import_path);
+            add_import_candidates(file_candidates, ".", import_path);
+            add_directory_candidate(directory_candidates, base_dir, import_path);
+            add_directory_candidate(directory_candidates, project_root, import_path);
+            add_directory_candidate(directory_candidates, ".", import_path);
         }
 
-        for (const auto& candidate : candidates) {
+        for (const auto& candidate : file_candidates) {
             if (file_exists(candidate)) {
-                return {candidate, true, standard};
+                return {candidate, {candidate}, true, standard, false};
             }
         }
 
-        std::string fallback = candidates.empty() ? with_pgt_extension(import_path) : candidates.front();
-        return {fallback, false, standard};
+        for (const auto& candidate : directory_candidates) {
+            if (directory_exists(candidate)) {
+                std::vector<std::string> files = collect_package_files(candidate);
+                if (!files.empty()) {
+                    return {candidate, files, true, standard, true};
+                }
+            }
+        }
+
+        std::string fallback = file_candidates.empty() ? with_pgt_extension(import_path) : file_candidates.front();
+        return {fallback, {}, false, standard, false};
+    }
+
+    void validate_main_package_root(const std::string& entry_file) const {
+        std::string root_dir = directory_of(entry_file);
+        for (const auto& entry : std::filesystem::directory_iterator(root_dir)) {
+            if (!entry.is_regular_file() || entry.path().extension() != ".pgt") {
+                continue;
+            }
+
+            std::string file_path = entry.path().string();
+            std::string package_name = read_package_name(file_path);
+            if (package_name.empty()) {
+                throw SemanticError("File in main package root has no package declaration: '" + file_path + "'",
+                                    SourceLocation(1, 0, file_path));
+            }
+            if (package_name != "main") {
+                throw SemanticError("Main package root cannot contain package '" + package_name +
+                                    "' in file '" + file_path + "'. Move it into directory '" +
+                                    (std::filesystem::path(root_dir) / package_name).string() +
+                                    "' or change it to 'package main'.",
+                                    SourceLocation(1, 0, file_path));
+            }
+        }
     }
 
     void validate_package_directory(const std::string& file_path, const std::string& package_name) const {
