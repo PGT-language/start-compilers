@@ -372,7 +372,8 @@ std::shared_ptr<AstNode> Parser::parse_primary() {
     }
     if (current().type == T_IDENTIFIER &&
         (current().value == "protocol" || current().value == "json_parse" ||
-         current().value == "json_stringify" || current().value == "read_file") &&
+         current().value == "json_stringify" || current().value == "read_file" ||
+         current().value == "open_log") &&
         pos + 1 < tokens.size() && tokens[pos + 1].type == T_LPAREN) {
         return parse_builtin_call_expr();
     }
