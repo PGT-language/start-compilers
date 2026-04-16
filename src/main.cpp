@@ -123,7 +123,9 @@ int main(int argc, char** argv) {
             if (DEBUG) std::cout << "[DEBUG] Parsed " << program.size() << " nodes" << std::endl;
 
             if (!parser.found_package_decl()) {
-                std::cerr << "Error: Missing 'package <name>' declaration in file '" << current_file << "'\n";
+                SemanticError err("Missing package declaration: expected 'package <name>' at the top of the file.",
+                                  SourceLocation(1, 0, current_file));
+                std::cerr << err.get_traceback();
                 return 1;
             }
 
@@ -137,9 +139,9 @@ int main(int argc, char** argv) {
 
             std::string current_dir = PackageResolver::directory_of(current_file);
             if (directory_packages.count(current_dir) && directory_packages[current_dir] != parsed_package_name) {
-                SemanticError err("Interpreter import error: packages '" + directory_packages[current_dir] +
-                                  "' and '" + parsed_package_name + "' cannot live in the same root directory. "
-                                  "Move package '" + parsed_package_name + "' into its own subdirectory.",
+                SemanticError err("Directory contains mixed packages: '" + directory_packages[current_dir] +
+                                  "' and '" + parsed_package_name + "'. Move package '" +
+                                  parsed_package_name + "' into its own directory.",
                                   SourceLocation(1, 0, current_file));
                 std::cerr << err.get_traceback();
                 return 1;
@@ -151,7 +153,15 @@ int main(int argc, char** argv) {
             // Проверяем обязательные элементы для главного файла
             if (current_file == filename) {
                 if (!parser.found_package_main()) {
-                    std::cerr << "Error: Missing 'package main' declaration in main file\n";
+                    SemanticError err("Main file must declare 'package main'.",
+                                      SourceLocation(1, 0, current_file));
+                    std::cerr << err.get_traceback();
+                    return 1;
+                }
+                try {
+                    package_resolver.validate_main_package_root(filename);
+                } catch (const CompilerError& e) {
+                    std::cerr << e.get_traceback();
                     return 1;
                 }
                 if (!parser.found_return_zero()) {
@@ -184,7 +194,9 @@ int main(int argc, char** argv) {
                         std::cout << " from " << import->file_path
                                  << " -> resolved to " << resolved_import.path << std::endl;
                     }
-                    files_to_load.push_back(resolved_import.path);
+                    for (const auto& import_file : resolved_import.files) {
+                        files_to_load.push_back(import_file);
+                    }
                 }
             }
 
@@ -207,33 +219,41 @@ int main(int argc, char** argv) {
                 if (auto import = std::dynamic_pointer_cast<ImportStmt>(node)) {
                     ResolvedImport resolved_import = package_resolver.resolve_import_path(PackageResolver::directory_of(file),
                                                                                          import->file_path);
-                    if (!resolved_import.found || !file_functions.count(resolved_import.path)) {
+                    if (!resolved_import.found || resolved_import.files.empty()) {
                         std::cerr << "Error: Cannot find imported file: " << resolved_import.path << "\n";
                         return 1;
                     }
                     const std::string& current_package = file_packages[file];
-                    const std::string& imported_package = file_packages[resolved_import.path];
-                    if (imported_package == "main") {
-                        SemanticError err("Interpreter import error: package 'main' cannot be imported. "
-                                          "Move shared code into a separate package.",
-                                          SourceLocation(import->location.line, import->location.column, file));
-                        std::cerr << err.get_traceback();
-                        return 1;
+                    std::set<std::string> available_funcs;
+                    for (const auto& import_file : resolved_import.files) {
+                        if (!file_asts.count(import_file)) {
+                            std::cerr << "Error: Cannot find imported file: " << import_file << "\n";
+                            return 1;
+                        }
+
+                        const std::string& imported_package = file_packages[import_file];
+                        if (imported_package == "main") {
+                            SemanticError err("Package 'main' cannot be imported. Move shared code into a separate package.",
+                                              SourceLocation(import->location.line, import->location.column, file));
+                            std::cerr << err.get_traceback();
+                            return 1;
+                        }
+                        if (PackageResolver::directory_of(file) == PackageResolver::directory_of(import_file) &&
+                            current_package != imported_package) {
+                            SemanticError err("Directory cannot contain mixed packages: '" + current_package +
+                                              "' and '" + imported_package +
+                                              "'. Move package '" + imported_package + "' into its own directory.",
+                                              SourceLocation(import->location.line, import->location.column, file));
+                            std::cerr << err.get_traceback();
+                            return 1;
+                        }
+                        if (file_functions.count(import_file)) {
+                            available_funcs.insert(file_functions[import_file].begin(), file_functions[import_file].end());
+                        }
                     }
-                    if (PackageResolver::directory_of(file) == PackageResolver::directory_of(resolved_import.path) &&
-                        current_package != imported_package) {
-                        SemanticError err("Interpreter import error: ay-ay-ay, you cannot import package '" +
-                                          imported_package + "' from the root directory of package '" +
-                                          current_package + "'. Move package '" + imported_package +
-                                          "' into its own subdirectory.",
-                                          SourceLocation(import->location.line, import->location.column, file));
-                        std::cerr << err.get_traceback();
-                        return 1;
-                    }
-                    const auto& available_funcs = file_functions[resolved_import.path];
                     for (const auto& func_name : import->import_names) {
                         if (!available_funcs.count(func_name)) {
-                            SemanticError err("Function '" + func_name + "' not found in imported file '" + import->file_path + "'",
+                            SemanticError err("Function '" + func_name + "' not found in import '" + import->file_path + "'",
                                              SourceLocation(import->location.line, import->location.column, file));
                             std::cerr << err.get_traceback();
                             return 1;

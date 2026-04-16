@@ -17,6 +17,8 @@ std::string CodeGen::get_c_type(const std::string& pgt_type) {
     if (pgt_type == "int") return "long long";
     if (pgt_type == "float") return "double";
     if (pgt_type == "string") return "char*";
+    if (pgt_type == "bool") return "int";
+    if (pgt_type == "bytes") return "char*";
     return "void*";
 }
 
@@ -26,8 +28,21 @@ std::string CodeGen::generate_expr(const std::shared_ptr<AstNode>& expr) {
             return std::to_string(lit->value.int_val) + "LL";
         } else if (lit->value.type == ValueType::FLOAT) {
             return std::to_string(lit->value.float_val);
+        } else if (lit->value.type == ValueType::BOOL) {
+            return lit->value.bool_val ? "1" : "0";
         } else if (lit->value.type == ValueType::STRING) {
             // Экранируем строки для C
+            std::string escaped = "\"";
+            for (char c : lit->value.str_val) {
+                if (c == '"') escaped += "\\\"";
+                else if (c == '\n') escaped += "\\n";
+                else if (c == '\t') escaped += "\\t";
+                else if (c == '\\') escaped += "\\\\";
+                else escaped += c;
+            }
+            escaped += "\"";
+            return escaped;
+        } else if (lit->value.type == ValueType::BYTES) {
             std::string escaped = "\"";
             for (char c : lit->value.str_val) {
                 if (c == '"') escaped += "\\\"";
@@ -97,6 +112,10 @@ void CodeGen::generate_print(const std::shared_ptr<PrintStmt>& print) {
             code << "printf(\"%f\", (double)" << expr << ");\n";
         } else if (format == "{string}") {
             code << "printf(\"%s\", (char*)" << expr << ");\n";
+        } else if (format == "{bool}") {
+            code << "printf(\"%s\", " << expr << " ? \"true\" : \"false\");\n";
+        } else if (format == "{bytes}") {
+            code << "printf(\"%s\", (char*)" << expr << ");\n";
         } else {
             code << "printf(\"%s\", (char*)" << expr << ");\n";
         }
@@ -128,6 +147,14 @@ void CodeGen::generate_input(const std::shared_ptr<InputStmt>& input) {
         code << "char " << var_name << "[1024];\n";
         write_indent();
         code << "fgets(" << var_name << ", 1024, stdin);\n";
+    } else if (input->format == "{bool}") {
+        code << "int " << var_name << ";\n";
+        write_indent();
+        code << "scanf(\"%d\", &" << var_name << ");\n";
+    } else if (input->format == "{bytes}") {
+        code << "char " << var_name << "[4096];\n";
+        write_indent();
+        code << "fgets(" << var_name << ", 4096, stdin);\n";
     }
 }
 
@@ -254,7 +281,8 @@ void CodeGen::generate_function(const std::shared_ptr<FunctionDef>& func) {
     code << "void " << func_name << "(";
     for (size_t i = 0; i < func->param_names.size(); ++i) {
         if (i > 0) code << ", ";
-        code << "void* " << func->param_names[i];
+        std::string param_type = i < func->param_types.size() ? func->param_types[i] : "";
+        code << get_c_type(param_type) << " " << func->param_names[i];
     }
     code << ") {\n";
     
@@ -289,7 +317,8 @@ std::string CodeGen::generate(const std::vector<std::shared_ptr<AstNode>>& progr
             code << "void " << func_name << "(";
             for (size_t i = 0; i < func->param_names.size(); ++i) {
                 if (i > 0) code << ", ";
-                code << "void* " << func->param_names[i];
+                std::string param_type = i < func->param_types.size() ? func->param_types[i] : "";
+                code << get_c_type(param_type) << " " << func->param_names[i];
             }
             code << ");\n";
         }

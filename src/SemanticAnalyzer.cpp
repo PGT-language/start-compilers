@@ -42,6 +42,17 @@ bool SemanticAnalyzer::is_assignable(VarType expected, VarType actual) {
     if (expected == VarType::FLOAT && actual == VarType::INT) {
         return true;
     }
+    if (expected == VarType::INT && actual == VarType::BOOL) {
+        return true;
+    }
+    if (expected == VarType::FLOAT && actual == VarType::BOOL) {
+        return true;
+    }
+    if (expected == VarType::BOOL &&
+        (actual == VarType::INT || actual == VarType::FLOAT ||
+         actual == VarType::STRING || actual == VarType::BYTES)) {
+        return true;
+    }
     if (expected == VarType::BYTES && actual == VarType::STRING) {
         return true;
     }

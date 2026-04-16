@@ -1,86 +1,137 @@
-package // названия пакета к примеру main как в >Go {реализовано}
+PGT language notes
 
-package main // только главный входной файл {реализовано}
+Пакеты
 
-package cli // библиотечный пакет, лучше держать в отдельной директории {реализовано}
+package main
+// главный входной пакет программы. Файл, который запускается через pgt run,
+// обязан начинаться с package main.
 
-// как в Go: одна директория = один пакет
-// если в той же директории, где package main, создать package cli и импортировать его,
-// это будет ошибкой импорта
+package cli
+// обычный библиотечный пакет.
 
-// правильно:
-// test-cli.pgt -> package main
-// cli/create-file.pgt -> package cli
+Правило как в Go:
+одна директория = один пакет.
 
-from // путь к файлу import // импортируем что то из файла {реализовано}
+Если файл package main лежит в директории test_code, то все .pgt файлы прямо в test_code
+тоже должны быть package main. Если рядом лежит файл package test, компилятор откажется
+запускать программу. Такой пакет нужно вынести в свою папку:
 
-function(что то) // как в go {реализовано}
+правильно:
+test_code/test-cli.pgt       -> package main
+test_code/cli/create-file.pgt -> package cli
+test_code/cli/delete-file.pgt -> package cli
 
-function(main) // вход в програму {реализовано}
+неправильно:
+test_code/test-cli.pgt  -> package main
+test_code/test-test.pgt -> package test
 
-if // {реализовано}
+Импорты
 
-else // {реализовано}
+from "cli" import create_file, delete_file
+// импорт пакета-папки. Компилятор загрузит .pgt файлы из директории cli
+// и найдёт функции create_file, delete_file внутри package cli.
 
-while // цикл {реализовано}
+from "cli/create-file" import create_file
+// старый файловый импорт тоже работает.
 
-true // логическая истина {реализовано}
+from "std/io" import std_note
+from "std/math" import std_print_sum
+from "std/text" import std_yes_no
+from "std/net" import std_http_get, std_http_post_text, std_http_post_bytes
+// стандартная библиотека.
 
-false // логическая ложь {реализовано}
+Функции
 
-int // {реализовано}
+function(main) {
+    return 1
+}
 
-float // {реализовано}
+function(print_name, name + string) {
+    println(name, "{string}")
+    return 1
+}
 
-string // {реализовано}
+call(print_name, "Pabla")
 
-print // {реализовано}
+Типы
 
-println // {реализовано}
+int
+float
+string
+bool
+bytes
 
-create::file("c") // создания файла {реализовано}
+Примеры:
 
-write::file("w") // запись файла {реализовано}
+count + int = 10
+price + float = 2.5
+name + string = "PGT"
+running + bool = true
+body + bytes = "hello"
 
-read::file("r") // чтение файла {реализовано}
+cout(input, "{int}")
+cout(answer, "{bool}")
+cout(raw, "{bytes}")
 
-close::file("h") // закрытие файла {реализовано}
+Печать
 
-delete::file("d") // удаление файла {реализовано}
+print("text")
+println("text")
+printg("without newline")
 
-call(test) // название точки вызова вот так call(имя функции) {реализовано}
+println(count, "{int}")
+println(price, "{float}")
+println(name, "{string}")
+println(running, "{bool}")
+println(body, "{bytes}")
 
-print(arg, "{int}") // посли вызова функции мы печатаем что находыться в function  {arg} и указываем тип данных {int} {реализовано}
+Условия и циклы
 
-cout(input, "{int}") // для работы с пользовательским вводом {реализовано}
+if (running == true) {
+    println("server is running")
+} else {
+    println("server is stopped")
+}
 
-while true { {реализовано}
-    print("loop") {реализовано}
-} // бесконечный цикл, пока без break {реализовано}
+while running {
+    println("loop")
+}
 
-printg(" {реализовано}
-    какой то много строчный тест
-    Test,
-    Test,
-    Test,
-    Test,
-    Test,
-    Test,
-    Test,
-")
+Файлы
 
-return 1 // окончание function {реализовано}
+create::file("test.txt")
+write::file("test.txt", "content")
+read::file("test.txt")
+close::file("test.txt")
+delete::file("test.txt")
 
-return 0 // окончание программы {реализовано}
+Сеть
 
-net::get("https://example.com") // transport выбирается автоматически из URL {реализовано}
+net::get("https://example.com")
+net::post("https://example.com", "data")
 
-net::post("https://example.com", "{data}") // transport выбирается автоматически из URL {реализовано}
+net::http::get("http://example.com")
+net::http::post("http://example.com", "data")
 
-net::http::get("http://example.com") // получение данных по url, Linux-only через libcurl {реализовано}
+net::https::get("https://example.com")
+net::https::post("https://example.com", "data")
 
-net::http::post("http://example.com", "{data}") // отправка данных по url, Linux-only через libcurl {реализовано}
+Через stdlib:
 
-net::https::get("https://example.com") // получение данных по https, Linux-only через OpenSSL {реализовано}
+from "std/net" import std_http_get, std_http_post_bytes
 
-net::https::post("https://example.com", "{data}") // отправка данных по https, Linux-only через OpenSSL {реализовано}
+function(main) {
+    payload + bytes = "hello"
+    call(std_http_get, "https://example.com")
+    call(std_http_post_bytes, "https://example.com", payload)
+    return 1
+}
+return 0
+
+Завершение
+
+return 1
+// окончание function
+
+return 0
+// окончание программы
