@@ -371,9 +371,6 @@ void Interpreter::run_http_server(const std::string& host, long long port, const
         }
         std::string request(buffer, received);
 
-        // Логируем запрос
-        log_message("Request: " + method + " " + path + " from client", "INFO");
-
         // Простой парсинг запроса
         std::string method, path, version;
         size_t pos = request.find(' ');
@@ -385,6 +382,9 @@ void Interpreter::run_http_server(const std::string& host, long long port, const
                 version = request.substr(pos2 + 1, request.find('\r', pos2) - pos2 - 1);
             }
         }
+
+        // Логируем запрос
+        log_message("Request: " + method + " " + path + " from client", "INFO");
 
         std::string response_body;
         std::string content_type = "text/plain; charset=utf-8";
@@ -1094,7 +1094,7 @@ Value Interpreter::eval(const std::shared_ptr<AstNode>& node, const std::map<std
     return Value();
 }
 
-void Interpreter::log_message(const std::string& message, const std::string& level) const {
+void Interpreter::log_message(const std::string& message, const std::string& level) {
     std::time_t now = std::time(nullptr);
     char time_str[20];
     std::strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", std::localtime(&now));

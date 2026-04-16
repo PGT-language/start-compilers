@@ -32,7 +32,7 @@ class Interpreter {
     void run_http_server(const std::string& host, long long port, const std::string& body, const SourceLocation& loc) const;
     Value parse_json(const std::string& json_str, const SourceLocation& loc) const;
     std::string stringify_json(const Value& value) const;
-    void log_message(const std::string& message, const std::string& level = "INFO") const;
+    void log_message(const std::string& message, const std::string& level = "INFO");
     void execute_statement(const std::shared_ptr<AstNode>& stmt, std::map<std::string, Value>& locals);
     void execute_block(const std::vector<std::shared_ptr<AstNode>>& body, std::map<std::string, Value>& locals);
     void execute_function(const std::string& name, const std::vector<Value>& call_args);
