@@ -364,6 +364,22 @@ std::string Interpreter::response_content_type(const Value& value) const {
     if (value.type == ValueType::OBJECT || value.type == ValueType::ARRAY) {
         return "application/json; charset=utf-8";
     }
+    if (value.type == ValueType::STRING || value.type == ValueType::BYTES) {
+        size_t start = 0;
+        while (start < value.str_val.size() && std::isspace(static_cast<unsigned char>(value.str_val[start]))) {
+            start++;
+        }
+        std::string prefix = value.str_val.substr(start, 15);
+        for (char& ch : prefix) {
+            ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        }
+        if (prefix.rfind("<!doctype html", 0) == 0 || prefix.rfind("<html", 0) == 0) {
+            return "text/html; charset=utf-8";
+        }
+        if (prefix.rfind("{", 0) == 0 || prefix.rfind("[", 0) == 0) {
+            return "application/json; charset=utf-8";
+        }
+    }
     return "text/plain; charset=utf-8";
 }
 
@@ -858,6 +874,10 @@ void Interpreter::execute_statement(const std::shared_ptr<AstNode>& stmt, std::m
 
         if (!net_op->transport.empty() && net_op->transport != "http" && net_op->transport != "https") {
             throw RuntimeError("Unsupported network transport: " + net_op->transport, net_op->location);
+        }
+        if (net_op->method != "get" && net_op->method != "post" &&
+            net_op->method != "serve" && net_op->method != "route") {
+            throw RuntimeError("Unsupported network method: " + net_op->method, net_op->location);
         }
         if (net_op->method == "serve" && net_op->transport == "https") {
             throw RuntimeError("Local server currently supports HTTP only", net_op->location);
