@@ -29,7 +29,7 @@ class Interpreter {
     std::string extract_http_body(const std::string& response) const;
     std::string perform_http_request(const std::string& transport, const std::string& method, const std::string& url,
                                      const std::string& body, const SourceLocation& loc) const;
-    void run_http_server(const std::string& host, long long port, const std::string& body, const SourceLocation& loc) const;
+    void run_http_server(const std::string& host, long long port, const std::string& body, const SourceLocation& loc);
     Value parse_json(const std::string& json_str, const SourceLocation& loc) const;
     std::string stringify_json(const Value& value) const;
     void log_message(const std::string& message, const std::string& level = "INFO");

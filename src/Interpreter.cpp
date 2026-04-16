@@ -309,7 +309,7 @@ std::string Interpreter::perform_http_request(const std::string& transport, cons
     return extract_http_body(response);
 }
 
-void Interpreter::run_http_server(const std::string& host, long long port, const std::string& body, const SourceLocation& loc) const {
+void Interpreter::run_http_server(const std::string& host, long long port, const std::string& body, const SourceLocation& loc) {
     if (port <= 0 || port > 65535) {
         throw RuntimeError("Server port must be between 1 and 65535", loc);
     }
