@@ -15,12 +15,14 @@ struct AstNode {
 struct FunctionDef : AstNode {
     std::string name;
     std::vector<std::string> param_names;
+    std::vector<std::string> param_types;
     std::vector<std::shared_ptr<AstNode>> body;
     bool has_return_one = false;  // Есть ли return 1 в функции
 };
 
 struct VarDecl : AstNode {
     std::string name;
+    std::string type_name;
     std::shared_ptr<AstNode> expr;
 };
 

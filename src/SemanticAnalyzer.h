@@ -12,6 +12,8 @@ enum class VarType {
     INT,
     FLOAT,
     STRING,
+    BOOL,
+    BYTES,
     UNKNOWN  // Тип еще не определен
 };
 
@@ -42,6 +44,9 @@ class SemanticAnalyzer {
     
     // Вспомогательные функции
     VarType get_value_type(const Value& val);
+    VarType type_from_name(const std::string& type_name);
+    std::string type_to_string(VarType type);
+    bool is_assignable(VarType expected, VarType actual);
     VarType infer_expr_type(const std::shared_ptr<AstNode>& node);
     void enter_scope();
     void exit_scope();

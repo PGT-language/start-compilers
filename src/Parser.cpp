@@ -22,6 +22,19 @@ const Token& Parser::current() const {
 }
 void Parser::advance() { if (!is_eof()) ++pos; }
 
+std::string Parser::parse_type_name() {
+    if (current().type == T_INT || current().type == T_FLOAT ||
+        current().type == T_STRING || current().type == T_BOOL_TYPE ||
+        current().type == T_BYTES) {
+        std::string type_name = current().value;
+        advance();
+        return type_name;
+    }
+
+    throw SyntaxError("Expected type name: int, float, string, bool, or bytes",
+                      SourceLocation(current().line, 0));
+}
+
 std::vector<std::shared_ptr<AstNode>> Parser::parse_program() {
     // Сбрасываем флаги для нового парсинга
     has_package_decl = false;
@@ -107,9 +120,10 @@ std::shared_ptr<FunctionDef> Parser::parse_function() {
         std::string param_name = current().value;
         advance();
         advance(); // +
-        advance(); // type
+        std::string param_type = parse_type_name();
 
         func->param_names.push_back(param_name);
+        func->param_types.push_back(param_type);
 
         if (current().type == T_COMMA) advance();
     }
@@ -239,10 +253,11 @@ std::shared_ptr<VarDecl> Parser::parse_var_decl() {
     decl->location = SourceLocation(current().line, 0);  // Сохраняем позицию
     std::string name = current().value; advance();
     advance(); // +
-    advance(); // type
+    std::string type_name = parse_type_name();
     advance(); // =
     auto expr = parse_expr();
     decl->name = name;
+    decl->type_name = type_name;
     decl->expr = expr;
     return decl;
 }
@@ -350,7 +365,7 @@ std::shared_ptr<AstNode> Parser::parse_primary() {
     if (current().type == T_TRUE || current().type == T_FALSE) {
         auto lit = std::make_shared<Literal>();
         lit->location = SourceLocation(current().line, 0);
-        lit->value = Value(current().type == T_TRUE ? 1LL : 0LL);
+        lit->value = Value::Bool(current().type == T_TRUE);
         advance();
         return lit;
     }

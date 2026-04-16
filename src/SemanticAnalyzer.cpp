@@ -6,8 +6,49 @@ VarType SemanticAnalyzer::get_value_type(const Value& val) {
         case ValueType::INT: return VarType::INT;
         case ValueType::FLOAT: return VarType::FLOAT;
         case ValueType::STRING: return VarType::STRING;
+        case ValueType::BOOL: return VarType::BOOL;
+        case ValueType::BYTES: return VarType::BYTES;
         default: return VarType::UNKNOWN;
     }
+}
+
+VarType SemanticAnalyzer::type_from_name(const std::string& type_name) {
+    if (type_name == "int") return VarType::INT;
+    if (type_name == "float") return VarType::FLOAT;
+    if (type_name == "string") return VarType::STRING;
+    if (type_name == "bool") return VarType::BOOL;
+    if (type_name == "bytes") return VarType::BYTES;
+    return VarType::UNKNOWN;
+}
+
+std::string SemanticAnalyzer::type_to_string(VarType type) {
+    switch (type) {
+        case VarType::INT: return "int";
+        case VarType::FLOAT: return "float";
+        case VarType::STRING: return "string";
+        case VarType::BOOL: return "bool";
+        case VarType::BYTES: return "bytes";
+        default: return "unknown";
+    }
+}
+
+bool SemanticAnalyzer::is_assignable(VarType expected, VarType actual) {
+    if (expected == VarType::UNKNOWN || actual == VarType::UNKNOWN) {
+        return true;
+    }
+    if (expected == actual) {
+        return true;
+    }
+    if (expected == VarType::FLOAT && actual == VarType::INT) {
+        return true;
+    }
+    if (expected == VarType::BYTES && actual == VarType::STRING) {
+        return true;
+    }
+    if (expected == VarType::STRING && actual == VarType::BYTES) {
+        return true;
+    }
+    return false;
 }
 
 VarType SemanticAnalyzer::infer_expr_type(const std::shared_ptr<AstNode>& node) {
@@ -52,8 +93,15 @@ VarType SemanticAnalyzer::infer_expr_type(const std::shared_ptr<AstNode>& node) 
             if (left_type == VarType::INT && right_type == VarType::INT) {
                 return VarType::INT;
             }
+            if ((left_type == VarType::INT || left_type == VarType::BOOL) &&
+                (right_type == VarType::INT || right_type == VarType::BOOL)) {
+                return VarType::INT;
+            }
             if (left_type == VarType::STRING || right_type == VarType::STRING) {
                 return VarType::STRING;  // Конкатенация строк
+            }
+            if (left_type == VarType::BYTES || right_type == VarType::BYTES) {
+                return VarType::BYTES;
             }
             throw TypeError("Invalid types for arithmetic operation", bin->location);
         }
@@ -127,8 +175,11 @@ void SemanticAnalyzer::analyze_program(const std::vector<std::shared_ptr<AstNode
             // Регистрируем функцию
             FunctionInfo func_info;
             func_info.decl_location = func->location;
-            for (const auto& param : func->param_names) {
-                func_info.param_types.push_back(VarType::UNKNOWN);  // Типы параметров пока не анализируем
+            for (size_t i = 0; i < func->param_names.size(); ++i) {
+                VarType param_type = i < func->param_types.size()
+                    ? type_from_name(func->param_types[i])
+                    : VarType::UNKNOWN;
+                func_info.param_types.push_back(param_type);
             }
             functions[func->name] = func_info;
         }
@@ -155,7 +206,10 @@ void SemanticAnalyzer::analyze_function(const std::shared_ptr<FunctionDef>& func
     
     // Объявляем параметры функции
     for (size_t i = 0; i < func->param_names.size(); ++i) {
-        declare_variable(func->param_names[i], VarType::UNKNOWN, func->location);
+        VarType param_type = i < func->param_types.size()
+            ? type_from_name(func->param_types[i])
+            : VarType::UNKNOWN;
+        declare_variable(func->param_names[i], param_type, func->location);
     }
     
     // Первый проход: объявляем все переменные (включая те, что создаются через cout)
@@ -165,10 +219,10 @@ void SemanticAnalyzer::analyze_function(const std::shared_ptr<FunctionDef>& func
         } else if (auto decl = std::dynamic_pointer_cast<VarDecl>(stmt)) {
             // Объявляем переменную с типом UNKNOWN, если выражение содержит неопределенные переменные
             try {
-                VarType expr_type = infer_expr_type(decl->expr);
-                declare_variable(decl->name, expr_type, decl->location);
+                VarType declared_type = type_from_name(decl->type_name);
+                declare_variable(decl->name, declared_type, decl->location);
             } catch (const UndefinedError&) {
-                declare_variable(decl->name, VarType::UNKNOWN, decl->location);
+                declare_variable(decl->name, type_from_name(decl->type_name), decl->location);
             }
         }
     }
@@ -206,10 +260,19 @@ void SemanticAnalyzer::analyze_var_decl(const std::shared_ptr<VarDecl>& decl) {
     // Не выбрасываем ошибку для неопределенных переменных - они будут проверяться во время выполнения
     try {
         VarType expr_type = infer_expr_type(decl->expr);
-        
+        VarType declared_type = type_from_name(decl->type_name);
+        if (!is_assignable(declared_type, expr_type)) {
+            throw TypeError("Cannot assign " + type_to_string(expr_type) +
+                            " to variable '" + decl->name + "' of type " +
+                            type_to_string(declared_type),
+                            decl->location);
+        }
+
         // Обновляем тип переменной, если он был UNKNOWN
         auto* var = find_variable(decl->name);
-        if (var && var->type == VarType::UNKNOWN && expr_type != VarType::UNKNOWN) {
+        if (var && var->type == VarType::UNKNOWN && declared_type != VarType::UNKNOWN) {
+            var->type = declared_type;
+        } else if (var && var->type == VarType::UNKNOWN && expr_type != VarType::UNKNOWN) {
             var->type = expr_type;
         }
         
@@ -252,6 +315,10 @@ void SemanticAnalyzer::analyze_input(const std::shared_ptr<InputStmt>& input) {
         var_type = VarType::FLOAT;
     } else if (input->format == "{string}") {
         var_type = VarType::STRING;
+    } else if (input->format == "{bool}") {
+        var_type = VarType::BOOL;
+    } else if (input->format == "{bytes}") {
+        var_type = VarType::BYTES;
     }
     declare_variable(var_name, var_type, input->location);
     auto* var = find_variable(var_name);
@@ -264,8 +331,9 @@ void SemanticAnalyzer::analyze_if(const std::shared_ptr<IfStmt>& if_stmt) {
     // Анализируем условие (не строго, чтобы не блокировать runtime проверки)
     try {
         VarType cond_type = infer_expr_type(if_stmt->condition);
-        if (cond_type != VarType::INT && cond_type != VarType::UNKNOWN && cond_type != VarType::FLOAT && cond_type != VarType::STRING) {
-            throw TypeError("Condition must be a boolean expression (int)", if_stmt->condition->location);
+        if (cond_type != VarType::INT && cond_type != VarType::BOOL && cond_type != VarType::UNKNOWN &&
+            cond_type != VarType::FLOAT && cond_type != VarType::STRING && cond_type != VarType::BYTES) {
+            throw TypeError("Condition must be a boolean-compatible expression", if_stmt->condition->location);
         }
     } catch (const UndefinedError&) {
         // Пропускаем ошибки неопределенных переменных в условиях - они будут проверяться во время выполнения
@@ -289,9 +357,9 @@ void SemanticAnalyzer::analyze_if(const std::shared_ptr<IfStmt>& if_stmt) {
 void SemanticAnalyzer::analyze_while(const std::shared_ptr<WhileStmt>& while_stmt) {
     try {
         VarType cond_type = infer_expr_type(while_stmt->condition);
-        if (cond_type != VarType::INT && cond_type != VarType::UNKNOWN &&
-            cond_type != VarType::FLOAT && cond_type != VarType::STRING) {
-            throw TypeError("While condition must be a boolean expression (int)", while_stmt->condition->location);
+        if (cond_type != VarType::INT && cond_type != VarType::BOOL && cond_type != VarType::UNKNOWN &&
+            cond_type != VarType::FLOAT && cond_type != VarType::STRING && cond_type != VarType::BYTES) {
+            throw TypeError("While condition must be a boolean-compatible expression", while_stmt->condition->location);
         }
     } catch (const UndefinedError&) {
         // Пропускаем ошибки неопределенных переменных в условиях - они будут проверяться во время выполнения
@@ -317,8 +385,18 @@ void SemanticAnalyzer::analyze_call(const std::shared_ptr<CallStmt>& call) {
     }
     
     // Анализируем аргументы
-    for (const auto& arg : call->args) {
+    for (size_t i = 0; i < call->args.size(); ++i) {
+        const auto& arg = call->args[i];
         analyze_expr(arg);
+        VarType arg_type = infer_expr_type(arg);
+        VarType expected_type = func_info.param_types[i];
+        if (!is_assignable(expected_type, arg_type)) {
+            throw TypeError("Function '" + call->func_name + "' argument " +
+                            std::to_string(i + 1) + " expects " +
+                            type_to_string(expected_type) + ", got " +
+                            type_to_string(arg_type),
+                            call->location);
+        }
     }
 }
 

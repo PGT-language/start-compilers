@@ -34,6 +34,7 @@ class Parser {
     std::shared_ptr<FileOp> parse_file_op();
     std::shared_ptr<NetOp> parse_net_op();
     std::shared_ptr<ImportStmt> parse_import();
+    std::string parse_type_name();
 
 public:
     void load_tokens(std::vector<Token> t);
