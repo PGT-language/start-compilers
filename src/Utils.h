@@ -36,10 +36,17 @@ struct Value {
     std::string to_string(const std::string& format = "") const {
         if (!format.empty()) {
             if (format == "{int}" && type == ValueType::INT) return std::to_string(int_val);
+            if (format == "{int}" && type == ValueType::BOOL) return std::to_string(bool_val ? 1 : 0);
             if (format == "{float}" && type == ValueType::FLOAT) return std::to_string(float_val);
+            if (format == "{float}" && type == ValueType::INT) return std::to_string(static_cast<double>(int_val));
             if (format == "{string}" && type == ValueType::STRING) return str_val;
+            if (format == "{string}" && type == ValueType::BYTES) return str_val;
             if (format == "{bool}" && type == ValueType::BOOL) return bool_val ? "true" : "false";
+            if (format == "{bool}" && type == ValueType::INT) return int_val != 0 ? "true" : "false";
+            if (format == "{bool}" && type == ValueType::FLOAT) return float_val != 0.0 ? "true" : "false";
+            if (format == "{bool}" && (type == ValueType::STRING || type == ValueType::BYTES)) return str_val.empty() ? "false" : "true";
             if (format == "{bytes}" && type == ValueType::BYTES) return str_val;
+            if (format == "{bytes}" && type == ValueType::STRING) return str_val;
         }
         switch (type) {
             case ValueType::INT: return std::to_string(int_val);
