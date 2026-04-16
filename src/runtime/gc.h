@@ -28,4 +28,3 @@ void gc_remove_root(void* ptr);
 #endif
 
 #endif // PGT_RUNTIME_GC_H
-

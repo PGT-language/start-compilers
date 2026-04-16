@@ -79,4 +79,3 @@ public:
     SyntaxError(const std::string& msg, const SourceLocation& loc = SourceLocation())
         : CompilerError("Syntax error: " + msg, loc) {}
 };
-
