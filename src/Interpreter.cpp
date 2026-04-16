@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <cstring>
 #include <cctype>
+#include <ctime>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
@@ -370,6 +371,9 @@ void Interpreter::run_http_server(const std::string& host, long long port, const
         }
         std::string request(buffer, received);
 
+        // Логируем запрос
+        log_message("Request: " + method + " " + path + " from client", "INFO");
+
         // Простой парсинг запроса
         std::string method, path, version;
         size_t pos = request.find(' ');
@@ -406,8 +410,15 @@ void Interpreter::run_http_server(const std::string& host, long long port, const
             } else if (path == "/api") {
                 response_body = "{\"message\": \"Hello from API\"}";
                 content_type = "application/json; charset=utf-8";
+            } else if (path == "/data") {
+                response_body = "{\"data\": [1, 2, 3, 4, 5]}";
+                content_type = "application/json; charset=utf-8";
+            } else if (path == "/status") {
+                response_body = "{\"status\": \"running\", \"uptime\": \"unknown\"}";
+                content_type = "application/json; charset=utf-8";
             } else {
                 response_body = "Not found";
+                log_message("Route not found: " + path, "WARN");
             }
         } else if (method == "POST") {
             // Найти тело запроса
@@ -420,12 +431,20 @@ void Interpreter::run_http_server(const std::string& host, long long port, const
                     // Пример: вернуть обратно
                     response_body = stringify_json(json);
                     content_type = "application/json; charset=utf-8";
+                    log_message("Processed JSON POST to /api", "INFO");
                 } catch (...) {
                     response_body = "{\"error\": \"Invalid JSON\"}";
                     content_type = "application/json; charset=utf-8";
+                    log_message("Invalid JSON in POST to /api", "ERROR");
                 }
+            } else if (path == "/data") {
+                // Пример обработки данных
+                response_body = "{\"received\": \"data posted\"}";
+                content_type = "application/json; charset=utf-8";
+                log_message("Data posted to /data", "INFO");
             } else {
-                response_body = "POST not supported";
+                response_body = "POST not supported for this route";
+                log_message("Unsupported POST route: " + path, "WARN");
             }
         } else {
             response_body = "Method not allowed";
@@ -437,6 +456,7 @@ void Interpreter::run_http_server(const std::string& host, long long port, const
         response += "Connection: close\r\n\r\n";
         response += response_body;
         send(client_fd, response.data(), response.size(), 0);
+        log_message("Response sent: " + std::to_string(response_body.size()) + " bytes", "INFO");
         close(client_fd);
     }
 }
@@ -950,6 +970,23 @@ Value Interpreter::eval(const std::shared_ptr<AstNode>& node, const std::map<std
             file.close();
             return Value(content);
         }
+        if (builtin->name == "open_log") {
+            if (builtin->args.size() != 1) {
+                throw RuntimeError("Builtin 'open_log' expects 1 argument", builtin->location);
+            }
+            Value arg = eval(builtin->args[0], locals);
+            if (arg.type != ValueType::STRING && arg.type != ValueType::BYTES) {
+                throw TypeError("Builtin 'open_log' expects a string path", builtin->location);
+            }
+            if (log_file.is_open()) {
+                log_file.close();
+            }
+            log_file.open(arg.str_val, std::ios::app);
+            if (!log_file.is_open()) {
+                throw RuntimeError("Failed to open log file: " + arg.str_val, builtin->location);
+            }
+            return Value::Bool(true);
+        }
         throw RuntimeError("Unknown builtin expression: " + builtin->name, builtin->location);
     }
     if (auto id = std::dynamic_pointer_cast<Identifier>(node)) {
@@ -1055,4 +1092,16 @@ Value Interpreter::eval(const std::shared_ptr<AstNode>& node, const std::map<std
         return Value();
     }
     return Value();
+}
+
+void Interpreter::log_message(const std::string& message, const std::string& level) const {
+    std::time_t now = std::time(nullptr);
+    char time_str[20];
+    std::strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
+    std::string log_entry = "[" + std::string(time_str) + "] [" + level + "] " + message;
+    std::cout << log_entry << std::endl;
+    if (log_file.is_open()) {
+        log_file << log_entry << std::endl;
+        log_file.flush();
+    }
 }

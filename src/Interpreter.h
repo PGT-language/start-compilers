@@ -13,6 +13,7 @@ class Interpreter {
     std::map<std::string, Value> globals;  // Глобальные переменные
     std::vector<SourceLocation> call_stack;  // Стек вызовов для traceback
     std::map<std::string, std::unique_ptr<std::fstream>> open_files;  // Открытые файлы
+    std::ofstream log_file;  // Файл для логов
 
     struct ParsedUrl {
         std::string scheme;
