@@ -84,3 +84,5 @@ net::http::post("http://example.com", "{data}") // отправка данных
 net::https::get("https://example.com") // получение данных по https, Linux-only через OpenSSL {реализовано}
 
 net::https::post("https://example.com", "{data}") // отправка данных по https, Linux-only через OpenSSL {реализовано}
+
+net::serve("127.0.0.1", 8083, body) // запуск HTTP сервера на указанном адресе и порту {реализовано}
