@@ -22,6 +22,7 @@ class Interpreter {
     };
 
     bool is_truthy(const Value& value) const;
+    Value coerce_value(const Value& value, const std::string& type_name, const SourceLocation& loc) const;
     void assign_value(const std::string& name, const Value& value, std::map<std::string, Value>& locals);
     ParsedUrl parse_url(const std::string& url, const SourceLocation& loc) const;
     std::string extract_http_body(const std::string& response) const;

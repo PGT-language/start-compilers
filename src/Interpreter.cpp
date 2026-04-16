@@ -17,13 +17,50 @@ bool Interpreter::is_truthy(const Value& value) const {
     if (value.type == ValueType::INT) {
         return value.int_val != 0;
     }
+    if (value.type == ValueType::BOOL) {
+        return value.bool_val;
+    }
     if (value.type == ValueType::FLOAT) {
         return value.float_val != 0.0;
     }
     if (value.type == ValueType::STRING) {
         return !value.str_val.empty();
     }
+    if (value.type == ValueType::BYTES) {
+        return !value.str_val.empty();
+    }
     return false;
+}
+
+Value Interpreter::coerce_value(const Value& value, const std::string& type_name, const SourceLocation& loc) const {
+    if (type_name == "int") {
+        if (value.type == ValueType::INT) return value;
+        if (value.type == ValueType::BOOL) return Value(value.bool_val ? 1LL : 0LL);
+        if (value.type == ValueType::FLOAT) return Value(static_cast<long long>(value.float_val));
+    }
+    if (type_name == "float") {
+        if (value.type == ValueType::FLOAT) return value;
+        if (value.type == ValueType::INT) return Value(static_cast<double>(value.int_val));
+        if (value.type == ValueType::BOOL) return Value(value.bool_val ? 1.0 : 0.0);
+    }
+    if (type_name == "string") {
+        if (value.type == ValueType::STRING) return value;
+        if (value.type == ValueType::BYTES) return Value(value.str_val);
+    }
+    if (type_name == "bool") {
+        if (value.type == ValueType::BOOL) return value;
+        if (value.type == ValueType::INT) return Value::Bool(value.int_val != 0);
+        if (value.type == ValueType::FLOAT) return Value::Bool(value.float_val != 0.0);
+        if (value.type == ValueType::STRING || value.type == ValueType::BYTES) {
+            return Value::Bool(!value.str_val.empty());
+        }
+    }
+    if (type_name == "bytes") {
+        if (value.type == ValueType::BYTES) return value;
+        if (value.type == ValueType::STRING) return Value::Bytes(value.str_val);
+    }
+
+    throw TypeError("Cannot convert value to type '" + type_name + "'", loc);
 }
 
 void Interpreter::assign_value(const std::string& name, const Value& value, std::map<std::string, Value>& locals) {
@@ -266,7 +303,7 @@ void Interpreter::execute_block(const std::vector<std::shared_ptr<AstNode>>& bod
 
 void Interpreter::execute_statement(const std::shared_ptr<AstNode>& stmt, std::map<std::string, Value>& locals) {
     if (auto decl = std::dynamic_pointer_cast<VarDecl>(stmt)) {
-        Value val = eval(decl->expr, locals);
+        Value val = coerce_value(eval(decl->expr, locals), decl->type_name, decl->location);
         assign_value(decl->name, val, locals);
         if (DEBUG) {
             std::cout << "[DEBUG] Set " << (globals.count(decl->name) ? "global" : "local")
@@ -355,6 +392,17 @@ void Interpreter::execute_statement(const std::shared_ptr<AstNode>& stmt, std::m
             }
             std::getline(std::cin, x);
             val = Value(x);
+        } else if (input->format == "{bool}") {
+            std::string x;
+            std::cin >> x;
+            val = Value::Bool(x == "true" || x == "1" || x == "yes");
+        } else if (input->format == "{bytes}") {
+            std::string x;
+            if (std::cin.peek() == '\n') {
+                std::cin.ignore();
+            }
+            std::getline(std::cin, x);
+            val = Value::Bytes(x);
         }
 
         std::string var_name = input->var_name.empty() ? "input" : input->var_name;
@@ -459,7 +507,9 @@ void Interpreter::execute_statement(const std::shared_ptr<AstNode>& stmt, std::m
             }
             Value body_val = eval(net_op->data, locals);
             if (body_val.type != ValueType::STRING) {
-                throw TypeError("Network POST body must be a string", net_op->location);
+                if (body_val.type != ValueType::BYTES) {
+                    throw TypeError("Network POST body must be a string or bytes", net_op->location);
+                }
             }
             body = body_val.str_val;
         }
@@ -478,7 +528,7 @@ void Interpreter::run(const std::vector<std::shared_ptr<AstNode>>& program) {
             functions[f->name] = f;
         } else if (auto var = std::dynamic_pointer_cast<VarDecl>(node)) {
             // Обрабатываем глобальные переменные
-            Value val = eval(var->expr);
+            Value val = coerce_value(eval(var->expr), var->type_name, var->location);
             globals[var->name] = val;
             if (DEBUG) std::cout << "[DEBUG] Global var " << var->name << " = " << val.to_string() << std::endl;
         }
@@ -504,7 +554,10 @@ void Interpreter::execute_function(const std::string& name, const std::vector<Va
     // Устанавливаем параметры как локальные переменные
     if (DEBUG) std::cout << "[DEBUG] Function " << name << " has " << func->param_names.size() << " params, got " << call_args.size() << " args" << std::endl;
     for (size_t i = 0; i < func->param_names.size() && i < call_args.size(); ++i) {
-        locals[func->param_names[i]] = call_args[i];
+        std::string param_type = i < func->param_types.size() ? func->param_types[i] : "";
+        locals[func->param_names[i]] = param_type.empty()
+            ? call_args[i]
+            : coerce_value(call_args[i], param_type, func->location);
         if (DEBUG) std::cout << "[DEBUG] Param " << func->param_names[i] << " = " << call_args[i].to_string() << std::endl;
     }
 
@@ -530,7 +583,7 @@ Value Interpreter::eval(const std::shared_ptr<AstNode>& node, const std::map<std
                 throw RuntimeError("Builtin 'protocol' expects 1 argument", builtin->location);
             }
             Value arg = eval(builtin->args[0], locals);
-            if (arg.type != ValueType::STRING) {
+            if (arg.type != ValueType::STRING && arg.type != ValueType::BYTES) {
                 throw TypeError("Builtin 'protocol' expects a string URL", builtin->location);
             }
             ParsedUrl parsed = parse_url(arg.str_val, builtin->location);
@@ -574,10 +627,11 @@ Value Interpreter::eval(const std::shared_ptr<AstNode>& node, const std::map<std
             } else {
                 // Сравнение чисел или смешанных типов
                 // Если один из операндов - строка, а другой - нет, конвертируем в строки
-                if (l.type == ValueType::STRING || r.type == ValueType::STRING || 
+                if (l.type == ValueType::STRING || r.type == ValueType::STRING ||
+                    l.type == ValueType::BYTES || r.type == ValueType::BYTES ||
                     l.type == ValueType::NONE || r.type == ValueType::NONE) {
-                    std::string l_str = (l.type == ValueType::STRING) ? l.str_val : l.to_string();
-                    std::string r_str = (r.type == ValueType::STRING) ? r.str_val : r.to_string();
+                    std::string l_str = (l.type == ValueType::STRING || l.type == ValueType::BYTES) ? l.str_val : l.to_string();
+                    std::string r_str = (r.type == ValueType::STRING || r.type == ValueType::BYTES) ? r.str_val : r.to_string();
                     if (DEBUG) std::cout << "[DEBUG] Comparing: '" << l_str << "' " << (bin->op == T_GREATER ? ">" : bin->op == T_LESS ? "<" : bin->op == T_EQUAL_EQUAL ? "==" : "?") << " '" << r_str << "'" << std::endl;
                     int cmp = l_str.compare(r_str);
                     switch (bin->op) {
@@ -594,10 +648,12 @@ Value Interpreter::eval(const std::shared_ptr<AstNode>& node, const std::map<std
                     double lv, rv;
                     if (l.type == ValueType::FLOAT) lv = l.float_val;
                     else if (l.type == ValueType::INT) lv = l.int_val;
+                    else if (l.type == ValueType::BOOL) lv = l.bool_val ? 1.0 : 0.0;
                     else lv = 0.0;
                     
                     if (r.type == ValueType::FLOAT) rv = r.float_val;
                     else if (r.type == ValueType::INT) rv = r.int_val;
+                    else if (r.type == ValueType::BOOL) rv = r.bool_val ? 1.0 : 0.0;
                     else rv = 0.0;
                 
                     switch (bin->op) {
@@ -615,8 +671,8 @@ Value Interpreter::eval(const std::shared_ptr<AstNode>& node, const std::map<std
         
         // Арифметические операции
         if (l.type == ValueType::FLOAT || r.type == ValueType::FLOAT) {
-            double lv = (l.type == ValueType::FLOAT) ? l.float_val : l.int_val;
-            double rv = (r.type == ValueType::FLOAT) ? r.float_val : r.int_val;
+            double lv = (l.type == ValueType::FLOAT) ? l.float_val : (l.type == ValueType::BOOL ? (l.bool_val ? 1.0 : 0.0) : l.int_val);
+            double rv = (r.type == ValueType::FLOAT) ? r.float_val : (r.type == ValueType::BOOL ? (r.bool_val ? 1.0 : 0.0) : r.int_val);
             switch (bin->op) {
                 case T_PLUS: return Value(lv + rv);
                 case T_MINUS: return Value(lv - rv);
@@ -624,12 +680,15 @@ Value Interpreter::eval(const std::shared_ptr<AstNode>& node, const std::map<std
                 case T_SLASH: return Value(rv != 0.0 ? lv / rv : 0.0);
             }
         }
-        if (l.type == ValueType::INT && r.type == ValueType::INT) {
+        if ((l.type == ValueType::INT || l.type == ValueType::BOOL) &&
+            (r.type == ValueType::INT || r.type == ValueType::BOOL)) {
+            long long lv = l.type == ValueType::BOOL ? (l.bool_val ? 1LL : 0LL) : l.int_val;
+            long long rv = r.type == ValueType::BOOL ? (r.bool_val ? 1LL : 0LL) : r.int_val;
             switch (bin->op) {
-                case T_PLUS: return Value(l.int_val + r.int_val);
-                case T_MINUS: return Value(l.int_val - r.int_val);
-                case T_STAR: return Value(l.int_val * r.int_val);
-                case T_SLASH: return Value(r.int_val != 0 ? l.int_val / r.int_val : 0LL);
+                case T_PLUS: return Value(lv + rv);
+                case T_MINUS: return Value(lv - rv);
+                case T_STAR: return Value(lv * rv);
+                case T_SLASH: return Value(rv != 0 ? lv / rv : 0LL);
             }
         }
         return Value();
