@@ -30,6 +30,7 @@ class CodeGen {
     void generate_net_op(const std::shared_ptr<NetOp>& net_op);
     void generate_var_decl(const std::shared_ptr<VarDecl>& decl);
     void generate_call(const std::shared_ptr<CallStmt>& call);
+    void generate_return(const std::shared_ptr<ReturnStmt>& ret);
     
 public:
     std::string generate(const std::vector<std::shared_ptr<AstNode>>& program);

@@ -15,6 +15,10 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
+struct FunctionReturn {
+    Value value;
+};
+
 bool Interpreter::is_truthy(const Value& value) const {
     if (value.type == ValueType::INT) {
         return value.int_val != 0;
@@ -309,6 +313,67 @@ std::string Interpreter::perform_http_request(const std::string& transport, cons
     return extract_http_body(response);
 }
 
+void Interpreter::register_http_route(const std::string& method, const std::string& path,
+                                      const std::string& handler, const SourceLocation& loc) {
+    if (path.empty() || path[0] != '/') {
+        throw RuntimeError("HTTP route path must start with '/'", loc);
+    }
+    if (handler.empty()) {
+        throw RuntimeError("HTTP route handler cannot be empty", loc);
+    }
+
+    std::string key = make_route_key(method, path);
+    http_routes[key] = {handler, loc};
+    log_message("Registered route: " + normalize_http_method(method) + " " + path + " -> " + handler, "INFO");
+}
+
+std::string Interpreter::make_route_key(const std::string& method, const std::string& path) const {
+    return normalize_http_method(method) + " " + path;
+}
+
+std::string Interpreter::normalize_http_method(const std::string& method) const {
+    std::string normalized;
+    for (char ch : method) {
+        normalized += static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+    }
+    return normalized;
+}
+
+std::string Interpreter::read_response_body(const std::string& body, const SourceLocation& loc) const {
+    if (body.substr(0, 5) != "file:") {
+        return body;
+    }
+
+    std::string file_path = body.substr(5);
+    std::ifstream file(file_path);
+    if (!file.is_open()) {
+        throw RuntimeError("Failed to open response file: " + file_path, loc);
+    }
+    return std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+}
+
+Value Interpreter::call_http_handler(const HttpRoute& route, const std::string& method,
+                                     const std::string& path, const std::string& body) {
+    if (functions.count(route.handler)) {
+        return execute_function(route.handler, {Value(method), Value(path), Value(body)});
+    }
+    return Value(read_response_body(route.handler, route.location));
+}
+
+std::string Interpreter::response_content_type(const Value& value) const {
+    if (value.type == ValueType::OBJECT || value.type == ValueType::ARRAY) {
+        return "application/json; charset=utf-8";
+    }
+    return "text/plain; charset=utf-8";
+}
+
+std::string Interpreter::response_body_from_value(const Value& value) const {
+    if (value.type == ValueType::OBJECT || value.type == ValueType::ARRAY) {
+        return stringify_json(value);
+    }
+    return value.to_string();
+}
+
 void Interpreter::run_http_server(const std::string& host, long long port, const std::string& body, const SourceLocation& loc) {
     if (port <= 0 || port > 65535) {
         throw RuntimeError("Server port must be between 1 and 65535", loc);
@@ -363,7 +428,7 @@ void Interpreter::run_http_server(const std::string& host, long long port, const
             continue;
         }
 
-        char buffer[2048] = {0};
+        char buffer[8192] = {0};
         ssize_t received = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
         if (received <= 0) {
             close(client_fd);
@@ -371,86 +436,48 @@ void Interpreter::run_http_server(const std::string& host, long long port, const
         }
         std::string request(buffer, received);
 
-        // Простой парсинг запроса
-        std::string method, path, version;
+        std::string method, path;
         size_t pos = request.find(' ');
         if (pos != std::string::npos) {
             method = request.substr(0, pos);
             size_t pos2 = request.find(' ', pos + 1);
             if (pos2 != std::string::npos) {
                 path = request.substr(pos + 1, pos2 - pos - 1);
-                version = request.substr(pos2 + 1, request.find('\r', pos2) - pos2 - 1);
             }
         }
 
-        // Логируем запрос
+        size_t body_pos = request.find("\r\n\r\n");
+        std::string request_body = body_pos != std::string::npos ? request.substr(body_pos + 4) : "";
+        std::string route_key = make_route_key(method, path);
+        auto route = http_routes.find(route_key);
         log_message("Request: " + method + " " + path + " from client", "INFO");
 
         std::string response_body;
         std::string content_type = "text/plain; charset=utf-8";
+        std::string status_line = "HTTP/1.1 200 OK\r\n";
 
-        if (method == "GET") {
-            if (path == "/") {
-                // Если body начинается с "file:", читать файл
-                if (body.substr(0, 5) == "file:") {
-                    std::string file_path = body.substr(5);
-                    std::ifstream file(file_path);
-                    if (file.is_open()) {
-                        response_body.assign((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-                        file.close();
-                        if (file_path.find(".html") != std::string::npos) {
-                            content_type = "text/html; charset=utf-8";
-                        }
-                    } else {
-                        response_body = "File not found";
-                    }
-                } else {
-                    response_body = body;
+        try {
+            if (route != http_routes.end()) {
+                Value result = call_http_handler(route->second, normalize_http_method(method), path, request_body);
+                response_body = response_body_from_value(result);
+                content_type = response_content_type(result);
+            } else if (!body.empty() && normalize_http_method(method) == "GET" && path == "/") {
+                response_body = read_response_body(body, loc);
+                if (body.find(".html") != std::string::npos) {
+                    content_type = "text/html; charset=utf-8";
                 }
-            } else if (path == "/api") {
-                response_body = "{\"message\": \"Hello from API\"}";
-                content_type = "application/json; charset=utf-8";
-            } else if (path == "/data") {
-                response_body = "{\"data\": [1, 2, 3, 4, 5]}";
-                content_type = "application/json; charset=utf-8";
-            } else if (path == "/status") {
-                response_body = "{\"status\": \"running\", \"uptime\": \"unknown\"}";
-                content_type = "application/json; charset=utf-8";
             } else {
+                status_line = "HTTP/1.1 404 Not Found\r\n";
                 response_body = "Not found";
-                log_message("Route not found: " + path, "WARN");
+                log_message("Route not found: " + method + " " + path, "WARN");
             }
-        } else if (method == "POST") {
-            // Найти тело запроса
-            size_t body_pos = request.find("\r\n\r\n");
-            std::string post_body = (body_pos != std::string::npos) ? request.substr(body_pos + 4) : "";
-            if (path == "/api") {
-                // Обработать JSON
-                try {
-                    Value json = parse_json(post_body, loc);
-                    // Пример: вернуть обратно
-                    response_body = stringify_json(json);
-                    content_type = "application/json; charset=utf-8";
-                    log_message("Processed JSON POST to /api", "INFO");
-                } catch (...) {
-                    response_body = "{\"error\": \"Invalid JSON\"}";
-                    content_type = "application/json; charset=utf-8";
-                    log_message("Invalid JSON in POST to /api", "ERROR");
-                }
-            } else if (path == "/data") {
-                // Пример обработки данных
-                response_body = "{\"received\": \"data posted\"}";
-                content_type = "application/json; charset=utf-8";
-                log_message("Data posted to /data", "INFO");
-            } else {
-                response_body = "POST not supported for this route";
-                log_message("Unsupported POST route: " + path, "WARN");
-            }
-        } else {
-            response_body = "Method not allowed";
+        } catch (const CompilerError& e) {
+            status_line = "HTTP/1.1 500 Internal Server Error\r\n";
+            response_body = e.what();
+            log_message("Route handler failed: " + std::string(e.what()), "ERROR");
         }
 
-        std::string response = "HTTP/1.1 200 OK\r\n";
+        std::string response = status_line;
         response += "Content-Type: " + content_type + "\r\n";
         response += "Content-Length: " + std::to_string(response_body.size()) + "\r\n";
         response += "Connection: close\r\n\r\n";
@@ -671,6 +698,10 @@ void Interpreter::execute_statement(const std::shared_ptr<AstNode>& stmt, std::m
         return;
     }
 
+    if (auto ret = std::dynamic_pointer_cast<ReturnStmt>(stmt)) {
+        throw FunctionReturn{ret->expr ? eval(ret->expr, locals) : Value()};
+    }
+
     if (auto if_stmt = std::dynamic_pointer_cast<IfStmt>(stmt)) {
         const auto& body_to_execute = is_truthy(eval(if_stmt->condition, locals))
             ? if_stmt->then_body
@@ -833,19 +864,38 @@ void Interpreter::execute_statement(const std::shared_ptr<AstNode>& stmt, std::m
         }
 
         std::string body;
+        if (net_op->method == "route") {
+            if (!net_op->path || !net_op->data) {
+                throw RuntimeError("Route requires method, path and handler", net_op->location);
+            }
+            Value path_val = eval(net_op->path, locals);
+            Value handler_val = eval(net_op->data, locals);
+            if (path_val.type != ValueType::STRING) {
+                throw TypeError("Route path must be a string", net_op->location);
+            }
+            if (handler_val.type != ValueType::STRING && handler_val.type != ValueType::BYTES) {
+                throw TypeError("Route handler must be a string", net_op->location);
+            }
+            register_http_route(url_val.str_val, path_val.str_val, handler_val.str_val, net_op->location);
+            return;
+        }
+
         if (net_op->method == "serve") {
-            if (!net_op->port || !net_op->data) {
-                throw RuntimeError("Server requires host, port and response body", net_op->location);
+            if (!net_op->port) {
+                throw RuntimeError("Server requires host and port", net_op->location);
             }
             Value port_val = eval(net_op->port, locals);
             if (port_val.type != ValueType::INT) {
                 throw TypeError("Server port must be an int", net_op->location);
             }
-            Value body_val = eval(net_op->data, locals);
-            if (body_val.type != ValueType::STRING && body_val.type != ValueType::BYTES) {
-                throw TypeError("Server response body must be a string or bytes", net_op->location);
+            if (net_op->data) {
+                Value body_val = eval(net_op->data, locals);
+                if (body_val.type != ValueType::STRING && body_val.type != ValueType::BYTES) {
+                    throw TypeError("Server response body must be a string or bytes", net_op->location);
+                }
+                body = body_val.str_val;
             }
-            run_http_server(url_val.str_val, port_val.int_val, body_val.str_val, net_op->location);
+            run_http_server(url_val.str_val, port_val.int_val, body, net_op->location);
             return;
         }
 
@@ -887,7 +937,7 @@ void Interpreter::run(const std::vector<std::shared_ptr<AstNode>>& program) {
     }
 }
 
-void Interpreter::execute_function(const std::string& name, const std::vector<Value>& call_args) {
+Value Interpreter::execute_function(const std::string& name, const std::vector<Value>& call_args) {
     if (!functions.count(name)) {
         throw UndefinedError(name, "function", SourceLocation());
     }
@@ -911,6 +961,9 @@ void Interpreter::execute_function(const std::string& name, const std::vector<Va
 
     try {
         execute_block(func->body, locals);
+    } catch (const FunctionReturn& ret) {
+        call_stack.pop_back();
+        return ret.value;
     } catch (CompilerError& e) {
         if (e.traceback.empty()) {
             e.traceback = call_stack;
@@ -920,6 +973,7 @@ void Interpreter::execute_function(const std::string& name, const std::vector<Va
     }
     // Удаляем функцию из стека вызовов
     call_stack.pop_back();
+    return Value();
 }
 
 Value Interpreter::eval(const std::shared_ptr<AstNode>& node, const std::map<std::string, Value>& locals) {

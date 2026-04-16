@@ -251,6 +251,12 @@ void CodeGen::generate_call(const std::shared_ptr<CallStmt>& call) {
     code << ");\n";
 }
 
+void CodeGen::generate_return(const std::shared_ptr<ReturnStmt>& ret) {
+    (void)ret;
+    write_indent();
+    code << "return;\n";
+}
+
 void CodeGen::generate_statement(const std::shared_ptr<AstNode>& stmt) {
     if (auto decl = std::dynamic_pointer_cast<VarDecl>(stmt)) {
         generate_var_decl(decl);
@@ -264,6 +270,8 @@ void CodeGen::generate_statement(const std::shared_ptr<AstNode>& stmt) {
         generate_while(while_stmt);
     } else if (auto call = std::dynamic_pointer_cast<CallStmt>(stmt)) {
         generate_call(call);
+    } else if (auto ret = std::dynamic_pointer_cast<ReturnStmt>(stmt)) {
+        generate_return(ret);
     } else if (auto net_op = std::dynamic_pointer_cast<NetOp>(stmt)) {
         generate_net_op(net_op);
     } else if (auto file_op = std::dynamic_pointer_cast<FileOp>(stmt)) {

@@ -155,12 +155,11 @@ std::shared_ptr<FunctionDef> Parser::parse_function() {
         size_t start_pos = pos;
         try {
             auto stmt = parse_statement();
-            // Проверяем, является ли это return 1 (проверяем после парсинга, если stmt == nullptr)
-            if (!stmt && start_pos < tokens.size() && tokens[start_pos].type == T_RETURN) {
-                size_t check_pos = start_pos + 1; // позиция после return
-                if (check_pos < tokens.size() && tokens[check_pos].type == T_NUMBER &&
-                    tokens[check_pos].value == "1") {
-                    func->has_return_one = true;
+            if (auto ret = std::dynamic_pointer_cast<ReturnStmt>(stmt)) {
+                if (auto lit = std::dynamic_pointer_cast<Literal>(ret->expr)) {
+                    if (lit->value.type == ValueType::INT && lit->value.int_val == 1) {
+                        func->has_return_one = true;
+                    }
                 }
             }
             if (stmt) {
@@ -235,16 +234,14 @@ std::shared_ptr<AstNode> Parser::parse_statement() {
     }
     if (current().type == T_CALL) return parse_call();
     if (current().type == T_RETURN) {
+        int return_line = current().line;
         advance(); // return
-        // Пропускаем выражение после return, если оно есть (до закрывающей скобки или конца функции)
+        auto ret = std::make_shared<ReturnStmt>();
+        ret->location = SourceLocation(return_line, 0);
         if (!is_eof() && current().type != T_RBRACE) {
-            try {
-                parse_expr();  // Парсим выражение, но не используем результат
-            } catch (...) {
-                // Если не удалось распарсить, просто пропускаем
-            }
+            ret->expr = parse_expr();
         }
-        return nullptr;
+        return ret;
     }
     return nullptr;
 }
@@ -700,6 +697,7 @@ std::shared_ptr<NetOp> Parser::parse_net_op() {
     net_op->location = SourceLocation(op_line, 0);
     net_op->transport = transport;
     net_op->method = method;
+    net_op->path = nullptr;
     net_op->port = nullptr;
     net_op->data = nullptr;
 
@@ -709,7 +707,28 @@ std::shared_ptr<NetOp> Parser::parse_net_op() {
                          SourceLocation(current().line, 0));
     }
 
-    if (method == "serve") {
+    if (method == "route") {
+        if (current().type != T_COMMA) {
+            throw SyntaxError("Expected path argument in net::route",
+                             SourceLocation(current().line, 0));
+        }
+        advance(); // ,
+        net_op->path = parse_expr();
+        if (!net_op->path) {
+            throw SyntaxError("Expected path in net::route",
+                             SourceLocation(current().line, 0));
+        }
+        if (current().type != T_COMMA) {
+            throw SyntaxError("Expected handler argument in net::route",
+                             SourceLocation(current().line, 0));
+        }
+        advance(); // ,
+        net_op->data = parse_expr();
+        if (!net_op->data) {
+            throw SyntaxError("Expected handler in net::route",
+                             SourceLocation(current().line, 0));
+        }
+    } else if (method == "serve") {
         if (current().type != T_COMMA) {
             throw SyntaxError("Expected port argument in net::serve",
                              SourceLocation(current().line, 0));
@@ -720,15 +739,13 @@ std::shared_ptr<NetOp> Parser::parse_net_op() {
             throw SyntaxError("Expected port in net::serve",
                              SourceLocation(current().line, 0));
         }
-        if (current().type != T_COMMA) {
-            throw SyntaxError("Expected response body argument in net::serve",
-                             SourceLocation(current().line, 0));
-        }
-        advance(); // ,
-        net_op->data = parse_expr();
-        if (!net_op->data) {
-            throw SyntaxError("Expected response body in net::serve",
-                             SourceLocation(current().line, 0));
+        if (current().type == T_COMMA) {
+            advance(); // ,
+            net_op->data = parse_expr();
+            if (!net_op->data) {
+                throw SyntaxError("Expected response body in net::serve",
+                                 SourceLocation(current().line, 0));
+            }
         }
     } else if (method == "post" && current().type == T_COMMA) {
         advance(); // ,

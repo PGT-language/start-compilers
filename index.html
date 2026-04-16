@@ -6,9 +6,24 @@
 <body>
     <h1>Hello from PGT Server</h1>
     <p>This is a test HTML page.</p>
-    <form action="/api" method="post">
+    <form id="api-form">
         <input type="text" name="message" placeholder="Enter message">
         <button type="submit">Send</button>
     </form>
+    <pre id="response"></pre>
+    <script>
+        document.getElementById("api-form").addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const form = event.currentTarget;
+            const response = await fetch("/api", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({ message: form.message.value })
+            });
+            document.getElementById("response").textContent = await response.text();
+        });
+    </script>
 </body>
 </html>

@@ -293,6 +293,8 @@ void SemanticAnalyzer::analyze_statement(const std::shared_ptr<AstNode>& stmt) {
         analyze_while(while_stmt);
     } else if (auto call = std::dynamic_pointer_cast<CallStmt>(stmt)) {
         analyze_call(call);
+    } else if (auto ret = std::dynamic_pointer_cast<ReturnStmt>(stmt)) {
+        analyze_return(ret);
     } else if (auto net_op = std::dynamic_pointer_cast<NetOp>(stmt)) {
         analyze_net_op(net_op);
     } else if (auto file_op = std::dynamic_pointer_cast<FileOp>(stmt)) {
@@ -445,11 +447,18 @@ void SemanticAnalyzer::analyze_call(const std::shared_ptr<CallStmt>& call) {
     }
 }
 
+void SemanticAnalyzer::analyze_return(const std::shared_ptr<ReturnStmt>& ret) {
+    if (ret->expr) {
+        analyze_expr(ret->expr);
+    }
+}
+
 void SemanticAnalyzer::analyze_net_op(const std::shared_ptr<NetOp>& net_op) {
     if (!net_op->transport.empty() && net_op->transport != "http" && net_op->transport != "https") {
         throw SemanticError("Unsupported network transport: '" + net_op->transport + "'", net_op->location);
     }
-    if (net_op->method != "get" && net_op->method != "post" && net_op->method != "serve") {
+    if (net_op->method != "get" && net_op->method != "post" &&
+        net_op->method != "serve" && net_op->method != "route") {
         throw SemanticError("Unsupported network method: '" + net_op->method + "'", net_op->location);
     }
     if (net_op->method == "serve" && net_op->transport == "https") {
@@ -462,7 +471,24 @@ void SemanticAnalyzer::analyze_net_op(const std::shared_ptr<NetOp>& net_op) {
         throw TypeError("Network URL must be a string", net_op->location);
     }
 
-    if (net_op->method == "serve") {
+    if (net_op->method == "route") {
+        if (!net_op->path) {
+            throw SemanticError("Network route requires a path argument", net_op->location);
+        }
+        analyze_expr(net_op->path);
+        VarType path_type = infer_expr_type(net_op->path);
+        if (path_type != VarType::STRING && path_type != VarType::UNKNOWN) {
+            throw TypeError("Network route path must be a string", net_op->location);
+        }
+        if (!net_op->data) {
+            throw SemanticError("Network route requires a handler argument", net_op->location);
+        }
+        analyze_expr(net_op->data);
+        VarType data_type = infer_expr_type(net_op->data);
+        if (data_type != VarType::STRING && data_type != VarType::BYTES && data_type != VarType::UNKNOWN) {
+            throw TypeError("Network route handler must be a string", net_op->location);
+        }
+    } else if (net_op->method == "serve") {
         if (!net_op->port) {
             throw SemanticError("Network server requires a port argument", net_op->location);
         }
@@ -471,13 +497,12 @@ void SemanticAnalyzer::analyze_net_op(const std::shared_ptr<NetOp>& net_op) {
         if (port_type != VarType::INT && port_type != VarType::UNKNOWN) {
             throw TypeError("Network server port must be an int", net_op->location);
         }
-        if (!net_op->data) {
-            throw SemanticError("Network server requires a response body", net_op->location);
-        }
-        analyze_expr(net_op->data);
-        VarType data_type = infer_expr_type(net_op->data);
-        if (data_type != VarType::STRING && data_type != VarType::BYTES && data_type != VarType::UNKNOWN) {
-            throw TypeError("Network server response body must be a string or bytes", net_op->location);
+        if (net_op->data) {
+            analyze_expr(net_op->data);
+            VarType data_type = infer_expr_type(net_op->data);
+            if (data_type != VarType::STRING && data_type != VarType::BYTES && data_type != VarType::UNKNOWN) {
+                throw TypeError("Network server response body must be a string or bytes", net_op->location);
+            }
         }
     } else if (net_op->method == "post") {
         if (!net_op->data) {

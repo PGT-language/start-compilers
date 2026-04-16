@@ -56,6 +56,10 @@ struct CallStmt : AstNode {
     std::vector<std::shared_ptr<AstNode>> args;
 };
 
+struct ReturnStmt : AstNode {
+    std::shared_ptr<AstNode> expr;
+};
+
 struct ImportStmt : AstNode {
     std::string file_path;  // путь к файлу после "from"
     std::vector<std::string> import_names; // список функций для импорта
@@ -74,10 +78,11 @@ struct WhileStmt : AstNode {
 
 struct NetOp : AstNode {
     std::string transport;  // http или https
-    std::string method;  // get, post или serve
+    std::string method;  // get, post, serve или route
     std::shared_ptr<AstNode> url;
+    std::shared_ptr<AstNode> path;  // только для route
     std::shared_ptr<AstNode> port;  // только для serve
-    std::shared_ptr<AstNode> data;  // для post и serve
+    std::shared_ptr<AstNode> data;  // для post, serve fallback и route handler
 };
 
 struct FileOp : AstNode {
