@@ -5,6 +5,7 @@
 #include "Ast.h"
 #include "SemanticAnalyzer.h"
 #include "Error.h"
+#include "PackageResolver.h"
 
 #include <iostream>
 #include <fstream>
@@ -69,44 +70,7 @@ int main(int argc, char** argv) {
         std::map<std::string, std::string> directory_packages;
         std::map<std::string, std::string> directory_package_sources;
         std::vector<std::string> files_to_load = {filename};
-
-        // Функция для получения директории файла
-        auto get_directory = [](const std::string& filepath) -> std::string {
-            size_t last_slash = filepath.find_last_of("/\\");
-            if (last_slash == std::string::npos) return ".";
-            return filepath.substr(0, last_slash);
-        };
-
-        // Функция для разрешения пути к импортируемому файлу
-        auto resolve_import_path = [&](const std::string& base_dir, const std::string& import_path) -> std::string {
-            // Если путь уже абсолютный или начинается с ./, используем как есть
-            if (import_path[0] == '/' || (import_path.size() > 1 && import_path[0] == '.' && import_path[1] == '/')) {
-                return import_path;
-            }
-            
-            // Если путь не заканчивается на .pgt, добавляем
-            std::string full_path = import_path;
-            if (full_path.size() < 4 || full_path.substr(full_path.size() - 4) != ".pgt") {
-                full_path += ".pgt";
-            }
-            
-            // Пробуем относительно директории базового файла
-            std::string relative_path = base_dir + "/" + full_path;
-            std::ifstream test(relative_path);
-            if (test) {
-                test.close();
-                return relative_path;
-            }
-            
-            // Пробуем относительно текущей директории
-            test.open(full_path);
-            if (test) {
-                test.close();
-                return full_path;
-            }
-            
-            return full_path; // Возвращаем даже если не нашли (ошибка будет позже)
-        };
+        PackageResolver package_resolver(filename, argv[0]);
 
         // Загружаем все файлы рекурсивно
         while (!files_to_load.empty()) {
@@ -121,7 +85,7 @@ int main(int argc, char** argv) {
             std::ifstream f(current_file);
             if (!f) {
                 std::cerr << "Error: Cannot open file '" << current_file << "'\n";
-                continue;
+                return 1;
             }
 
             std::string source((std::istreambuf_iterator<char>(f)), {});
@@ -143,7 +107,7 @@ int main(int argc, char** argv) {
                     break;
                 }
             } while (t.type != T_EOF);
-            
+
             if (DEBUG) std::cout << "[DEBUG] Tokenized " << tokens.size() << " tokens" << std::endl;
 
             Parser parser;
@@ -164,7 +128,14 @@ int main(int argc, char** argv) {
             }
 
             std::string parsed_package_name = parser.parsed_package_name();
-            std::string current_dir = get_directory(current_file);
+            try {
+                package_resolver.validate_package_directory(current_file, parsed_package_name);
+            } catch (const CompilerError& e) {
+                std::cerr << e.get_traceback();
+                return 1;
+            }
+
+            std::string current_dir = PackageResolver::directory_of(current_file);
             if (directory_packages.count(current_dir) && directory_packages[current_dir] != parsed_package_name) {
                 SemanticError err("Interpreter import error: packages '" + directory_packages[current_dir] +
                                   "' and '" + parsed_package_name + "' cannot live in the same root directory. "
@@ -193,20 +164,27 @@ int main(int argc, char** argv) {
             file_asts[current_file] = program;
 
             // Ищем импорты и добавляем их в очередь загрузки
-            std::string base_dir = get_directory(current_file);
+            std::string base_dir = PackageResolver::directory_of(current_file);
             for (const auto& node : program) {
                 if (auto import = std::dynamic_pointer_cast<ImportStmt>(node)) {
-                    std::string import_path = resolve_import_path(base_dir, import->file_path);
+                    ResolvedImport resolved_import = package_resolver.resolve_import_path(base_dir, import->file_path);
+                    if (!resolved_import.found) {
+                        SemanticError err("Import '" + import->file_path + "' was not found. Expected file '" +
+                                          resolved_import.path + "'.",
+                                          SourceLocation(import->location.line, import->location.column, current_file));
+                        std::cerr << err.get_traceback();
+                        return 1;
+                    }
                     if (DEBUG) {
                         std::cout << "[DEBUG] Found import: ";
                         for (size_t i = 0; i < import->import_names.size(); ++i) {
                             if (i > 0) std::cout << ", ";
                             std::cout << import->import_names[i];
                         }
-                        std::cout << " from " << import->file_path 
-                                 << " -> resolved to " << import_path << std::endl;
+                        std::cout << " from " << import->file_path
+                                 << " -> resolved to " << resolved_import.path << std::endl;
                     }
-                    files_to_load.push_back(import_path);
+                    files_to_load.push_back(resolved_import.path);
                 }
             }
 
@@ -222,18 +200,19 @@ int main(int argc, char** argv) {
                 }
             }
         }
-        
+
         // Проверяем импорты
         for (const auto& [file, ast] : file_asts) {
             for (const auto& node : ast) {
                 if (auto import = std::dynamic_pointer_cast<ImportStmt>(node)) {
-                    std::string import_path = resolve_import_path(get_directory(file), import->file_path);
-                    if (!file_functions.count(import_path)) {
-                        std::cerr << "Error: Cannot find imported file: " << import_path << "\n";
+                    ResolvedImport resolved_import = package_resolver.resolve_import_path(PackageResolver::directory_of(file),
+                                                                                         import->file_path);
+                    if (!resolved_import.found || !file_functions.count(resolved_import.path)) {
+                        std::cerr << "Error: Cannot find imported file: " << resolved_import.path << "\n";
                         return 1;
                     }
                     const std::string& current_package = file_packages[file];
-                    const std::string& imported_package = file_packages[import_path];
+                    const std::string& imported_package = file_packages[resolved_import.path];
                     if (imported_package == "main") {
                         SemanticError err("Interpreter import error: package 'main' cannot be imported. "
                                           "Move shared code into a separate package.",
@@ -241,7 +220,8 @@ int main(int argc, char** argv) {
                         std::cerr << err.get_traceback();
                         return 1;
                     }
-                    if (get_directory(file) == get_directory(import_path) && current_package != imported_package) {
+                    if (PackageResolver::directory_of(file) == PackageResolver::directory_of(resolved_import.path) &&
+                        current_package != imported_package) {
                         SemanticError err("Interpreter import error: ay-ay-ay, you cannot import package '" +
                                           imported_package + "' from the root directory of package '" +
                                           current_package + "'. Move package '" + imported_package +
@@ -250,11 +230,11 @@ int main(int argc, char** argv) {
                         std::cerr << err.get_traceback();
                         return 1;
                     }
-                    const auto& available_funcs = file_functions[import_path];
+                    const auto& available_funcs = file_functions[resolved_import.path];
                     for (const auto& func_name : import->import_names) {
                         if (!available_funcs.count(func_name)) {
-                            SemanticError err("Function '" + func_name + "' not found in imported file '" + import->file_path + "'", 
-                                             import->location);
+                            SemanticError err("Function '" + func_name + "' not found in imported file '" + import->file_path + "'",
+                                             SourceLocation(import->location.line, import->location.column, file));
                             std::cerr << err.get_traceback();
                             return 1;
                         }

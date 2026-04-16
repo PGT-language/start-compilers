@@ -44,12 +44,19 @@ std::vector<std::shared_ptr<AstNode>> Parser::parse_program() {
         last_pos = pos;
         
         if (current().type == T_PACKAGE) {
+            int package_line = current().line;
             advance(); // package
-            if (current().type == T_IDENTIFIER) {
-                has_package_decl = true;
-                package_name = current().value;
+            if (current().type != T_IDENTIFIER) {
+                throw SyntaxError("Expected package name after 'package'",
+                                  SourceLocation(package_line, 0));
             }
-            if (!is_eof()) advance(); // main или другое значение
+            if (has_package_decl) {
+                throw SyntaxError("Duplicate package declaration",
+                                  SourceLocation(package_line, 0));
+            }
+            has_package_decl = true;
+            package_name = current().value;
+            advance(); // main или другое значение
         } else if (current().type == T_FROM) {
             auto import = parse_import();
             if (import) nodes.push_back(import);
@@ -522,11 +529,13 @@ std::shared_ptr<ImportStmt> Parser::parse_import() {
         file_path = current().value;
         advance();
     } else {
-        return nullptr;
+        throw SyntaxError("Expected import path after 'from'",
+                          SourceLocation(import_line, 0));
     }
     
     if (current().type != T_IMPORT) {
-        return nullptr;
+        throw SyntaxError("Expected 'import' after import path '" + file_path + "'",
+                          SourceLocation(current().line, 0));
     }
     advance(); // import
     
@@ -557,7 +566,8 @@ std::shared_ptr<ImportStmt> Parser::parse_import() {
     }
     
     if (import->import_names.empty()) {
-        return nullptr; // Нет функций для импорта
+        throw SyntaxError("Expected at least one function name after 'import'",
+                          SourceLocation(import_line, 0));
     }
     
     if (DEBUG) {
