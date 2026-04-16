@@ -6,6 +6,7 @@
 #include <fstream>
 #include <filesystem>
 #include <cstring>
+#include <cctype>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
@@ -28,6 +29,12 @@ bool Interpreter::is_truthy(const Value& value) const {
     }
     if (value.type == ValueType::BYTES) {
         return !value.str_val.empty();
+    }
+    if (value.type == ValueType::OBJECT) {
+        return !value.obj_val.empty();
+    }
+    if (value.type == ValueType::ARRAY) {
+        return !value.arr_val.empty();
     }
     return false;
 }
@@ -58,6 +65,12 @@ Value Interpreter::coerce_value(const Value& value, const std::string& type_name
     if (type_name == "bytes") {
         if (value.type == ValueType::BYTES) return value;
         if (value.type == ValueType::STRING) return Value::Bytes(value.str_val);
+    }
+    if (type_name == "object") {
+        if (value.type == ValueType::OBJECT) return value;
+    }
+    if (type_name == "array") {
+        if (value.type == ValueType::ARRAY) return value;
     }
 
     throw TypeError("Cannot convert value to type '" + type_name + "'", loc);
@@ -349,17 +362,246 @@ void Interpreter::run_http_server(const std::string& host, long long port, const
             continue;
         }
 
-        char buffer[2048];
-        recv(client_fd, buffer, sizeof(buffer), 0);
+        char buffer[2048] = {0};
+        ssize_t received = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
+        if (received <= 0) {
+            close(client_fd);
+            continue;
+        }
+        std::string request(buffer, received);
+
+        // Простой парсинг запроса
+        std::string method, path, version;
+        size_t pos = request.find(' ');
+        if (pos != std::string::npos) {
+            method = request.substr(0, pos);
+            size_t pos2 = request.find(' ', pos + 1);
+            if (pos2 != std::string::npos) {
+                path = request.substr(pos + 1, pos2 - pos - 1);
+                version = request.substr(pos2 + 1, request.find('\r', pos2) - pos2 - 1);
+            }
+        }
+
+        std::string response_body;
+        std::string content_type = "text/plain; charset=utf-8";
+
+        if (method == "GET") {
+            if (path == "/") {
+                // Если body начинается с "file:", читать файл
+                if (body.substr(0, 5) == "file:") {
+                    std::string file_path = body.substr(5);
+                    std::ifstream file(file_path);
+                    if (file.is_open()) {
+                        response_body.assign((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+                        file.close();
+                        if (file_path.find(".html") != std::string::npos) {
+                            content_type = "text/html; charset=utf-8";
+                        }
+                    } else {
+                        response_body = "File not found";
+                    }
+                } else {
+                    response_body = body;
+                }
+            } else if (path == "/api") {
+                response_body = "{\"message\": \"Hello from API\"}";
+                content_type = "application/json; charset=utf-8";
+            } else {
+                response_body = "Not found";
+            }
+        } else if (method == "POST") {
+            // Найти тело запроса
+            size_t body_pos = request.find("\r\n\r\n");
+            std::string post_body = (body_pos != std::string::npos) ? request.substr(body_pos + 4) : "";
+            if (path == "/api") {
+                // Обработать JSON
+                try {
+                    Value json = parse_json(post_body, loc);
+                    // Пример: вернуть обратно
+                    response_body = stringify_json(json);
+                    content_type = "application/json; charset=utf-8";
+                } catch (...) {
+                    response_body = "{\"error\": \"Invalid JSON\"}";
+                    content_type = "application/json; charset=utf-8";
+                }
+            } else {
+                response_body = "POST not supported";
+            }
+        } else {
+            response_body = "Method not allowed";
+        }
 
         std::string response = "HTTP/1.1 200 OK\r\n";
-        response += "Content-Type: text/plain; charset=utf-8\r\n";
-        response += "Content-Length: " + std::to_string(body.size()) + "\r\n";
+        response += "Content-Type: " + content_type + "\r\n";
+        response += "Content-Length: " + std::to_string(response_body.size()) + "\r\n";
         response += "Connection: close\r\n\r\n";
-        response += body;
+        response += response_body;
         send(client_fd, response.data(), response.size(), 0);
         close(client_fd);
     }
+}
+
+Value Interpreter::parse_json(const std::string& json_str, const SourceLocation& loc) const {
+    // Простой JSON парсер
+    size_t pos = 0;
+    return parse_json_value(json_str, pos, loc);
+}
+
+Value Interpreter::parse_json_value(const std::string& json_str, size_t& pos, const SourceLocation& loc) const {
+    skip_whitespace(json_str, pos);
+    if (pos >= json_str.size()) throw RuntimeError("Unexpected end of JSON", loc);
+
+    char ch = json_str[pos];
+    if (ch == '{') {
+        return parse_json_object(json_str, pos, loc);
+    } else if (ch == '[') {
+        return parse_json_array(json_str, pos, loc);
+    } else if (ch == '"') {
+        return parse_json_string(json_str, pos, loc);
+    } else if (ch == 't' || ch == 'f') {
+        return parse_json_bool(json_str, pos, loc);
+    } else if (ch == 'n') {
+        return parse_json_null(json_str, pos, loc);
+    } else if (isdigit(ch) || ch == '-') {
+        return parse_json_number(json_str, pos, loc);
+    } else {
+        throw RuntimeError("Invalid JSON character: " + std::string(1, ch), loc);
+    }
+}
+
+Value Interpreter::parse_json_object(const std::string& json_str, size_t& pos, const SourceLocation& loc) const {
+    std::map<std::string, Value> obj;
+    pos++; // skip '{'
+    skip_whitespace(json_str, pos);
+    if (pos < json_str.size() && json_str[pos] == '}') {
+        pos++;
+        return Value::Object(obj);
+    }
+    while (true) {
+        skip_whitespace(json_str, pos);
+        if (json_str[pos] != '"') throw RuntimeError("Expected string key in object", loc);
+        std::string key = parse_json_string_value(json_str, pos, loc);
+        skip_whitespace(json_str, pos);
+        if (json_str[pos] != ':') throw RuntimeError("Expected ':' after key", loc);
+        pos++;
+        Value value = parse_json_value(json_str, pos, loc);
+        obj[key] = value;
+        skip_whitespace(json_str, pos);
+        if (json_str[pos] == '}') {
+            pos++;
+            break;
+        } else if (json_str[pos] == ',') {
+            pos++;
+        } else {
+            throw RuntimeError("Expected ',' or '}' in object", loc);
+        }
+    }
+    return Value::Object(obj);
+}
+
+Value Interpreter::parse_json_array(const std::string& json_str, size_t& pos, const SourceLocation& loc) const {
+    std::vector<Value> arr;
+    pos++; // skip '['
+    skip_whitespace(json_str, pos);
+    if (pos < json_str.size() && json_str[pos] == ']') {
+        pos++;
+        return Value::Array(arr);
+    }
+    while (true) {
+        Value value = parse_json_value(json_str, pos, loc);
+        arr.push_back(value);
+        skip_whitespace(json_str, pos);
+        if (json_str[pos] == ']') {
+            pos++;
+            break;
+        } else if (json_str[pos] == ',') {
+            pos++;
+        } else {
+            throw RuntimeError("Expected ',' or ']' in array", loc);
+        }
+    }
+    return Value::Array(arr);
+}
+
+Value Interpreter::parse_json_string(const std::string& json_str, size_t& pos, const SourceLocation& loc) const {
+    std::string str = parse_json_string_value(json_str, pos, loc);
+    return Value(str);
+}
+
+std::string Interpreter::parse_json_string_value(const std::string& json_str, size_t& pos, const SourceLocation& loc) const {
+    if (json_str[pos] != '"') throw RuntimeError("Expected '\"'", loc);
+    pos++;
+    std::string str;
+    while (pos < json_str.size() && json_str[pos] != '"') {
+        if (json_str[pos] == '\\') {
+            pos++;
+            if (pos >= json_str.size()) throw RuntimeError("Unexpected end of string", loc);
+            char esc = json_str[pos];
+            if (esc == '"') str += '"';
+            else if (esc == '\\') str += '\\';
+            else if (esc == '/') str += '/';
+            else if (esc == 'b') str += '\b';
+            else if (esc == 'f') str += '\f';
+            else if (esc == 'n') str += '\n';
+            else if (esc == 'r') str += '\r';
+            else if (esc == 't') str += '\t';
+            else if (esc == 'u') {
+                // Simple unicode handling, assume 4 hex digits
+                pos += 4;
+                str += '?'; // placeholder
+            } else {
+                throw RuntimeError("Invalid escape sequence", loc);
+            }
+        } else {
+            str += json_str[pos];
+        }
+        pos++;
+    }
+    if (pos >= json_str.size() || json_str[pos] != '"') throw RuntimeError("Unterminated string", loc);
+    pos++;
+    return str;
+}
+
+Value Interpreter::parse_json_bool(const std::string& json_str, size_t& pos, const SourceLocation& loc) const {
+    if (json_str.substr(pos, 4) == "true") {
+        pos += 4;
+        return Value::Bool(true);
+    } else if (json_str.substr(pos, 5) == "false") {
+        pos += 5;
+        return Value::Bool(false);
+    } else {
+        throw RuntimeError("Invalid boolean", loc);
+    }
+}
+
+Value Interpreter::parse_json_null(const std::string& json_str, size_t& pos, const SourceLocation& loc) const {
+    if (json_str.substr(pos, 4) == "null") {
+        pos += 4;
+        return Value(); // NONE
+    } else {
+        throw RuntimeError("Invalid null", loc);
+    }
+}
+
+Value Interpreter::parse_json_number(const std::string& json_str, size_t& pos, const SourceLocation& loc) const {
+    size_t start = pos;
+    if (json_str[pos] == '-') pos++;
+    while (pos < json_str.size() && isdigit(json_str[pos])) pos++;
+    if (pos < json_str.size() && json_str[pos] == '.') {
+        pos++;
+        while (pos < json_str.size() && isdigit(json_str[pos])) pos++;
+        return Value(std::stod(json_str.substr(start, pos - start)));
+    } else {
+        return Value(std::stoll(json_str.substr(start, pos - start)));
+    }
+}
+
+void Interpreter::skip_whitespace(const std::string& json_str, size_t& pos) const {
+    while (pos < json_str.size() && isspace(json_str[pos])) pos++;
+}
+
+std::string Interpreter::stringify_json(const Value& value) const {
+    return value.to_json();
 }
 
 void Interpreter::execute_block(const std::vector<std::shared_ptr<AstNode>>& body, std::map<std::string, Value>& locals) {
@@ -674,6 +916,39 @@ Value Interpreter::eval(const std::shared_ptr<AstNode>& node, const std::map<std
             }
             ParsedUrl parsed = parse_url(arg.str_val, builtin->location);
             return Value(parsed.scheme);
+        }
+        if (builtin->name == "json_parse") {
+            if (builtin->args.size() != 1) {
+                throw RuntimeError("Builtin 'json_parse' expects 1 argument", builtin->location);
+            }
+            Value arg = eval(builtin->args[0], locals);
+            if (arg.type != ValueType::STRING && arg.type != ValueType::BYTES) {
+                throw TypeError("Builtin 'json_parse' expects a string", builtin->location);
+            }
+            return parse_json(arg.str_val, builtin->location);
+        }
+        if (builtin->name == "json_stringify") {
+            if (builtin->args.size() != 1) {
+                throw RuntimeError("Builtin 'json_stringify' expects 1 argument", builtin->location);
+            }
+            Value arg = eval(builtin->args[0], locals);
+            return Value(stringify_json(arg));
+        }
+        if (builtin->name == "read_file") {
+            if (builtin->args.size() != 1) {
+                throw RuntimeError("Builtin 'read_file' expects 1 argument", builtin->location);
+            }
+            Value arg = eval(builtin->args[0], locals);
+            if (arg.type != ValueType::STRING && arg.type != ValueType::BYTES) {
+                throw TypeError("Builtin 'read_file' expects a string path", builtin->location);
+            }
+            std::ifstream file(arg.str_val);
+            if (!file.is_open()) {
+                throw RuntimeError("Failed to open file: " + arg.str_val, builtin->location);
+            }
+            std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+            file.close();
+            return Value(content);
         }
         throw RuntimeError("Unknown builtin expression: " + builtin->name, builtin->location);
     }

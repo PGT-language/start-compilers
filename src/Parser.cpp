@@ -25,13 +25,14 @@ void Parser::advance() { if (!is_eof()) ++pos; }
 std::string Parser::parse_type_name() {
     if (current().type == T_INT || current().type == T_FLOAT ||
         current().type == T_STRING || current().type == T_BOOL_TYPE ||
-        current().type == T_BYTES) {
+        current().type == T_BYTES || current().type == T_OBJECT ||
+        current().type == T_ARRAY) {
         std::string type_name = current().value;
         advance();
         return type_name;
     }
 
-    throw SyntaxError("Expected type name: int, float, string, bool, or bytes",
+    throw SyntaxError("Expected type name: int, float, string, bool, bytes, object, or array",
                       SourceLocation(current().line, 0));
 }
 
@@ -370,7 +371,8 @@ std::shared_ptr<AstNode> Parser::parse_primary() {
         return lit;
     }
     if (current().type == T_IDENTIFIER &&
-        (current().value == "protocol") &&
+        (current().value == "protocol" || current().value == "json_parse" ||
+         current().value == "json_stringify" || current().value == "read_file") &&
         pos + 1 < tokens.size() && tokens[pos + 1].type == T_LPAREN) {
         return parse_builtin_call_expr();
     }

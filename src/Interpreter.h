@@ -29,10 +29,24 @@ class Interpreter {
     std::string perform_http_request(const std::string& transport, const std::string& method, const std::string& url,
                                      const std::string& body, const SourceLocation& loc) const;
     void run_http_server(const std::string& host, long long port, const std::string& body, const SourceLocation& loc) const;
+    Value parse_json(const std::string& json_str, const SourceLocation& loc) const;
+    std::string stringify_json(const Value& value) const;
+    void log_message(const std::string& message, const std::string& level = "INFO") const;
     void execute_statement(const std::shared_ptr<AstNode>& stmt, std::map<std::string, Value>& locals);
     void execute_block(const std::vector<std::shared_ptr<AstNode>>& body, std::map<std::string, Value>& locals);
     void execute_function(const std::string& name, const std::vector<Value>& call_args);
     Value eval(const std::shared_ptr<AstNode>& node, const std::map<std::string, Value>& locals = {});
+
+private:
+    Value parse_json_value(const std::string& json_str, size_t& pos, const SourceLocation& loc) const;
+    Value parse_json_object(const std::string& json_str, size_t& pos, const SourceLocation& loc) const;
+    Value parse_json_array(const std::string& json_str, size_t& pos, const SourceLocation& loc) const;
+    Value parse_json_string(const std::string& json_str, size_t& pos, const SourceLocation& loc) const;
+    std::string parse_json_string_value(const std::string& json_str, size_t& pos, const SourceLocation& loc) const;
+    Value parse_json_bool(const std::string& json_str, size_t& pos, const SourceLocation& loc) const;
+    Value parse_json_null(const std::string& json_str, size_t& pos, const SourceLocation& loc) const;
+    Value parse_json_number(const std::string& json_str, size_t& pos, const SourceLocation& loc) const;
+    void skip_whitespace(const std::string& json_str, size_t& pos) const;
 
 public:
     void run(const std::vector<std::shared_ptr<AstNode>>& program);

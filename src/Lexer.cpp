@@ -204,6 +204,8 @@ Token Lexer::next_token() {
             if (id == "string") return {T_STRING, id, line};
             if (id == "bool") return {T_BOOL_TYPE, id, line};
             if (id == "bytes") return {T_BYTES, id, line};
+            if (id == "object") return {T_OBJECT, id, line};
+            if (id == "array") return {T_ARRAY, id, line};
             if (id == "from") return {T_FROM, id, line};
             if (id == "import") return {T_IMPORT, id, line};
             if (id == "if") return {T_IF, id, line};

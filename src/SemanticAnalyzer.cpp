@@ -18,6 +18,8 @@ VarType SemanticAnalyzer::type_from_name(const std::string& type_name) {
     if (type_name == "string") return VarType::STRING;
     if (type_name == "bool") return VarType::BOOL;
     if (type_name == "bytes") return VarType::BYTES;
+    if (type_name == "object") return VarType::OBJECT;
+    if (type_name == "array") return VarType::ARRAY;
     return VarType::UNKNOWN;
 }
 
@@ -28,6 +30,8 @@ std::string SemanticAnalyzer::type_to_string(VarType type) {
         case VarType::STRING: return "string";
         case VarType::BOOL: return "bool";
         case VarType::BYTES: return "bytes";
+        case VarType::OBJECT: return "object";
+        case VarType::ARRAY: return "array";
         default: return "unknown";
     }
 }
@@ -74,6 +78,32 @@ VarType SemanticAnalyzer::infer_expr_type(const std::shared_ptr<AstNode>& node) 
             VarType arg_type = infer_expr_type(builtin->args[0]);
             if (arg_type != VarType::STRING && arg_type != VarType::UNKNOWN) {
                 throw TypeError("Builtin 'protocol' expects a string URL", builtin->location);
+            }
+            return VarType::STRING;
+        }
+        if (builtin->name == "json_parse") {
+            if (builtin->args.size() != 1) {
+                throw SemanticError("Builtin 'json_parse' expects 1 argument", builtin->location);
+            }
+            VarType arg_type = infer_expr_type(builtin->args[0]);
+            if (arg_type != VarType::STRING && arg_type != VarType::UNKNOWN) {
+                throw TypeError("Builtin 'json_parse' expects a string", builtin->location);
+            }
+            return VarType::OBJECT; // or UNKNOWN, but let's say OBJECT
+        }
+        if (builtin->name == "json_stringify") {
+            if (builtin->args.size() != 1) {
+                throw SemanticError("Builtin 'json_stringify' expects 1 argument", builtin->location);
+            }
+            return VarType::STRING;
+        }
+        if (builtin->name == "read_file") {
+            if (builtin->args.size() != 1) {
+                throw SemanticError("Builtin 'read_file' expects 1 argument", builtin->location);
+            }
+            VarType arg_type = infer_expr_type(builtin->args[0]);
+            if (arg_type != VarType::STRING && arg_type != VarType::UNKNOWN) {
+                throw TypeError("Builtin 'read_file' expects a string path", builtin->location);
             }
             return VarType::STRING;
         }

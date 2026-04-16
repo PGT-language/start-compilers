@@ -2,10 +2,12 @@
 
 #include <string>
 #include <utility>
+#include <map>
+#include <vector>
 
 extern bool DEBUG;
 
-enum class ValueType { INT, FLOAT, STRING, BOOL, BYTES, NONE };
+enum class ValueType { INT, FLOAT, STRING, BOOL, BYTES, OBJECT, ARRAY, NONE };
 
 struct Value {
     ValueType type = ValueType::NONE;
@@ -13,6 +15,8 @@ struct Value {
     double float_val = 0.0;
     bool bool_val = false;
     std::string str_val;
+    std::map<std::string, Value> obj_val;
+    std::vector<Value> arr_val;
 
     Value() = default;
     Value(long long v) : type(ValueType::INT), int_val(v) {}
@@ -30,6 +34,20 @@ struct Value {
         Value value;
         value.type = ValueType::BYTES;
         value.str_val = std::move(v);
+        return value;
+    }
+
+    static Value Object(std::map<std::string, Value> v) {
+        Value value;
+        value.type = ValueType::OBJECT;
+        value.obj_val = std::move(v);
+        return value;
+    }
+
+    static Value Array(std::vector<Value> v) {
+        Value value;
+        value.type = ValueType::ARRAY;
+        value.arr_val = std::move(v);
         return value;
     }
 
@@ -54,7 +72,54 @@ struct Value {
             case ValueType::STRING: return str_val;
             case ValueType::BOOL: return bool_val ? "true" : "false";
             case ValueType::BYTES: return str_val;
+            case ValueType::OBJECT: {
+                std::string json = "{";
+                for (auto it = obj_val.begin(); it != obj_val.end(); ++it) {
+                    if (it != obj_val.begin()) json += ",";
+                    json += "\"" + it->first + "\":" + it->second.to_json();
+                }
+                json += "}";
+                return json;
+            }
+            case ValueType::ARRAY: {
+                std::string json = "[";
+                for (size_t i = 0; i < arr_val.size(); ++i) {
+                    if (i > 0) json += ",";
+                    json += arr_val[i].to_json();
+                }
+                json += "]";
+                return json;
+            }
             default: return "";
+        }
+    }
+
+    std::string to_json() const {
+        switch (type) {
+            case ValueType::INT: return std::to_string(int_val);
+            case ValueType::FLOAT: return std::to_string(float_val);
+            case ValueType::STRING: return "\"" + str_val + "\"";
+            case ValueType::BOOL: return bool_val ? "true" : "false";
+            case ValueType::BYTES: return "\"" + str_val + "\"";
+            case ValueType::OBJECT: {
+                std::string json = "{";
+                for (auto it = obj_val.begin(); it != obj_val.end(); ++it) {
+                    if (it != obj_val.begin()) json += ",";
+                    json += "\"" + it->first + "\":" + it->second.to_json();
+                }
+                json += "}";
+                return json;
+            }
+            case ValueType::ARRAY: {
+                std::string json = "[";
+                for (size_t i = 0; i < arr_val.size(); ++i) {
+                    if (i > 0) json += ",";
+                    json += arr_val[i].to_json();
+                }
+                json += "]";
+                return json;
+            }
+            default: return "null";
         }
     }
 };

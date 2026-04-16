@@ -14,6 +14,8 @@ enum class VarType {
     STRING,
     BOOL,
     BYTES,
+    OBJECT,
+    ARRAY,
     UNKNOWN  // Тип еще не определен
 };
 
