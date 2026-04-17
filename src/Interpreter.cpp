@@ -876,14 +876,25 @@ void Interpreter::execute_statement(const std::shared_ptr<AstNode>& stmt, std::m
             throw RuntimeError("Unsupported network transport: " + net_op->transport, net_op->location);
         }
         if (net_op->method != "get" && net_op->method != "post" &&
-            net_op->method != "serve" && net_op->method != "route") {
+            net_op->method != "serve" && net_op->method != "run" &&
+            net_op->method != "route") {
             throw RuntimeError("Unsupported network method: " + net_op->method, net_op->location);
         }
-        if (net_op->method == "serve" && net_op->transport == "https") {
+        if ((net_op->method == "serve" || net_op->method == "run") && net_op->transport == "https") {
             throw RuntimeError("Local server currently supports HTTP only", net_op->location);
         }
 
         std::string body;
+        if ((net_op->method == "get" || net_op->method == "post") &&
+            net_op->data && url_val.str_val.rfind("/", 0) == 0) {
+            Value handler_val = eval(net_op->data, locals);
+            if (handler_val.type != ValueType::STRING && handler_val.type != ValueType::BYTES) {
+                throw TypeError("Route handler must be a string", net_op->location);
+            }
+            register_http_route(net_op->method, url_val.str_val, handler_val.str_val, net_op->location);
+            return;
+        }
+
         if (net_op->method == "route") {
             if (!net_op->path || !net_op->data) {
                 throw RuntimeError("Route requires method, path and handler", net_op->location);
@@ -900,7 +911,7 @@ void Interpreter::execute_statement(const std::shared_ptr<AstNode>& stmt, std::m
             return;
         }
 
-        if (net_op->method == "serve") {
+        if (net_op->method == "serve" || net_op->method == "run") {
             if (!net_op->port) {
                 throw RuntimeError("Server requires host and port", net_op->location);
             }

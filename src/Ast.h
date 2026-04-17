@@ -78,7 +78,7 @@ struct WhileStmt : AstNode {
 
 struct NetOp : AstNode {
     std::string transport;  // http или https
-    std::string method;  // get, post, serve или route
+    std::string method;  // get, post, serve, run или route
     std::shared_ptr<AstNode> url;
     std::shared_ptr<AstNode> path;  // только для route
     std::shared_ptr<AstNode> port;  // только для serve

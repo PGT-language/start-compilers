@@ -222,7 +222,7 @@ std::shared_ptr<AstNode> Parser::parse_statement() {
         pos + 2 < tokens.size() && tokens[pos + 2].type == T_FILE) {
         return parse_file_op();
     }
-    if (current().type == T_IDENTIFIER && current().value == "net" &&
+    if (current().type == T_IDENTIFIER && (current().value == "net" || current().value == "web") &&
         pos + 1 < tokens.size() && tokens[pos + 1].type == T_COLON_COLON) {
         return parse_net_op();
     }
@@ -655,16 +655,17 @@ std::shared_ptr<FileOp> Parser::parse_file_op() {
 
 std::shared_ptr<NetOp> Parser::parse_net_op() {
     int op_line = current().line;
-    advance(); // net
+    std::string namespace_name = current().value;
+    advance(); // net/web
 
     if (current().type != T_COLON_COLON) {
-        throw SyntaxError("Expected '::' after 'net', got: " + current().value,
+        throw SyntaxError("Expected '::' after '" + namespace_name + "', got: " + current().value,
                          SourceLocation(current().line, 0));
     }
     advance(); // ::
 
     if (current().type != T_IDENTIFIER) {
-        throw SyntaxError("Expected network method or transport after 'net::', got: " + current().value,
+        throw SyntaxError("Expected network method or transport after '" + namespace_name + "::', got: " + current().value,
                          SourceLocation(current().line, 0));
     }
     std::string first_part = current().value;
@@ -709,45 +710,45 @@ std::shared_ptr<NetOp> Parser::parse_net_op() {
 
     if (method == "route") {
         if (current().type != T_COMMA) {
-            throw SyntaxError("Expected path argument in net::route",
+            throw SyntaxError("Expected path argument in " + namespace_name + "::route",
                              SourceLocation(current().line, 0));
         }
         advance(); // ,
         net_op->path = parse_expr();
         if (!net_op->path) {
-            throw SyntaxError("Expected path in net::route",
+            throw SyntaxError("Expected path in " + namespace_name + "::route",
                              SourceLocation(current().line, 0));
         }
         if (current().type != T_COMMA) {
-            throw SyntaxError("Expected handler argument in net::route",
+            throw SyntaxError("Expected handler argument in " + namespace_name + "::route",
                              SourceLocation(current().line, 0));
         }
         advance(); // ,
         net_op->data = parse_expr();
         if (!net_op->data) {
-            throw SyntaxError("Expected handler in net::route",
+            throw SyntaxError("Expected handler in " + namespace_name + "::route",
                              SourceLocation(current().line, 0));
         }
-    } else if (method == "serve") {
+    } else if (method == "serve" || method == "run") {
         if (current().type != T_COMMA) {
-            throw SyntaxError("Expected port argument in net::serve",
+            throw SyntaxError("Expected port argument in " + namespace_name + "::" + method,
                              SourceLocation(current().line, 0));
         }
         advance(); // ,
         net_op->port = parse_expr();
         if (!net_op->port) {
-            throw SyntaxError("Expected port in net::serve",
+            throw SyntaxError("Expected port in " + namespace_name + "::" + method,
                              SourceLocation(current().line, 0));
         }
         if (current().type == T_COMMA) {
             advance(); // ,
             net_op->data = parse_expr();
             if (!net_op->data) {
-                throw SyntaxError("Expected response body in net::serve",
+                throw SyntaxError("Expected response body in " + namespace_name + "::" + method,
                                  SourceLocation(current().line, 0));
             }
         }
-    } else if (method == "post" && current().type == T_COMMA) {
+    } else if ((method == "get" || method == "post") && current().type == T_COMMA) {
         advance(); // ,
         net_op->data = parse_expr();
     }

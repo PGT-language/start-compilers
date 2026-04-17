@@ -458,10 +458,11 @@ void SemanticAnalyzer::analyze_net_op(const std::shared_ptr<NetOp>& net_op) {
         throw SemanticError("Unsupported network transport: '" + net_op->transport + "'", net_op->location);
     }
     if (net_op->method != "get" && net_op->method != "post" &&
-        net_op->method != "serve" && net_op->method != "route") {
+        net_op->method != "serve" && net_op->method != "run" &&
+        net_op->method != "route") {
         throw SemanticError("Unsupported network method: '" + net_op->method + "'", net_op->location);
     }
-    if (net_op->method == "serve" && net_op->transport == "https") {
+    if ((net_op->method == "serve" || net_op->method == "run") && net_op->transport == "https") {
         throw SemanticError("Local server currently supports HTTP only", net_op->location);
     }
 
@@ -488,7 +489,7 @@ void SemanticAnalyzer::analyze_net_op(const std::shared_ptr<NetOp>& net_op) {
         if (data_type != VarType::STRING && data_type != VarType::BYTES && data_type != VarType::UNKNOWN) {
             throw TypeError("Network route handler must be a string", net_op->location);
         }
-    } else if (net_op->method == "serve") {
+    } else if (net_op->method == "serve" || net_op->method == "run") {
         if (!net_op->port) {
             throw SemanticError("Network server requires a port argument", net_op->location);
         }
@@ -503,6 +504,12 @@ void SemanticAnalyzer::analyze_net_op(const std::shared_ptr<NetOp>& net_op) {
             if (data_type != VarType::STRING && data_type != VarType::BYTES && data_type != VarType::UNKNOWN) {
                 throw TypeError("Network server response body must be a string or bytes", net_op->location);
             }
+        }
+    } else if (net_op->method == "get" && net_op->data) {
+        analyze_expr(net_op->data);
+        VarType data_type = infer_expr_type(net_op->data);
+        if (data_type != VarType::STRING && data_type != VarType::BYTES && data_type != VarType::UNKNOWN) {
+            throw TypeError("Network GET route handler must be a string or bytes", net_op->location);
         }
     } else if (net_op->method == "post") {
         if (!net_op->data) {
