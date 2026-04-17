@@ -831,10 +831,11 @@ std::shared_ptr<IfStmt> Parser::parse_if() {
 
     // Парсим тело if
     while (!is_eof() && current().type != T_RBRACE) {
+        size_t start_pos = pos;
         auto stmt = parse_statement();
         if (stmt) {
             if_stmt->then_body.push_back(stmt);
-        } else {
+        } else if (pos == start_pos) {
             advance(); // пропускаем неизвестные токены
         }
     }
@@ -853,10 +854,11 @@ std::shared_ptr<IfStmt> Parser::parse_if() {
         if (current().type == T_LBRACE) {
             advance(); // {
             while (!is_eof() && current().type != T_RBRACE) {
+                size_t start_pos = pos;
                 auto stmt = parse_statement();
                 if (stmt) {
                     if_stmt->else_body.push_back(stmt);
-                } else {
+                } else if (pos == start_pos) {
                     advance();
                 }
             }
@@ -909,10 +911,11 @@ std::shared_ptr<WhileStmt> Parser::parse_while() {
     while_stmt->condition = condition;
 
     while (!is_eof() && current().type != T_RBRACE) {
+        size_t start_pos = pos;
         auto stmt = parse_statement();
         if (stmt) {
             while_stmt->body.push_back(stmt);
-        } else {
+        } else if (pos == start_pos) {
             advance();
         }
     }
