@@ -110,6 +110,28 @@ std::vector<std::shared_ptr<AstNode>> Parser::parse_program() {
                             }
                         }
                     }
+                    if (net_op->method == "route" && !net_op->data && !net_op->port &&
+                        current().type == T_FUNCTION) {
+                        if (auto path_lit = std::dynamic_pointer_cast<Literal>(net_op->url)) {
+                            std::string route_method = "GET";
+                            if (net_op->path) {
+                                if (auto method_lit = std::dynamic_pointer_cast<Literal>(net_op->path)) {
+                                    if (method_lit->value.type == ValueType::STRING) {
+                                        route_method = method_lit->value.str_val;
+                                    }
+                                }
+                            }
+                            if (path_lit->value.type == ValueType::STRING &&
+                                path_lit->value.str_val.rfind("/", 0) == 0) {
+                                pending_routes.push_back({
+                                    route_method,
+                                    path_lit->value.str_val,
+                                    net_op->location
+                                });
+                                continue;
+                            }
+                        }
+                    }
                 }
                 nodes.push_back(stmt);
             } else {
@@ -729,25 +751,21 @@ std::shared_ptr<NetOp> Parser::parse_net_op() {
     }
 
     if (method == "route") {
-        if (current().type != T_COMMA) {
-            throw SyntaxError("Expected path argument in " + namespace_name + "::route",
-                             SourceLocation(current().line, 0));
-        }
-        advance(); // ,
-        net_op->path = parse_expr();
-        if (!net_op->path) {
-            throw SyntaxError("Expected path in " + namespace_name + "::route",
-                             SourceLocation(current().line, 0));
-        }
-        if (current().type != T_COMMA) {
-            throw SyntaxError("Expected handler argument in " + namespace_name + "::route",
-                             SourceLocation(current().line, 0));
-        }
-        advance(); // ,
-        net_op->data = parse_expr();
-        if (!net_op->data) {
-            throw SyntaxError("Expected handler in " + namespace_name + "::route",
-                             SourceLocation(current().line, 0));
+        if (current().type == T_COMMA) {
+            advance(); // ,
+            net_op->path = parse_expr();
+            if (!net_op->path) {
+                throw SyntaxError("Expected path in " + namespace_name + "::route",
+                                 SourceLocation(current().line, 0));
+            }
+            if (current().type == T_COMMA) {
+                advance(); // ,
+                net_op->data = parse_expr();
+                if (!net_op->data) {
+                    throw SyntaxError("Expected handler in " + namespace_name + "::route",
+                                     SourceLocation(current().line, 0));
+                }
+            }
         }
     } else if (method == "serve" || method == "run") {
         if (current().type != T_COMMA) {
