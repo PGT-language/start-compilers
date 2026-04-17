@@ -908,18 +908,21 @@ void Interpreter::execute_statement(const std::shared_ptr<AstNode>& stmt, std::m
         }
 
         if (net_op->method == "route") {
-            if (!net_op->path || !net_op->data) {
-                throw RuntimeError("Route requires method, path and handler", net_op->location);
+            if (!net_op->path) {
+                throw RuntimeError("Route requires path and handler", net_op->location);
             }
-            Value path_val = eval(net_op->path, locals);
-            Value handler_val = eval(net_op->data, locals);
-            if (path_val.type != ValueType::STRING) {
-                throw TypeError("Route path must be a string", net_op->location);
+            Value first_val = eval(net_op->url, locals);
+            Value second_val = eval(net_op->path, locals);
+            Value handler_val = net_op->data ? eval(net_op->data, locals) : second_val;
+            std::string route_method = net_op->data ? first_val.str_val : "GET";
+            std::string route_path = net_op->data ? second_val.str_val : first_val.str_val;
+            if (first_val.type != ValueType::STRING || second_val.type != ValueType::STRING) {
+                throw TypeError("Route arguments must be strings", net_op->location);
             }
             if (handler_val.type != ValueType::STRING && handler_val.type != ValueType::BYTES) {
                 throw TypeError("Route handler must be a string", net_op->location);
             }
-            register_http_route(url_val.str_val, path_val.str_val, handler_val.str_val, net_op->location);
+            register_http_route(route_method, route_path, handler_val.str_val, net_op->location);
             return;
         }
 

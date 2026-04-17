@@ -487,20 +487,19 @@ void SemanticAnalyzer::analyze_net_op(const std::shared_ptr<NetOp>& net_op) {
 
     if (net_op->method == "route") {
         if (!net_op->path) {
-            throw SemanticError("Network route requires a path argument", net_op->location);
+            throw SemanticError("Network route requires a handler argument", net_op->location);
         }
         analyze_expr(net_op->path);
         VarType path_type = infer_expr_type(net_op->path);
         if (path_type != VarType::STRING && path_type != VarType::UNKNOWN) {
-            throw TypeError("Network route path must be a string", net_op->location);
+            throw TypeError("Network route argument must be a string", net_op->location);
         }
-        if (!net_op->data) {
-            throw SemanticError("Network route requires a handler argument", net_op->location);
-        }
-        analyze_expr(net_op->data);
-        VarType data_type = infer_expr_type(net_op->data);
-        if (data_type != VarType::STRING && data_type != VarType::BYTES && data_type != VarType::UNKNOWN) {
-            throw TypeError("Network route handler must be a string", net_op->location);
+        if (net_op->data) {
+            analyze_expr(net_op->data);
+            VarType data_type = infer_expr_type(net_op->data);
+            if (data_type != VarType::STRING && data_type != VarType::BYTES && data_type != VarType::UNKNOWN) {
+                throw TypeError("Network route handler must be a string", net_op->location);
+            }
         }
     } else if (net_op->method == "serve" || net_op->method == "run") {
         if (!net_op->port) {
