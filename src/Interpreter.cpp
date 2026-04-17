@@ -17,6 +17,7 @@
 
 struct FunctionReturn {
     Value value;
+    bool has_expr;
 };
 
 bool Interpreter::is_truthy(const Value& value) const {
@@ -727,7 +728,7 @@ void Interpreter::execute_statement(const std::shared_ptr<AstNode>& stmt, std::m
     }
 
     if (auto ret = std::dynamic_pointer_cast<ReturnStmt>(stmt)) {
-        throw FunctionReturn{ret->expr ? eval(ret->expr, locals) : Value()};
+        throw FunctionReturn{ret->expr ? eval(ret->expr, locals) : Value(1LL), ret->expr != nullptr};
     }
 
     if (auto if_stmt = std::dynamic_pointer_cast<IfStmt>(stmt)) {
@@ -1017,6 +1018,13 @@ Value Interpreter::execute_function(const std::string& name, const std::vector<V
         execute_block(func->body, locals);
     } catch (const FunctionReturn& ret) {
         call_stack.pop_back();
+        // Если return с выражением, возвращаем значение без проверки
+        // Если return без выражения, проверяем что возвращаемое значение 1
+        if (!ret.has_expr && (ret.value.type != ValueType::INT || ret.value.int_val != 1LL)) {
+            CompilerError e("Function '" + name + "' must return 1 when using return without expression", func->location);
+            e.traceback = call_stack;
+            throw e;
+        }
         return ret.value;
     } catch (CompilerError& e) {
         if (e.traceback.empty()) {
@@ -1025,9 +1033,11 @@ Value Interpreter::execute_function(const std::string& name, const std::vector<V
         call_stack.pop_back();
         throw;
     }
-    // Удаляем функцию из стека вызовов
+    // Если функция не вернула значение, это ошибка
+    CompilerError e("Function '" + name + "' must contain 'return 1'", func->location);
+    e.traceback = call_stack;
     call_stack.pop_back();
-    return Value();
+    throw e;
 }
 
 Value Interpreter::eval(const std::shared_ptr<AstNode>& node, const std::map<std::string, Value>& locals) {

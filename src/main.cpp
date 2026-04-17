@@ -274,19 +274,15 @@ int main(int argc, char** argv) {
             }
         }
 
-        // Проверяем наличие return 1 в функции main
-        bool main_has_return_one = false;
+        // Проверяем наличие return 1 в каждой функции
         for (const auto& node : combined_program) {
             if (auto func = std::dynamic_pointer_cast<FunctionDef>(node)) {
-                if (func->name == "main") {
-                    main_has_return_one = func->has_return_one;
-                    break;
+                if (!func->has_return_one) {
+                    SemanticError err("Function '" + func->name + "' must contain 'return 1'", func->location);
+                    std::cerr << err.get_traceback();
+                    return 1;
                 }
             }
-        }
-        if (!main_has_return_one) {
-            std::cerr << "Error: Function 'main' must contain 'return 1'\n";
-            return 1;
         }
 
         // Семантический анализ
