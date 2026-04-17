@@ -355,7 +355,19 @@ std::string Interpreter::read_response_body(const std::string& body, const Sourc
 Value Interpreter::call_http_handler(const HttpRoute& route, const std::string& method,
                                      const std::string& path, const std::string& body) {
     if (functions.count(route.handler)) {
-        return execute_function(route.handler, {Value(method), Value(path), Value(body)});
+        HttpRequest previous_request = current_request;
+        current_request = {method, path, body};
+        try {
+            auto handler = functions[route.handler];
+            Value result = handler->param_names.empty()
+                ? execute_function(route.handler, {})
+                : execute_function(route.handler, {Value(method), Value(path), Value(body)});
+            current_request = previous_request;
+            return result;
+        } catch (...) {
+            current_request = previous_request;
+            throw;
+        }
     }
     return Value(read_response_body(route.handler, route.location));
 }
@@ -955,6 +967,9 @@ void Interpreter::run(const std::vector<std::shared_ptr<AstNode>>& program) {
     for (const auto& node : program) {
         if (auto f = std::dynamic_pointer_cast<FunctionDef>(node)) {
             functions[f->name] = f;
+            for (const auto& route : f->routes) {
+                register_http_route(route.method, route.path, f->name, route.location);
+            }
         } else if (auto var = std::dynamic_pointer_cast<VarDecl>(node)) {
             // Обрабатываем глобальные переменные
             Value val = coerce_value(eval(var->expr), var->type_name, var->location);
@@ -1071,6 +1086,30 @@ Value Interpreter::eval(const std::shared_ptr<AstNode>& node, const std::map<std
                 throw RuntimeError("Failed to open log file: " + arg.str_val, builtin->location);
             }
             return Value::Bool(true);
+        }
+        if (builtin->name == "request_method") {
+            if (!builtin->args.empty()) {
+                throw RuntimeError("Builtin 'request_method' expects 0 arguments", builtin->location);
+            }
+            return Value(current_request.method);
+        }
+        if (builtin->name == "request_path") {
+            if (!builtin->args.empty()) {
+                throw RuntimeError("Builtin 'request_path' expects 0 arguments", builtin->location);
+            }
+            return Value(current_request.path);
+        }
+        if (builtin->name == "request_body") {
+            if (!builtin->args.empty()) {
+                throw RuntimeError("Builtin 'request_body' expects 0 arguments", builtin->location);
+            }
+            return Value(current_request.body);
+        }
+        if (builtin->name == "request_json") {
+            if (!builtin->args.empty()) {
+                throw RuntimeError("Builtin 'request_json' expects 0 arguments", builtin->location);
+            }
+            return parse_json(current_request.body, builtin->location);
         }
         throw RuntimeError("Unknown builtin expression: " + builtin->name, builtin->location);
     }

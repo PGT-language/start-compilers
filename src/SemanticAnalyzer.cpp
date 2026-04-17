@@ -117,6 +117,19 @@ VarType SemanticAnalyzer::infer_expr_type(const std::shared_ptr<AstNode>& node) 
             }
             return VarType::BOOL;
         }
+        if (builtin->name == "request_method" || builtin->name == "request_path" ||
+            builtin->name == "request_body") {
+            if (!builtin->args.empty()) {
+                throw SemanticError("Builtin '" + builtin->name + "' expects 0 arguments", builtin->location);
+            }
+            return VarType::STRING;
+        }
+        if (builtin->name == "request_json") {
+            if (!builtin->args.empty()) {
+                throw SemanticError("Builtin 'request_json' expects 0 arguments", builtin->location);
+            }
+            return VarType::OBJECT;
+        }
         throw SemanticError("Unknown builtin expression: '" + builtin->name + "'", builtin->location);
     }
     if (auto id = std::dynamic_pointer_cast<Identifier>(node)) {

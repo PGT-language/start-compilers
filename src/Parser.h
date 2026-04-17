@@ -11,6 +11,7 @@ class Parser {
     bool has_package_decl = false;
     std::string package_name;
     bool has_return_zero = false;
+    std::vector<RouteDef> pending_routes;
 
     bool is_eof() const;
     const Token& current() const;

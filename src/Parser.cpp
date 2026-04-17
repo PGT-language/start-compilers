@@ -41,6 +41,7 @@ std::vector<std::shared_ptr<AstNode>> Parser::parse_program() {
     has_package_decl = false;
     package_name.clear();
     has_return_zero = false;
+    pending_routes.clear();
 
     std::vector<std::shared_ptr<AstNode>> nodes;
     size_t last_pos = pos;
@@ -93,6 +94,23 @@ std::vector<std::shared_ptr<AstNode>> Parser::parse_program() {
         } else {
             auto stmt = parse_statement();
             if (stmt) {
+                if (auto net_op = std::dynamic_pointer_cast<NetOp>(stmt)) {
+                    if ((net_op->method == "get" || net_op->method == "post") &&
+                        !net_op->data && !net_op->path && !net_op->port &&
+                        current().type == T_FUNCTION) {
+                        if (auto lit = std::dynamic_pointer_cast<Literal>(net_op->url)) {
+                            if (lit->value.type == ValueType::STRING &&
+                                lit->value.str_val.rfind("/", 0) == 0) {
+                                pending_routes.push_back({
+                                    net_op->method == "post" ? "POST" : "GET",
+                                    lit->value.str_val,
+                                    net_op->location
+                                });
+                                continue;
+                            }
+                        }
+                    }
+                }
                 nodes.push_back(stmt);
             } else {
                 advance();
@@ -111,6 +129,8 @@ std::shared_ptr<FunctionDef> Parser::parse_function() {
 
     auto func = std::make_shared<FunctionDef>();
     func->name = name;
+    func->routes = pending_routes;
+    pending_routes.clear();
 
     // Пропускаем запятую после имени функции, если она есть
     if (current().type == T_COMMA) advance();

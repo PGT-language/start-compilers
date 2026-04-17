@@ -12,11 +12,18 @@ struct AstNode {
     virtual ~AstNode() = default;
 };
 
+struct RouteDef {
+    std::string method;
+    std::string path;
+    SourceLocation location;
+};
+
 struct FunctionDef : AstNode {
     std::string name;
     std::vector<std::string> param_names;
     std::vector<std::string> param_types;
     std::vector<std::shared_ptr<AstNode>> body;
+    std::vector<RouteDef> routes;
     bool has_return_one = false;  // Есть ли return 1 в функции
 };
 

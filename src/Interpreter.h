@@ -20,6 +20,12 @@ class Interpreter {
         SourceLocation location;
     };
 
+    struct HttpRequest {
+        std::string method;
+        std::string path;
+        std::string body;
+    };
+
     struct ParsedUrl {
         std::string scheme;
         std::string host;
@@ -28,6 +34,7 @@ class Interpreter {
     };
 
     std::map<std::string, HttpRoute> http_routes;
+    HttpRequest current_request;
 
     bool is_truthy(const Value& value) const;
     Value coerce_value(const Value& value, const std::string& type_name, const SourceLocation& loc) const;
