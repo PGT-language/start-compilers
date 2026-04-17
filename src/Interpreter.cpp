@@ -994,6 +994,11 @@ Value Interpreter::execute_function(const std::string& name, const std::vector<V
 
     // Локальные переменные функции (параметры + переменные внутри функции)
     std::map<std::string, Value> locals;
+    if (!current_request.method.empty()) {
+        locals["request_method"] = Value(current_request.method);
+        locals["request_path"] = Value(current_request.path);
+        locals["request_body"] = Value(current_request.body);
+    }
 
     // Устанавливаем параметры как локальные переменные
     if (DEBUG) std::cout << "[DEBUG] Function " << name << " has " << func->param_names.size() << " params, got " << call_args.size() << " args" << std::endl;
