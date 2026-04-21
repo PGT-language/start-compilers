@@ -92,6 +92,14 @@ bool is_namespaced_builtin_root(const Token& token) {
            token.value == "orm" ||
            token.value == "request";
 }
+
+bool is_namespaced_builtin_member(const Token& token) {
+    return token.type == T_IDENTIFIER ||
+           token.type == T_FILE ||
+           token.type == T_OBJECT ||
+           token.type == T_READ ||
+           token.type == T_WRITE;
+}
 }
 
 void Parser::load_tokens(std::vector<Token> t) {
@@ -625,7 +633,7 @@ std::shared_ptr<BuiltinCallExpr> Parser::parse_namespaced_builtin_call_expr() {
     }
     advance(); // ::
 
-    if (current().type != T_IDENTIFIER && current().type != T_FILE) {
+    if (!is_namespaced_builtin_member(current())) {
         throw SyntaxError("Expected builtin name after '" + namespace_name + "::', got: " + current().value,
                          SourceLocation(current().line, 0));
     }
