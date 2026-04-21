@@ -454,6 +454,10 @@ std::string Interpreter::log_level_from_builtin(const std::string& name) const {
 
 bool Interpreter::is_log_builtin_name(const std::string& name) const {
     return name == "log" ||
+           name == "log_output" ||
+           name == "set_log_output" ||
+           name == "log_console" ||
+           name == "log_file" ||
            name == "log_trace" ||
            name == "log_debug" ||
            name == "log_info" ||
@@ -466,8 +470,55 @@ bool Interpreter::is_log_builtin_name(const std::string& name) const {
            name == "log_fatal";
 }
 
+Value Interpreter::set_log_output(const Value& arg, const SourceLocation& loc) {
+    if (arg.type != ValueType::STRING && arg.type != ValueType::BYTES) {
+        throw TypeError("Builtin 'log_output' expects 'console' or 'file'", loc);
+    }
+
+    std::string target;
+    for (char ch : arg.str_val) {
+        target += static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+
+    if (target == "stdout" || target == "terminal") {
+        target = "console";
+    }
+    if (target == "log" || target == "logs") {
+        target = "file";
+    }
+
+    if (target == "file" && !log_file.is_open()) {
+        throw RuntimeError("Cannot switch log output to file before opening a log file", loc);
+    }
+    if (target != "console" && target != "file") {
+        throw RuntimeError("Log output must be 'console' or 'file'", loc);
+    }
+
+    log_output = target;
+    return Value::Bool(true);
+}
+
 Value Interpreter::execute_log_builtin(const std::string& name, const std::vector<Value>& args,
                                        const SourceLocation& loc) {
+    if (name == "log_console") {
+        if (!args.empty()) {
+            throw RuntimeError("Builtin 'log_console' expects 0 arguments", loc);
+        }
+        log_output = "console";
+        return Value::Bool(true);
+    }
+    if (name == "log_file") {
+        if (args.size() != 1) {
+            throw RuntimeError("Builtin 'log_file' expects 1 argument", loc);
+        }
+        return open_log_path(args[0], loc);
+    }
+    if (name == "log_output" || name == "set_log_output") {
+        if (args.size() != 1) {
+            throw RuntimeError("Builtin '" + name + "' expects 1 argument", loc);
+        }
+        return set_log_output(args[0], loc);
+    }
     if (args.empty()) {
         throw RuntimeError("Builtin '" + name + "' expects at least 1 argument", loc);
     }
@@ -515,6 +566,7 @@ Value Interpreter::open_log_path(const Value& arg, const SourceLocation& loc) {
     if (!log_file.is_open()) {
         throw RuntimeError("Failed to open log file: " + arg.str_val, loc);
     }
+    log_output = "file";
     return Value::Bool(true);
 }
 
@@ -1372,9 +1424,10 @@ void Interpreter::log_message(const std::string& message, const std::string& lev
     char time_str[20];
     std::strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
     std::string log_entry = "[" + std::string(time_str) + "] [" + normalize_log_level(level) + "] " + message;
-    std::cout << log_entry << std::endl;
-    if (log_file.is_open()) {
+    if (log_output == "file" && log_file.is_open()) {
         log_file << log_entry << std::endl;
         log_file.flush();
+        return;
     }
+    std::cout << log_entry << std::endl;
 }

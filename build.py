@@ -8,7 +8,8 @@ source_files = [
     "src/Interpreter.cpp",
     "src/Utils.cpp",
     "src/SemanticAnalyzer.cpp",
-    "src/GarbageCollector.cpp"
+    "src/GarbageCollector.cpp",
+    "src/gen/Generator.cpp"
 ]
 
 output_executable = "pgt"

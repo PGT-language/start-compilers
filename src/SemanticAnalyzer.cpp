@@ -4,6 +4,10 @@
 namespace {
 bool is_log_builtin_name(const std::string& name) {
     return name == "log" ||
+           name == "log_output" ||
+           name == "set_log_output" ||
+           name == "log_console" ||
+           name == "log_file" ||
            name == "log_trace" ||
            name == "log_debug" ||
            name == "log_info" ||
@@ -14,6 +18,13 @@ bool is_log_builtin_name(const std::string& name) {
            name == "log_critical" ||
            name == "log_critecal" ||
            name == "log_fatal";
+}
+
+bool is_log_config_builtin_name(const std::string& name) {
+    return name == "log_output" ||
+           name == "set_log_output" ||
+           name == "log_console" ||
+           name == "log_file";
 }
 }
 

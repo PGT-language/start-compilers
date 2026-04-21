@@ -14,6 +14,7 @@ class Interpreter {
     std::vector<SourceLocation> call_stack;  // Стек вызовов для traceback
     std::map<std::string, std::unique_ptr<std::fstream>> open_files;  // Открытые файлы
     std::ofstream log_file;  // Файл для логов
+    std::string log_output = "console";  // console или file
 
     struct HttpRoute {
         std::string handler;
@@ -59,6 +60,7 @@ class Interpreter {
     bool is_known_log_level(const std::string& level) const;
     std::string log_level_from_builtin(const std::string& name) const;
     bool is_log_builtin_name(const std::string& name) const;
+    Value set_log_output(const Value& arg, const SourceLocation& loc);
     Value execute_log_builtin(const std::string& name, const std::vector<Value>& args, const SourceLocation& loc);
     Value open_log_path(const Value& arg, const SourceLocation& loc);
     void log_message(const std::string& message, const std::string& level = "INFO");
