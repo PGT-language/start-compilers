@@ -365,7 +365,7 @@ std::string api_source(const InitOptions& options) {
                    << "        return json::object(\"status\", \"saved\")\n"
                    << "    }\n";
         }
-        source << "    return \"Я работаю\"\n"
+        source << "    return \"I'm is working\"\n"
                << "    return 1\n"
                << "}\n";
     }
