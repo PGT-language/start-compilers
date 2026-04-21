@@ -44,7 +44,7 @@ int main(int argc, char** argv) {
 
     if (command == "version" || command == "--version" || command == "-v") {
         std::cout << "PGT Compiler v0.1\n";
-        std::cout << "Built on December 20, 2025\n";
+        std::cout << "Built on Aprel 21 2026\n";
         std::cout << "Author: pabla\n";
         return 0;
     }
