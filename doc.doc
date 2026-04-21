@@ -234,6 +234,14 @@ pgt init backend test // создать backend проект test, template/name
 10. создать Dockerfile и docker-compose.yml или пропустить {реализовано}
 11. создать nginx/default.conf или пропустить {реализовано}
 
+pgt init backend создаёт модульную структуру:
+- main.pgt // минимальный вход: setup(), register(), web::run(...) {реализовано}
+- runtime/runtime.pgt // startup: logging, sql::open, migrate {реализовано}
+- routes/routes.pgt // регистрация web::route/web::get/web::post {реализовано}
+- api/api.pgt // index/api handlers и сохранение POST JSON через ORM, если model включён {реализовано}
+- models/<name>/<name>.pgt или database/<name>/<name>.pgt // слой базы данных {реализовано}
+- Dockerfile // использует PGT runtime image через ARG PGT_IMAGE {реализовано}
+
 pgt generate component logging // генератор компонента logging {реализовано}
 
 pgt g component logging // короткая форма генератора {реализовано}

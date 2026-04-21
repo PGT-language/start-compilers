@@ -24,6 +24,8 @@ struct InitOptions {
     bool create_nginx = false;
 };
 
+const char* DEFAULT_PGT_DOCKER_IMAGE = "pablaofficeal/pgt:latest";
+
 std::string trim(const std::string& value) {
     size_t start = 0;
     while (start < value.size() && std::isspace(static_cast<unsigned char>(value[start]))) {
@@ -110,7 +112,7 @@ void print_init_help() {
     std::cout << "Usage:\n";
     std::cout << "  pgt init [template] [project-name]\n\n";
     std::cout << "Templates:\n";
-    std::cout << "  backend  Create a backend project with optional logging, database, API, Docker, and nginx\n\n";
+    std::cout << "  backend  Create a modular backend project with optional logging, database, API, Docker, and nginx\n\n";
     std::cout << "Example:\n";
     std::cout << "  pgt init backend test\n";
 }
@@ -291,12 +293,12 @@ std::string raw_table_source(const InitOptions& options) {
     return source.str();
 }
 
-std::string main_source(const InitOptions& options) {
+std::string runtime_source(const InitOptions& options) {
     bool model_database = options.use_database && options.table_type == "model";
     std::string table_package = normalize_identifier(options.table_name, "model");
 
     std::ostringstream source;
-    source << "package main\n"
+    source << "package runtime\n"
            << "\n";
 
     bool has_imports = false;
@@ -308,7 +310,7 @@ std::string main_source(const InitOptions& options) {
     }
     if (options.use_database) {
         if (model_database) {
-            source << "from \"models/" << table_package << "\" import migrate, save\n";
+            source << "from \"models/" << table_package << "\" import migrate\n";
         } else {
             source << "from \"database/" << table_package << "\" import migrate\n";
         }
@@ -316,6 +318,37 @@ std::string main_source(const InitOptions& options) {
     }
     if (has_imports) {
         source << "\n";
+    }
+
+    source << "function(setup) {\n";
+    if (options.create_logging) {
+        if (options.log_output == "file") {
+            source << "    to_file(\"server.log\")\n";
+        } else {
+            source << "    to_console()\n";
+        }
+        source << "    " << options.log_level << "(\"starting backend\")\n";
+    }
+    if (options.use_database) {
+        source << "    sql::open(\"app.sqlite\")\n"
+               << "    migrate()\n";
+    }
+    source << "    return 1\n"
+           << "}\n";
+    return source.str();
+}
+
+std::string api_source(const InitOptions& options) {
+    bool model_database = options.use_database && options.table_type == "model";
+    std::string table_package = normalize_identifier(options.table_name, "model");
+
+    std::ostringstream source;
+    source << "package api\n"
+           << "\n";
+
+    if (model_database) {
+        source << "from \"models/" << table_package << "\" import save\n"
+               << "\n";
     }
 
     source << "function(index) {\n"
@@ -337,26 +370,41 @@ std::string main_source(const InitOptions& options) {
                << "}\n";
     }
 
+    return source.str();
+}
+
+std::string routes_source(const InitOptions& options) {
+    std::ostringstream source;
+    source << "package routes\n"
+           << "\n"
+           << "from \"api\" import index";
+    if (options.create_api) {
+        source << ", api";
+    }
     source << "\n"
-           << "function(main) {\n";
-    if (options.create_logging) {
-        if (options.log_output == "file") {
-            source << "    to_file(\"server.log\")\n";
-        } else {
-            source << "    to_console()\n";
-        }
-        source << "    " << options.log_level << "(\"starting backend\")\n";
-    }
-    if (options.use_database) {
-        source << "    sql::open(\"app.sqlite\")\n"
-               << "    migrate()\n";
-    }
-    source << "    web::route(\"/\", \"index\")\n";
+           << "\n"
+           << "function(register) {\n"
+           << "    web::route(\"/\", \"index\")\n";
     if (options.create_api) {
         source << "    web::get(\"/api\", \"api\")\n"
                << "    web::post(\"/api\", \"api\")\n";
     }
-    source << "    web::run(\"0.0.0.0\", 5000)\n"
+    source << "    return 1\n"
+           << "}\n";
+    return source.str();
+}
+
+std::string main_source() {
+    std::ostringstream source;
+    source << "package main\n"
+           << "\n"
+           << "from \"runtime\" import setup\n"
+           << "from \"routes\" import register\n"
+           << "\n"
+           << "function(main) {\n"
+           << "    setup()\n"
+           << "    register()\n"
+           << "    web::run(\"0.0.0.0\", 5000)\n"
            << "    return 1\n"
            << "}\n"
            << "\n"
@@ -365,28 +413,26 @@ std::string main_source(const InitOptions& options) {
 }
 
 std::string dockerfile_source() {
-    return
-        "FROM ubuntu:24.04\n"
-        "\n"
-        "RUN apt-get update && apt-get install -y --no-install-recommends \\\n"
-        "    ca-certificates \\\n"
-        "    libssl3 \\\n"
-        "    libsqlite3-0 \\\n"
-        "    && rm -rf /var/lib/apt/lists/*\n"
-        "\n"
-        "WORKDIR /app\n"
-        "COPY pgt /usr/local/bin/pgt\n"
-        "COPY . .\n"
-        "\n"
-        "EXPOSE 5000\n"
-        "CMD [\"pgt\", \"run\", \"main.pgt\"]\n";
+    std::ostringstream source;
+    source << "ARG PGT_IMAGE=" << DEFAULT_PGT_DOCKER_IMAGE << "\n"
+           << "FROM ${PGT_IMAGE}\n"
+           << "\n"
+           << "WORKDIR /app\n"
+           << "COPY . .\n"
+           << "\n"
+           << "EXPOSE 5000\n"
+           << "CMD [\"run\", \"main.pgt\"]\n";
+    return source.str();
 }
 
 std::string compose_source(bool with_nginx) {
     std::ostringstream source;
     source << "services:\n"
            << "  app:\n"
-           << "    build: .\n";
+           << "    build:\n"
+           << "      context: .\n"
+           << "      args:\n"
+           << "        PGT_IMAGE: " << DEFAULT_PGT_DOCKER_IMAGE << "\n";
     if (with_nginx) {
         source << "    expose:\n"
                << "      - \"5000\"\n"
@@ -423,25 +469,83 @@ std::string nginx_source(bool docker) {
 }
 
 std::string readme_source(const InitOptions& options) {
+    std::string table_package = normalize_identifier(options.table_name, "model");
     std::ostringstream source;
     source << "# " << options.project_name << "\n"
            << "\n"
            << "Generated with `pgt init " << options.template_name << " " << options.project_name << "`.\n"
            << "\n"
+           << "## Structure\n"
+           << "\n"
+           << "- `main.pgt` starts the app and stays intentionally small.\n"
+           << "- `runtime/runtime.pgt` prepares logging and database startup.\n"
+           << "- `routes/routes.pgt` registers HTTP routes.\n"
+           << "- `api/api.pgt` contains request handlers.\n";
+    if (options.create_logging) {
+        source << "- `components/logging/logging.pgt` wraps log output and log levels.\n";
+    }
+    if (options.use_database) {
+        if (options.table_type == "model") {
+            source << "- `models/" << table_package << "/" << table_package << ".pgt` contains the ORM model.\n";
+        } else {
+            source << "- `database/" << table_package << "/" << table_package << ".pgt` contains raw SQL migration helpers.\n";
+        }
+    }
+
+    source << "\n"
            << "## Run\n"
            << "\n"
            << "```bash\n"
            << "pgt run main.pgt\n"
            << "```\n";
+    if (options.create_api) {
+        source << "\n"
+               << "## API Examples\n"
+               << "\n"
+               << "```bash\n"
+               << "curl http://localhost:5000/\n"
+               << "curl http://localhost:5000/api\n";
+        if (options.use_database && options.table_type == "model") {
+            source << "curl -X POST http://localhost:5000/api \\\n"
+                   << "  -H 'Content-Type: application/json' \\\n"
+                   << "  -d '{\"message\":\"hello\"}'\n";
+        }
+        source << "```\n";
+    }
+    if (options.create_logging) {
+        source << "\n"
+               << "## Logging\n"
+               << "\n"
+               << "Logging is configured in `runtime/runtime.pgt`.\n"
+               << "Current output: `" << options.log_output << "`, level: `" << options.log_level << "`.\n";
+    }
+    if (options.use_database) {
+        source << "\n"
+               << "## Database\n"
+               << "\n"
+               << "The app opens `app.sqlite` during startup and runs `migrate()` from `runtime/runtime.pgt`.\n";
+    }
     if (options.create_docker) {
         source << "\n"
                << "## Docker\n"
                << "\n"
-               << "Put the `pgt` runtime binary next to this Dockerfile, then run:\n"
+               << "The Dockerfile uses the PGT runtime image `" << DEFAULT_PGT_DOCKER_IMAGE << "` by default.\n"
                << "\n"
                << "```bash\n"
                << "docker compose up --build\n"
+               << "```\n"
+               << "\n"
+               << "Use another runtime image with:\n"
+               << "\n"
+               << "```bash\n"
+               << "docker compose build --build-arg PGT_IMAGE=your/image:tag\n"
                << "```\n";
+    }
+    if (options.create_nginx) {
+        source << "\n"
+               << "## Nginx\n"
+               << "\n"
+               << "Nginx config lives in `nginx/default.conf` and proxies traffic to the app on port 5000.\n";
     }
     return source.str();
 }
@@ -456,7 +560,10 @@ bool create_backend_project(const InitOptions& options) {
     try {
         std::filesystem::create_directories(project_dir);
 
-        if (!write_file(project_dir / "main.pgt", main_source(options))) return false;
+        if (!write_file(project_dir / "main.pgt", main_source())) return false;
+        if (!write_file(project_dir / "runtime" / "runtime.pgt", runtime_source(options))) return false;
+        if (!write_file(project_dir / "routes" / "routes.pgt", routes_source(options))) return false;
+        if (!write_file(project_dir / "api" / "api.pgt", api_source(options))) return false;
         if (!write_file(project_dir / "README.md", readme_source(options))) return false;
 
         if (options.create_logging) {
