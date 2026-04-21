@@ -19,6 +19,7 @@ SOURCE_FILES = (
     "src/SemanticAnalyzer.cpp",
     "src/GarbageCollector.cpp",
     "src/gen/Generator.cpp",
+    "src/init/ProjectInit.cpp",
 )
 LINK_LIBRARIES = ("-lssl", "-lcrypto", "-lsqlite3")
 

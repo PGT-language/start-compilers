@@ -7,6 +7,7 @@
 #include "Error.h"
 #include "PackageResolver.h"
 #include "gen/Generator.h"
+#include "init/ProjectInit.h"
 
 #include <iostream>
 #include <fstream>
@@ -21,6 +22,7 @@ int main(int argc, char** argv) {
         std::cout << "  pgt version             — Show version\n";
         std::cout << "  pgt run <file.pgt>      — Run PGT program\n";
         std::cout << "  pgt run <file.pgt> --debug — Run with debug output\n";
+        std::cout << "  pgt init [template] [name] — Initialize a project from template\n";
         std::cout << "  pgt generate component <name> — Generate a PGT component\n";
         std::cout << "  pgt generate file <path> [package] — Generate a PGT file\n";
         std::cout << "  pgt generate model <name> [field:type ...] — Generate an ORM model\n";
@@ -37,6 +39,8 @@ int main(int argc, char** argv) {
         std::cout << "  version                 — Show compiler version\n";
         std::cout << "  run <file.pgt>          — Execute .pgt file\n";
         std::cout << "  run <file.pgt> --debug  — Execute with debug info\n\n";
+        std::cout << "  init [template] [name]  — Initialize a project from template\n";
+        std::cout << "  init backend test       — Create backend project named test\n\n";
         std::cout << "  generate component <name> — Generate a PGT component\n";
         std::cout << "  generate file <path> [package] — Generate a PGT file\n";
         std::cout << "  generate model <name> [field:type ...] — Generate an ORM model\n";
@@ -44,6 +48,7 @@ int main(int argc, char** argv) {
         std::cout << "  history                 — Show history of commands\n";
         std::cout << "Example:\n";
         std::cout << "  ./pgt run test.pgt\n";
+        std::cout << "  ./pgt init backend test\n";
         std::cout << "  ./pgt generate component logging\n";
         std::cout << "  ./pgt generate model user name:string email:string\n";
         return 0;
@@ -58,6 +63,10 @@ int main(int argc, char** argv) {
 
     if (command == "generate" || command == "g") {
         return run_generator_command(argc, argv);
+    }
+
+    if (command == "init") {
+        return run_project_init_command(argc, argv);
     }
 
     if (command == "run") {

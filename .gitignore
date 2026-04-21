@@ -15,3 +15,7 @@ messages.json
 app.sql
 app.db
 app.sqlite
+gggg/docker-compose.yml
+gggg/Dockerfile
+gggg/README.md
+gggg/nginx/default.conf

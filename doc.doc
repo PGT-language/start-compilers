@@ -217,6 +217,23 @@ orm::save("Test", json::object("message", "Hello", "name", "Pabla", "age", 18)) 
 
 orm::save("users", json::object("name", "Pabla")) // ORM alias для insert/save по имени таблицы {реализовано}
 
+pgt init // интерактивная инициализация проекта из шаблона {реализовано}
+
+pgt init backend test // создать backend проект test, template/name уже выбраны и первые два шага скипаются {реализовано}
+
+Шаги pgt init backend:
+1. template, если не передан в команде {реализовано}
+2. project name, если не передан в команде {реализовано}
+3. создать logging или пропустить {реализовано}
+4. если logging включён: выбрать file или console {реализовано}
+5. если logging включён: выбрать уровень trace/debug/info/notice/warn/error/critical {реализовано}
+6. включить database или пропустить {реализовано}
+7. если database включена: выбрать table type model или sql {реализовано}
+8. если database включена: выбрать table/model name {реализовано}
+9. создать default /api route с ответом "Я работаю" или пропустить {реализовано}
+10. создать Dockerfile и docker-compose.yml или пропустить {реализовано}
+11. создать nginx/default.conf или пропустить {реализовано}
+
 pgt generate component logging // генератор компонента logging {реализовано}
 
 pgt g component logging // короткая форма генератора {реализовано}
