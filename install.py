@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import argparse
 import os
 import shutil
@@ -9,7 +7,6 @@ import sys
 import tempfile
 from pathlib import Path
 from typing import List, Optional
-
 
 COMPILER_NAME = "pgt"
 CPP_STANDARD = "-std=c++17"
@@ -204,9 +201,7 @@ def main() -> int:
     except RuntimeError as error:
         print(f"Error: {error}", file=sys.stderr)
         return 1
-
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())
