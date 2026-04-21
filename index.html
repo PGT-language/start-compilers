@@ -5,9 +5,9 @@
 </head>
 <body>
     <h1>Hello from PGT Server</h1>
-    <p>This is a test HTML page.</p>
+    <p>Send a message to the PGT server. The server writes the JSON payload to messages.json.</p>
     <form id="api-form">
-        <input type="text" name="message" placeholder="Enter message">
+        <input type="text" name="message" placeholder="Enter message" required>
         <button type="submit">Send</button>
     </form>
     <pre id="response"></pre>
@@ -22,6 +22,7 @@
                 },
                 body: JSON.stringify({ message: form.message.value })
             });
+            form.reset();
             document.getElementById("response").textContent = await response.text();
         });
     </script>

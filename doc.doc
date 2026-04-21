@@ -98,9 +98,51 @@ json_stringify(value) // сериализует объект или массив
 
 read_file("path/to/file") // читает файл и возвращает его содержимое как строку {реализовано}
 
-open_log("path/to/logfile.log") // открывает файл для логирования {реализовано}
+open_log("path/to/logfile.log") // открывает файл для логирования и переключает вывод логов в файл {реализовано}
 
-Логирование: сервер автоматически логирует все запросы в консоль и в файл, если открыт с open_log {реализовано}
+log("message") // логирует сообщение с уровнем INFO {реализовано}
+
+log("debug", "message") // логирует сообщение с выбранным уровнем {реализовано}
+
+log("message", "debug") // альтернативный порядок: сообщение, потом уровень {реализовано}
+
+log_trace("message") // уровень TRACE {реализовано}
+
+log_debug("message") // уровень DEBUG {реализовано}
+
+log_info("message") // уровень INFO {реализовано}
+
+log_notice("message") // уровень NOTICE {реализовано}
+
+log_warn("message") // уровень WARN {реализовано}
+
+log_warning("message") // alias для WARN {реализовано}
+
+log_error("message") // уровень ERROR {реализовано}
+
+log_critical("message") // уровень CRITICAL {реализовано}
+
+log_fatal("message") // alias для CRITICAL {реализовано}
+
+log_critecal("message") // alias для CRITICAL, чтобы не ломаться от опечатки {реализовано}
+
+log_console() // переключает логи только в консоль {реализовано}
+
+log_file("path/to/logfile.log") // открывает файл и переключает логи только в файл {реализовано}
+
+log_output("console") // выбирает вывод логов в консоль {реализовано}
+
+log_output("file") // выбирает вывод логов в уже открытый файл {реализовано}
+
+set_log_output("console") // alias для log_output {реализовано}
+
+Логирование: сервер автоматически логирует старт, маршруты, запросы, ответы и ошибки. Вывод всегда один: либо консоль, либо файл. По умолчанию консоль; open_log/log_file переключают в файл. {реализовано}
+
+pgt generate component logging // генератор компонента logging {реализовано}
+
+pgt g component logging // короткая форма генератора {реализовано}
+
+from "components/logging" import to_file, to_console, debug, info, warn, error, critical // подключение logging-компонента {реализовано}
 
 Маршруты сервера:
 - GET / : возвращает HTML файл или тело

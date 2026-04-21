@@ -98,6 +98,22 @@ VarType SemanticAnalyzer::infer_expr_type(const std::shared_ptr<AstNode>& node) 
         return get_value_type(lit->value);
     }
     if (auto builtin = std::dynamic_pointer_cast<BuiltinCallExpr>(node)) {
+        if (is_log_config_builtin_name(builtin->name)) {
+            if (builtin->name == "log_console") {
+                if (!builtin->args.empty()) {
+                    throw SemanticError("Builtin 'log_console' expects 0 arguments", builtin->location);
+                }
+                return VarType::BOOL;
+            }
+            if (builtin->args.size() != 1) {
+                throw SemanticError("Builtin '" + builtin->name + "' expects 1 argument", builtin->location);
+            }
+            VarType arg_type = infer_expr_type(builtin->args[0]);
+            if (arg_type != VarType::STRING && arg_type != VarType::BYTES && arg_type != VarType::UNKNOWN) {
+                throw TypeError("Builtin '" + builtin->name + "' expects a string argument", builtin->location);
+            }
+            return VarType::BOOL;
+        }
         if (is_log_builtin_name(builtin->name)) {
             if (builtin->args.empty()) {
                 throw SemanticError("Builtin '" + builtin->name + "' expects at least 1 argument", builtin->location);
@@ -482,6 +498,23 @@ void SemanticAnalyzer::analyze_while(const std::shared_ptr<WhileStmt>& while_stm
 }
 
 void SemanticAnalyzer::analyze_call(const std::shared_ptr<CallStmt>& call) {
+    if (is_log_config_builtin_name(call->func_name)) {
+        if (call->func_name == "log_console") {
+            if (!call->args.empty()) {
+                throw SemanticError("Builtin 'log_console' expects 0 arguments", call->location);
+            }
+            return;
+        }
+        if (call->args.size() != 1) {
+            throw SemanticError("Builtin '" + call->func_name + "' expects 1 argument", call->location);
+        }
+        VarType arg_type = infer_expr_type(call->args[0]);
+        if (arg_type != VarType::STRING && arg_type != VarType::BYTES && arg_type != VarType::UNKNOWN) {
+            throw TypeError("Builtin '" + call->func_name + "' expects a string argument", call->location);
+        }
+        return;
+    }
+
     if (is_log_builtin_name(call->func_name)) {
         if (call->args.empty()) {
             throw SemanticError("Builtin '" + call->func_name + "' expects at least 1 argument", call->location);
