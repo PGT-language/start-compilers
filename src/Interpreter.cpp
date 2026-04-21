@@ -431,6 +431,17 @@ std::string Interpreter::normalize_log_level(const std::string& level) const {
     return normalized;
 }
 
+bool Interpreter::is_known_log_level(const std::string& level) const {
+    std::string normalized = normalize_log_level(level);
+    return normalized == "TRACE" ||
+           normalized == "DEBUG" ||
+           normalized == "INFO" ||
+           normalized == "NOTICE" ||
+           normalized == "WARN" ||
+           normalized == "ERROR" ||
+           normalized == "CRITICAL";
+}
+
 std::string Interpreter::log_level_from_builtin(const std::string& name) const {
     if (name == "log_trace") return "TRACE";
     if (name == "log_debug") return "DEBUG";
@@ -463,16 +474,26 @@ Value Interpreter::execute_log_builtin(const std::string& name, const std::vecto
 
     std::string level = log_level_from_builtin(name);
     size_t message_start = 0;
+    size_t message_end = args.size();
     if (name == "log" && args.size() > 1) {
-        if (args[0].type != ValueType::STRING && args[0].type != ValueType::BYTES) {
+        bool first_is_string = args[0].type == ValueType::STRING || args[0].type == ValueType::BYTES;
+        bool last_is_string = args.back().type == ValueType::STRING || args.back().type == ValueType::BYTES;
+        if (first_is_string && is_known_log_level(args[0].str_val)) {
+            level = normalize_log_level(args[0].str_val);
+            message_start = 1;
+        } else if (last_is_string && is_known_log_level(args.back().str_val)) {
+            level = normalize_log_level(args.back().str_val);
+            message_end--;
+        } else if (first_is_string) {
+            level = normalize_log_level(args[0].str_val);
+            message_start = 1;
+        } else {
             throw TypeError("Builtin 'log' level must be a string", loc);
         }
-        level = normalize_log_level(args[0].str_val);
-        message_start = 1;
     }
 
     std::string message;
-    for (size_t i = message_start; i < args.size(); ++i) {
+    for (size_t i = message_start; i < message_end; ++i) {
         if (!message.empty()) {
             message += " ";
         }

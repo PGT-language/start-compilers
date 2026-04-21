@@ -3,6 +3,7 @@
 #include "Error.h"
 #include <iostream>
 #include <limits>
+#include <vector>
 
 namespace {
 bool is_builtin_call_name(const std::string& name) {

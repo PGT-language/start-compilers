@@ -92,9 +92,16 @@ VarType SemanticAnalyzer::infer_expr_type(const std::shared_ptr<AstNode>& node) 
                 throw SemanticError("Builtin '" + builtin->name + "' expects at least 1 argument", builtin->location);
             }
             if (builtin->name == "log" && builtin->args.size() > 1) {
-                VarType level_type = infer_expr_type(builtin->args[0]);
-                if (level_type != VarType::STRING && level_type != VarType::BYTES && level_type != VarType::UNKNOWN) {
-                    throw TypeError("Builtin 'log' level must be a string", builtin->location);
+                VarType first_type = infer_expr_type(builtin->args[0]);
+                VarType last_type = infer_expr_type(builtin->args.back());
+                bool first_can_be_level = first_type == VarType::STRING ||
+                                          first_type == VarType::BYTES ||
+                                          first_type == VarType::UNKNOWN;
+                bool last_can_be_level = last_type == VarType::STRING ||
+                                         last_type == VarType::BYTES ||
+                                         last_type == VarType::UNKNOWN;
+                if (!first_can_be_level && !last_can_be_level) {
+                    throw TypeError("Builtin 'log' level must be a string as first or last argument", builtin->location);
                 }
             }
             for (const auto& arg : builtin->args) {
@@ -469,9 +476,16 @@ void SemanticAnalyzer::analyze_call(const std::shared_ptr<CallStmt>& call) {
             throw SemanticError("Builtin '" + call->func_name + "' expects at least 1 argument", call->location);
         }
         if (call->func_name == "log" && call->args.size() > 1) {
-            VarType level_type = infer_expr_type(call->args[0]);
-            if (level_type != VarType::STRING && level_type != VarType::BYTES && level_type != VarType::UNKNOWN) {
-                throw TypeError("Builtin 'log' level must be a string", call->location);
+            VarType first_type = infer_expr_type(call->args[0]);
+            VarType last_type = infer_expr_type(call->args.back());
+            bool first_can_be_level = first_type == VarType::STRING ||
+                                      first_type == VarType::BYTES ||
+                                      first_type == VarType::UNKNOWN;
+            bool last_can_be_level = last_type == VarType::STRING ||
+                                     last_type == VarType::BYTES ||
+                                     last_type == VarType::UNKNOWN;
+            if (!first_can_be_level && !last_can_be_level) {
+                throw TypeError("Builtin 'log' level must be a string as first or last argument", call->location);
             }
         }
         for (const auto& arg : call->args) {

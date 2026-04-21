@@ -11,7 +11,6 @@
 #include <fstream>
 #include <set>
 #include <map>
-#include <algorithm>
 #include <cctype>
 #include <filesystem>
 #include <sstream>
