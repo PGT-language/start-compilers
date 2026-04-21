@@ -15,6 +15,7 @@ class Interpreter {
     std::map<std::string, std::unique_ptr<std::fstream>> open_files;  // Открытые файлы
     std::ofstream log_file;  // Файл для логов
     std::string log_output = "console";  // console или file
+    std::string sql_output_path;  // Файл для SQL script backend
 
     struct HttpRoute {
         std::string handler;
@@ -56,6 +57,14 @@ class Interpreter {
     std::string response_body_from_value(const Value& value) const;
     Value parse_json(const std::string& json_str, const SourceLocation& loc) const;
     std::string stringify_json(const Value& value) const;
+    Value read_file_path(const Value& arg, const SourceLocation& loc) const;
+    Value execute_json_builtin(const std::string& name, const std::vector<Value>& args, const SourceLocation& loc);
+    Value execute_request_builtin(const std::string& name, const std::vector<Value>& args, const SourceLocation& loc);
+    Value execute_sql_builtin(const std::string& name, const std::vector<Value>& args, const SourceLocation& loc);
+    std::string escape_sql_identifier(const std::string& identifier, const SourceLocation& loc) const;
+    std::string sql_literal(const Value& value) const;
+    std::string build_insert_sql(const std::string& table, const Value& data, const SourceLocation& loc) const;
+    void append_sql_statement(const std::string& statement, const SourceLocation& loc) const;
     std::string normalize_log_level(const std::string& level) const;
     bool is_known_log_level(const std::string& level) const;
     std::string log_level_from_builtin(const std::string& name) const;

@@ -8,6 +8,20 @@ bool is_log_builtin_name(const std::string& name) {
            name == "set_log_output" ||
            name == "log_console" ||
            name == "log_file" ||
+           name == "log::output" ||
+           name == "log::set_output" ||
+           name == "log::console" ||
+           name == "log::file" ||
+           name == "log::trace" ||
+           name == "log::debug" ||
+           name == "log::info" ||
+           name == "log::notice" ||
+           name == "log::warn" ||
+           name == "log::warning" ||
+           name == "log::error" ||
+           name == "log::critical" ||
+           name == "log::critecal" ||
+           name == "log::fatal" ||
            name == "log_trace" ||
            name == "log_debug" ||
            name == "log_info" ||
@@ -24,7 +38,30 @@ bool is_log_config_builtin_name(const std::string& name) {
     return name == "log_output" ||
            name == "set_log_output" ||
            name == "log_console" ||
-           name == "log_file";
+           name == "log_file" ||
+           name == "log::output" ||
+           name == "log::set_output" ||
+           name == "log::console" ||
+           name == "log::file";
+}
+
+bool is_json_builtin_name(const std::string& name) {
+    return name.rfind("json::", 0) == 0;
+}
+
+bool is_sql_builtin_name(const std::string& name) {
+    return name.rfind("sql::", 0) == 0 ||
+           name.rfind("orm::", 0) == 0;
+}
+
+bool is_request_builtin_name(const std::string& name) {
+    return name.rfind("request::", 0) == 0;
+}
+
+bool is_string_like(VarType type) {
+    return type == VarType::STRING ||
+           type == VarType::BYTES ||
+           type == VarType::UNKNOWN;
 }
 }
 
@@ -98,8 +135,97 @@ VarType SemanticAnalyzer::infer_expr_type(const std::shared_ptr<AstNode>& node) 
         return get_value_type(lit->value);
     }
     if (auto builtin = std::dynamic_pointer_cast<BuiltinCallExpr>(node)) {
+        if (builtin->name == "read::file") {
+            if (builtin->args.size() != 1) {
+                throw SemanticError("Builtin 'read::file' expects 1 argument", builtin->location);
+            }
+            VarType arg_type = infer_expr_type(builtin->args[0]);
+            if (!is_string_like(arg_type)) {
+                throw TypeError("Builtin 'read::file' expects a string path", builtin->location);
+            }
+            return VarType::STRING;
+        }
+        if (is_request_builtin_name(builtin->name)) {
+            if (!builtin->args.empty()) {
+                throw SemanticError("Builtin '" + builtin->name + "' expects 0 arguments", builtin->location);
+            }
+            if (builtin->name == "request::json") {
+                return VarType::OBJECT;
+            }
+            return VarType::STRING;
+        }
+        if (is_json_builtin_name(builtin->name)) {
+            if (builtin->name == "json::parse" || builtin->name == "json::decode" ||
+                builtin->name == "json::unmarshal" || builtin->name == "json::read") {
+                if (builtin->args.size() != 1) {
+                    throw SemanticError("Builtin '" + builtin->name + "' expects 1 argument", builtin->location);
+                }
+                VarType arg_type = infer_expr_type(builtin->args[0]);
+                if (!is_string_like(arg_type)) {
+                    throw TypeError("Builtin '" + builtin->name + "' expects a string argument", builtin->location);
+                }
+                return VarType::OBJECT;
+            }
+            if (builtin->name == "json::stringify" || builtin->name == "json::encode" ||
+                builtin->name == "json::marshal") {
+                if (builtin->args.size() != 1) {
+                    throw SemanticError("Builtin '" + builtin->name + "' expects 1 argument", builtin->location);
+                }
+                analyze_expr(builtin->args[0]);
+                return VarType::STRING;
+            }
+            if (builtin->name == "json::write" || builtin->name == "json::save") {
+                if (builtin->args.size() != 2) {
+                    throw SemanticError("Builtin '" + builtin->name + "' expects path and value", builtin->location);
+                }
+                VarType path_type = infer_expr_type(builtin->args[0]);
+                if (!is_string_like(path_type)) {
+                    throw TypeError("JSON file path must be a string", builtin->location);
+                }
+                analyze_expr(builtin->args[1]);
+                return VarType::BOOL;
+            }
+            if (builtin->name == "json::object") {
+                if (builtin->args.size() % 2 != 0) {
+                    throw SemanticError("Builtin 'json::object' expects key/value pairs", builtin->location);
+                }
+                for (size_t i = 0; i < builtin->args.size(); i += 2) {
+                    VarType key_type = infer_expr_type(builtin->args[i]);
+                    if (!is_string_like(key_type)) {
+                        throw TypeError("JSON object keys must be strings", builtin->location);
+                    }
+                    analyze_expr(builtin->args[i + 1]);
+                }
+                return VarType::OBJECT;
+            }
+        }
+        if (is_sql_builtin_name(builtin->name)) {
+            if (builtin->name == "sql::open" || builtin->name == "sql::connect" ||
+                builtin->name == "sql::exec") {
+                if (builtin->args.size() != 1) {
+                    throw SemanticError("Builtin '" + builtin->name + "' expects 1 argument", builtin->location);
+                }
+                VarType arg_type = infer_expr_type(builtin->args[0]);
+                if (!is_string_like(arg_type)) {
+                    throw TypeError("Builtin '" + builtin->name + "' expects a string argument", builtin->location);
+                }
+                return builtin->name == "sql::exec" ? VarType::STRING : VarType::BOOL;
+            }
+            if (builtin->name == "sql::table" || builtin->name == "orm::table" ||
+                builtin->name == "sql::insert" || builtin->name == "orm::save") {
+                if (builtin->args.size() != 2) {
+                    throw SemanticError("Builtin '" + builtin->name + "' expects 2 arguments", builtin->location);
+                }
+                VarType table_type = infer_expr_type(builtin->args[0]);
+                if (!is_string_like(table_type)) {
+                    throw TypeError("SQL table name must be a string", builtin->location);
+                }
+                analyze_expr(builtin->args[1]);
+                return VarType::STRING;
+            }
+        }
         if (is_log_config_builtin_name(builtin->name)) {
-            if (builtin->name == "log_console") {
+            if (builtin->name == "log_console" || builtin->name == "log::console") {
                 if (!builtin->args.empty()) {
                     throw SemanticError("Builtin 'log_console' expects 0 arguments", builtin->location);
                 }
@@ -373,6 +499,8 @@ void SemanticAnalyzer::analyze_statement(const std::shared_ptr<AstNode>& stmt) {
         analyze_call(call);
     } else if (auto ret = std::dynamic_pointer_cast<ReturnStmt>(stmt)) {
         analyze_return(ret);
+    } else if (auto builtin = std::dynamic_pointer_cast<BuiltinCallExpr>(stmt)) {
+        analyze_expr(builtin);
     } else if (auto net_op = std::dynamic_pointer_cast<NetOp>(stmt)) {
         analyze_net_op(net_op);
     } else if (auto file_op = std::dynamic_pointer_cast<FileOp>(stmt)) {
@@ -499,7 +627,7 @@ void SemanticAnalyzer::analyze_while(const std::shared_ptr<WhileStmt>& while_stm
 
 void SemanticAnalyzer::analyze_call(const std::shared_ptr<CallStmt>& call) {
     if (is_log_config_builtin_name(call->func_name)) {
-        if (call->func_name == "log_console") {
+        if (call->func_name == "log_console" || call->func_name == "log::console") {
             if (!call->args.empty()) {
                 throw SemanticError("Builtin 'log_console' expects 0 arguments", call->location);
             }

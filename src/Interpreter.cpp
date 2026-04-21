@@ -8,6 +8,7 @@
 #include <cstring>
 #include <cctype>
 #include <ctime>
+#include <sstream>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
@@ -403,6 +404,244 @@ std::string Interpreter::response_body_from_value(const Value& value) const {
     return value.to_string();
 }
 
+Value Interpreter::read_file_path(const Value& arg, const SourceLocation& loc) const {
+    if (arg.type != ValueType::STRING && arg.type != ValueType::BYTES) {
+        throw TypeError("Builtin 'read::file' expects a string path", loc);
+    }
+
+    std::ifstream file(arg.str_val);
+    if (!file.is_open()) {
+        throw RuntimeError("Failed to open file: " + arg.str_val, loc);
+    }
+
+    std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+    file.close();
+    return Value(content);
+}
+
+Value Interpreter::execute_json_builtin(const std::string& name, const std::vector<Value>& args,
+                                        const SourceLocation& loc) {
+    if (name == "json::parse" || name == "json::decode" || name == "json::unmarshal") {
+        if (args.size() != 1) {
+            throw RuntimeError("Builtin '" + name + "' expects 1 argument", loc);
+        }
+        if (args[0].type != ValueType::STRING && args[0].type != ValueType::BYTES) {
+            throw TypeError("Builtin '" + name + "' expects a string", loc);
+        }
+        return parse_json(args[0].str_val, loc);
+    }
+
+    if (name == "json::stringify" || name == "json::encode" || name == "json::marshal") {
+        if (args.size() != 1) {
+            throw RuntimeError("Builtin '" + name + "' expects 1 argument", loc);
+        }
+        return Value(stringify_json(args[0]));
+    }
+
+    if (name == "json::object") {
+        if (args.size() % 2 != 0) {
+            throw RuntimeError("Builtin 'json::object' expects key/value pairs", loc);
+        }
+
+        std::map<std::string, Value> object;
+        for (size_t i = 0; i < args.size(); i += 2) {
+            if (args[i].type != ValueType::STRING && args[i].type != ValueType::BYTES) {
+                throw TypeError("JSON object keys must be strings", loc);
+            }
+            object[args[i].str_val] = args[i + 1];
+        }
+        return Value::Object(object);
+    }
+
+    if (name == "json::write" || name == "json::save") {
+        if (args.size() != 2) {
+            throw RuntimeError("Builtin '" + name + "' expects path and value", loc);
+        }
+        if (args[0].type != ValueType::STRING && args[0].type != ValueType::BYTES) {
+            throw TypeError("JSON file path must be a string", loc);
+        }
+
+        std::ofstream file(args[0].str_val, std::ios::out | std::ios::trunc);
+        if (!file.is_open()) {
+            throw RuntimeError("Failed to open JSON file for writing: " + args[0].str_val, loc);
+        }
+        if (args[1].type == ValueType::OBJECT || args[1].type == ValueType::ARRAY) {
+            file << stringify_json(args[1]);
+        } else {
+            file << args[1].to_json();
+        }
+        file.close();
+        return Value::Bool(true);
+    }
+
+    if (name == "json::read") {
+        if (args.size() != 1) {
+            throw RuntimeError("Builtin 'json::read' expects 1 argument", loc);
+        }
+        Value content = read_file_path(args[0], loc);
+        return parse_json(content.str_val, loc);
+    }
+
+    throw RuntimeError("Unknown JSON builtin: " + name, loc);
+}
+
+Value Interpreter::execute_request_builtin(const std::string& name, const std::vector<Value>& args,
+                                           const SourceLocation& loc) {
+    if (!args.empty()) {
+        throw RuntimeError("Builtin '" + name + "' expects 0 arguments", loc);
+    }
+
+    if (name == "request::method") return Value(current_request.method);
+    if (name == "request::path") return Value(current_request.path);
+    if (name == "request::body") return Value(current_request.body);
+    if (name == "request::json") return parse_json(current_request.body, loc);
+
+    throw RuntimeError("Unknown request builtin: " + name, loc);
+}
+
+std::string Interpreter::escape_sql_identifier(const std::string& identifier, const SourceLocation& loc) const {
+    if (identifier.empty()) {
+        throw RuntimeError("SQL identifier cannot be empty", loc);
+    }
+
+    for (char ch : identifier) {
+        if (!std::isalnum(static_cast<unsigned char>(ch)) && ch != '_') {
+            throw RuntimeError("Unsafe SQL identifier: " + identifier, loc);
+        }
+    }
+    return identifier;
+}
+
+std::string Interpreter::sql_literal(const Value& value) const {
+    if (value.type == ValueType::INT) return std::to_string(value.int_val);
+    if (value.type == ValueType::FLOAT) return std::to_string(value.float_val);
+    if (value.type == ValueType::BOOL) return value.bool_val ? "1" : "0";
+    if (value.type == ValueType::NONE) return "NULL";
+
+    std::string raw = value.to_string();
+    std::string escaped = "'";
+    for (char ch : raw) {
+        if (ch == '\'') {
+            escaped += "''";
+        } else {
+            escaped += ch;
+        }
+    }
+    escaped += "'";
+    return escaped;
+}
+
+std::string Interpreter::build_insert_sql(const std::string& table, const Value& data, const SourceLocation& loc) const {
+    Value object = data;
+    if (object.type == ValueType::STRING || object.type == ValueType::BYTES) {
+        object = parse_json(object.str_val, loc);
+    }
+    if (object.type != ValueType::OBJECT) {
+        throw TypeError("SQL insert expects a JSON object", loc);
+    }
+    if (object.obj_val.empty()) {
+        throw RuntimeError("SQL insert object cannot be empty", loc);
+    }
+
+    std::ostringstream columns;
+    std::ostringstream values;
+    bool first = true;
+    for (const auto& [key, value] : object.obj_val) {
+        if (!first) {
+            columns << ", ";
+            values << ", ";
+        }
+        columns << escape_sql_identifier(key, loc);
+        values << sql_literal(value);
+        first = false;
+    }
+
+    return "INSERT INTO " + escape_sql_identifier(table, loc) +
+           " (" + columns.str() + ") VALUES (" + values.str() + ")";
+}
+
+void Interpreter::append_sql_statement(const std::string& statement, const SourceLocation& loc) const {
+    if (sql_output_path.empty()) {
+        throw RuntimeError("Open SQL output first with sql::open(\"database.sql\")", loc);
+    }
+
+    std::ofstream file(sql_output_path, std::ios::out | std::ios::app);
+    if (!file.is_open()) {
+        throw RuntimeError("Failed to open SQL output: " + sql_output_path, loc);
+    }
+
+    file << statement;
+    if (statement.empty() || statement.back() != ';') {
+        file << ";";
+    }
+    file << "\n";
+    file.close();
+}
+
+Value Interpreter::execute_sql_builtin(const std::string& name, const std::vector<Value>& args,
+                                       const SourceLocation& loc) {
+    if (name == "sql::open" || name == "sql::connect") {
+        if (args.size() != 1) {
+            throw RuntimeError("Builtin '" + name + "' expects 1 argument", loc);
+        }
+        if (args[0].type != ValueType::STRING && args[0].type != ValueType::BYTES) {
+            throw TypeError("SQL output path must be a string", loc);
+        }
+
+        sql_output_path = args[0].str_val;
+        std::ofstream file(sql_output_path, std::ios::out | std::ios::app);
+        if (!file.is_open()) {
+            throw RuntimeError("Failed to open SQL output: " + sql_output_path, loc);
+        }
+        file.close();
+        return Value::Bool(true);
+    }
+
+    if (name == "sql::exec") {
+        if (args.size() != 1) {
+            throw RuntimeError("Builtin 'sql::exec' expects 1 argument", loc);
+        }
+        if (args[0].type != ValueType::STRING && args[0].type != ValueType::BYTES) {
+            throw TypeError("SQL query must be a string", loc);
+        }
+        append_sql_statement(args[0].str_val, loc);
+        return Value(args[0].str_val);
+    }
+
+    if (name == "sql::table" || name == "orm::table") {
+        if (args.size() != 2) {
+            throw RuntimeError("Builtin '" + name + "' expects table and columns", loc);
+        }
+        if (args[0].type != ValueType::STRING && args[0].type != ValueType::BYTES) {
+            throw TypeError("SQL table name must be a string", loc);
+        }
+        if (args[1].type != ValueType::STRING && args[1].type != ValueType::BYTES) {
+            throw TypeError("SQL table columns must be a string", loc);
+        }
+
+        std::string query = "CREATE TABLE IF NOT EXISTS " +
+                            escape_sql_identifier(args[0].str_val, loc) +
+                            " (" + args[1].str_val + ")";
+        append_sql_statement(query, loc);
+        return Value(query);
+    }
+
+    if (name == "sql::insert" || name == "orm::save") {
+        if (args.size() != 2) {
+            throw RuntimeError("Builtin '" + name + "' expects table and data", loc);
+        }
+        if (args[0].type != ValueType::STRING && args[0].type != ValueType::BYTES) {
+            throw TypeError("SQL table name must be a string", loc);
+        }
+
+        std::string query = build_insert_sql(args[0].str_val, args[1], loc);
+        append_sql_statement(query, loc);
+        return Value(query);
+    }
+
+    throw RuntimeError("Unknown SQL builtin: " + name, loc);
+}
+
 std::string Interpreter::normalize_log_level(const std::string& level) const {
     size_t start = 0;
     while (start < level.size() && std::isspace(static_cast<unsigned char>(level[start]))) {
@@ -444,11 +683,17 @@ bool Interpreter::is_known_log_level(const std::string& level) const {
 
 std::string Interpreter::log_level_from_builtin(const std::string& name) const {
     if (name == "log_trace") return "TRACE";
+    if (name == "log::trace") return "TRACE";
     if (name == "log_debug") return "DEBUG";
+    if (name == "log::debug") return "DEBUG";
     if (name == "log_notice") return "NOTICE";
+    if (name == "log::notice") return "NOTICE";
     if (name == "log_warn" || name == "log_warning") return "WARN";
+    if (name == "log::warn" || name == "log::warning") return "WARN";
     if (name == "log_error") return "ERROR";
+    if (name == "log::error") return "ERROR";
     if (name == "log_critical" || name == "log_critecal" || name == "log_fatal") return "CRITICAL";
+    if (name == "log::critical" || name == "log::critecal" || name == "log::fatal") return "CRITICAL";
     return "INFO";
 }
 
@@ -458,6 +703,20 @@ bool Interpreter::is_log_builtin_name(const std::string& name) const {
            name == "set_log_output" ||
            name == "log_console" ||
            name == "log_file" ||
+           name == "log::output" ||
+           name == "log::set_output" ||
+           name == "log::console" ||
+           name == "log::file" ||
+           name == "log::trace" ||
+           name == "log::debug" ||
+           name == "log::info" ||
+           name == "log::notice" ||
+           name == "log::warn" ||
+           name == "log::warning" ||
+           name == "log::error" ||
+           name == "log::critical" ||
+           name == "log::critecal" ||
+           name == "log::fatal" ||
            name == "log_trace" ||
            name == "log_debug" ||
            name == "log_info" ||
@@ -500,20 +759,21 @@ Value Interpreter::set_log_output(const Value& arg, const SourceLocation& loc) {
 
 Value Interpreter::execute_log_builtin(const std::string& name, const std::vector<Value>& args,
                                        const SourceLocation& loc) {
-    if (name == "log_console") {
+    if (name == "log_console" || name == "log::console") {
         if (!args.empty()) {
             throw RuntimeError("Builtin 'log_console' expects 0 arguments", loc);
         }
         log_output = "console";
         return Value::Bool(true);
     }
-    if (name == "log_file") {
+    if (name == "log_file" || name == "log::file") {
         if (args.size() != 1) {
             throw RuntimeError("Builtin 'log_file' expects 1 argument", loc);
         }
         return open_log_path(args[0], loc);
     }
-    if (name == "log_output" || name == "set_log_output") {
+    if (name == "log_output" || name == "set_log_output" ||
+        name == "log::output" || name == "log::set_output") {
         if (args.size() != 1) {
             throw RuntimeError("Builtin '" + name + "' expects 1 argument", loc);
         }
@@ -913,6 +1173,11 @@ void Interpreter::execute_statement(const std::shared_ptr<AstNode>& stmt, std::m
         return;
     }
 
+    if (auto builtin = std::dynamic_pointer_cast<BuiltinCallExpr>(stmt)) {
+        eval(builtin, locals);
+        return;
+    }
+
     if (auto ret = std::dynamic_pointer_cast<ReturnStmt>(stmt)) {
         throw FunctionReturn{ret->expr ? eval(ret->expr, locals) : Value(1LL), ret->expr != nullptr};
     }
@@ -1230,6 +1495,34 @@ Value Interpreter::eval(const std::shared_ptr<AstNode>& node, const std::map<std
     if (!node) return Value();
     if (auto lit = std::dynamic_pointer_cast<Literal>(node)) return lit->value;
     if (auto builtin = std::dynamic_pointer_cast<BuiltinCallExpr>(node)) {
+        if (builtin->name == "read::file") {
+            if (builtin->args.size() != 1) {
+                throw RuntimeError("Builtin 'read::file' expects 1 argument", builtin->location);
+            }
+            Value arg = eval(builtin->args[0], locals);
+            return read_file_path(arg, builtin->location);
+        }
+        if (builtin->name.rfind("json::", 0) == 0) {
+            std::vector<Value> args;
+            for (const auto& arg : builtin->args) {
+                args.push_back(eval(arg, locals));
+            }
+            return execute_json_builtin(builtin->name, args, builtin->location);
+        }
+        if (builtin->name.rfind("request::", 0) == 0) {
+            std::vector<Value> args;
+            for (const auto& arg : builtin->args) {
+                args.push_back(eval(arg, locals));
+            }
+            return execute_request_builtin(builtin->name, args, builtin->location);
+        }
+        if (builtin->name.rfind("sql::", 0) == 0 || builtin->name.rfind("orm::", 0) == 0) {
+            std::vector<Value> args;
+            for (const auto& arg : builtin->args) {
+                args.push_back(eval(arg, locals));
+            }
+            return execute_sql_builtin(builtin->name, args, builtin->location);
+        }
         if (is_log_builtin_name(builtin->name)) {
             std::vector<Value> args;
             for (const auto& arg : builtin->args) {
@@ -1270,16 +1563,7 @@ Value Interpreter::eval(const std::shared_ptr<AstNode>& node, const std::map<std
                 throw RuntimeError("Builtin 'read_file' expects 1 argument", builtin->location);
             }
             Value arg = eval(builtin->args[0], locals);
-            if (arg.type != ValueType::STRING && arg.type != ValueType::BYTES) {
-                throw TypeError("Builtin 'read_file' expects a string path", builtin->location);
-            }
-            std::ifstream file(arg.str_val);
-            if (!file.is_open()) {
-                throw RuntimeError("Failed to open file: " + arg.str_val, builtin->location);
-            }
-            std::string content((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-            file.close();
-            return Value(content);
+            return read_file_path(arg, builtin->location);
         }
         if (builtin->name == "open_log") {
             if (builtin->args.size() != 1) {

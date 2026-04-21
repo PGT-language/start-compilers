@@ -154,10 +154,11 @@ Token Lexer::next_token() {
 
         if (std::isalpha(c) || c == '_') {
             std::string id;
-            while (std::isalnum(peek()) || peek() == '_') id += get();
+            while (std::isalnum(peek()) || peek() == '_' || peek() == '.') id += get();
 
             if (id == "package") return {T_PACKAGE, id, line};
             if (id == "function") return {T_FUNCTION, id, line};
+            if (id == "class") return {T_CLASS, id, line};
             if (id == "print") return {T_PRINT, id, line};
             if (id == "printg") return {T_PRINTG, id, line};
             if (id == "println") return {T_PRINTLN, id, line};

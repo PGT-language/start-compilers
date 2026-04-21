@@ -17,11 +17,30 @@ bool is_builtin_call_name(const std::string& name) {
         "request_path",
         "request_body",
         "request_json",
+        "request::method",
+        "request::path",
+        "request::body",
+        "request::json",
+        "read::file",
         "log",
         "log_output",
         "set_log_output",
         "log_console",
         "log_file",
+        "log::output",
+        "log::set_output",
+        "log::console",
+        "log::file",
+        "log::trace",
+        "log::debug",
+        "log::info",
+        "log::notice",
+        "log::warn",
+        "log::warning",
+        "log::error",
+        "log::critical",
+        "log::critecal",
+        "log::fatal",
         "log_trace",
         "log_debug",
         "log_info",
@@ -31,7 +50,24 @@ bool is_builtin_call_name(const std::string& name) {
         "log_error",
         "log_critical",
         "log_critecal",
-        "log_fatal"
+        "log_fatal",
+        "json::parse",
+        "json::decode",
+        "json::unmarshal",
+        "json::stringify",
+        "json::encode",
+        "json::marshal",
+        "json::write",
+        "json::save",
+        "json::read",
+        "json::object",
+        "sql::open",
+        "sql::connect",
+        "sql::exec",
+        "sql::table",
+        "sql::insert",
+        "orm::table",
+        "orm::save"
     };
 
     for (const auto& builtin_name : names) {
@@ -40,6 +76,20 @@ bool is_builtin_call_name(const std::string& name) {
         }
     }
     return false;
+}
+
+bool is_namespaced_builtin_root(const Token& token) {
+    if (token.type == T_READ) {
+        return true;
+    }
+    if (token.type != T_IDENTIFIER) {
+        return false;
+    }
+    return token.value == "log" ||
+           token.value == "json" ||
+           token.value == "sql" ||
+           token.value == "orm" ||
+           token.value == "request";
 }
 }
 
@@ -307,6 +357,10 @@ std::shared_ptr<AstNode> Parser::parse_statement() {
         pos + 1 < tokens.size() && tokens[pos + 1].type == T_COLON_COLON) {
         return parse_net_op();
     }
+    if (is_namespaced_builtin_root(current()) &&
+        pos + 1 < tokens.size() && tokens[pos + 1].type == T_COLON_COLON) {
+        return parse_namespaced_builtin_call_expr();
+    }
     if (current().type == T_IDENTIFIER && pos + 1 < tokens.size() && tokens[pos + 1].type == T_PLUS) {
         return parse_var_decl();
     }
@@ -419,6 +473,57 @@ std::shared_ptr<BuiltinCallExpr> Parser::parse_builtin_call_expr() {
     return call;
 }
 
+std::shared_ptr<BuiltinCallExpr> Parser::parse_namespaced_builtin_call_expr() {
+    int call_line = current().line;
+    std::string namespace_name = current().value;
+    advance(); // namespace
+
+    if (current().type != T_COLON_COLON) {
+        throw SyntaxError("Expected '::' after namespace '" + namespace_name + "', got: " + current().value,
+                         SourceLocation(current().line, 0));
+    }
+    advance(); // ::
+
+    if (current().type != T_IDENTIFIER && current().type != T_FILE) {
+        throw SyntaxError("Expected builtin name after '" + namespace_name + "::', got: " + current().value,
+                         SourceLocation(current().line, 0));
+    }
+
+    std::string builtin_name = namespace_name + "::" + current().value;
+    advance(); // builtin name
+
+    if (!is_builtin_call_name(builtin_name)) {
+        throw SyntaxError("Unknown builtin call: '" + builtin_name + "'",
+                         SourceLocation(call_line, 0));
+    }
+
+    if (current().type != T_LPAREN) {
+        throw SyntaxError("Expected '(' after builtin '" + builtin_name + "', got: " + current().value,
+                         SourceLocation(current().line, 0));
+    }
+    advance(); // (
+
+    auto call = std::make_shared<BuiltinCallExpr>();
+    call->location = SourceLocation(call_line, 0);
+    call->name = builtin_name;
+
+    if (current().type != T_RPAREN) {
+        call->args.push_back(parse_expr());
+        while (!is_eof() && current().type == T_COMMA) {
+            advance(); // ,
+            call->args.push_back(parse_expr());
+        }
+    }
+
+    if (is_eof() || current().type != T_RPAREN) {
+        throw SyntaxError("Expected ')' after builtin call arguments, got: " + current().value,
+                         SourceLocation(current().line, 0));
+    }
+    advance(); // )
+
+    return call;
+}
+
 std::shared_ptr<AstNode> Parser::parse_primary() {
     if (is_eof()) return nullptr;
     if (current().type == T_NUMBER) {
@@ -451,6 +556,10 @@ std::shared_ptr<AstNode> Parser::parse_primary() {
     if (current().type == T_IDENTIFIER && is_builtin_call_name(current().value) &&
         pos + 1 < tokens.size() && tokens[pos + 1].type == T_LPAREN) {
         return parse_builtin_call_expr();
+    }
+    if (is_namespaced_builtin_root(current()) &&
+        pos + 1 < tokens.size() && tokens[pos + 1].type == T_COLON_COLON) {
+        return parse_namespaced_builtin_call_expr();
     }
     if (current().type == T_IDENTIFIER || current().type == T_INPUT) {
         auto id = std::make_shared<Identifier>();

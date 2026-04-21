@@ -22,6 +22,9 @@ int main(int argc, char** argv) {
         std::cout << "  pgt run <file.pgt>      — Run PGT program\n";
         std::cout << "  pgt run <file.pgt> --debug — Run with debug output\n";
         std::cout << "  pgt generate component <name> — Generate a PGT component\n";
+        std::cout << "  pgt generate file <path> [package] — Generate a PGT file\n";
+        std::cout << "  pgt generate model <name> [field:type ...] — Generate an ORM model\n";
+        std::cout << "  pgt generate class <name> [field:type ...] — Alias for model\n";
         return 0;
     }
 
@@ -35,10 +38,14 @@ int main(int argc, char** argv) {
         std::cout << "  run <file.pgt>          — Execute .pgt file\n";
         std::cout << "  run <file.pgt> --debug  — Execute with debug info\n\n";
         std::cout << "  generate component <name> — Generate a PGT component\n";
+        std::cout << "  generate file <path> [package] — Generate a PGT file\n";
+        std::cout << "  generate model <name> [field:type ...] — Generate an ORM model\n";
+        std::cout << "  generate class <name> [field:type ...] — Alias for model\n";
         std::cout << "  history                 — Show history of commands\n";
         std::cout << "Example:\n";
         std::cout << "  ./pgt run test.pgt\n";
         std::cout << "  ./pgt generate component logging\n";
+        std::cout << "  ./pgt generate model user name:string email:string\n";
         return 0;
     }
 

@@ -27,6 +27,20 @@ struct FunctionDef : AstNode {
     bool has_return_one = false;  // Есть ли return 1 в функции
 };
 
+struct OrmField {
+    std::string name;
+    std::string db_type;
+    int size = 0;
+    bool primary_key = false;
+    SourceLocation location;
+};
+
+struct ClassDef : AstNode {
+    std::string name;
+    std::string base;
+    std::vector<OrmField> fields;
+};
+
 struct VarDecl : AstNode {
     std::string name;
     std::string type_name;

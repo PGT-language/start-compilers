@@ -18,6 +18,8 @@ class Parser {
     void advance();
 
     std::shared_ptr<FunctionDef> parse_function();
+    std::shared_ptr<ClassDef> parse_class();
+    OrmField parse_orm_field();
     std::shared_ptr<AstNode> parse_statement();
     std::shared_ptr<VarDecl> parse_var_decl();
     std::shared_ptr<AstNode> parse_expr();
@@ -26,6 +28,7 @@ class Parser {
     std::shared_ptr<AstNode> parse_mul_div();
     std::shared_ptr<AstNode> parse_primary();
     std::shared_ptr<BuiltinCallExpr> parse_builtin_call_expr();
+    std::shared_ptr<BuiltinCallExpr> parse_namespaced_builtin_call_expr();
     std::shared_ptr<IfStmt> parse_if();
     std::shared_ptr<WhileStmt> parse_while();
     std::shared_ptr<PrintStmt> parse_print();
