@@ -56,6 +56,7 @@ class Interpreter {
     Value parse_json(const std::string& json_str, const SourceLocation& loc) const;
     std::string stringify_json(const Value& value) const;
     std::string normalize_log_level(const std::string& level) const;
+    bool is_known_log_level(const std::string& level) const;
     std::string log_level_from_builtin(const std::string& name) const;
     bool is_log_builtin_name(const std::string& name) const;
     Value execute_log_builtin(const std::string& name, const std::vector<Value>& args, const SourceLocation& loc);
