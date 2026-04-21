@@ -227,12 +227,14 @@ int main(int argc, char** argv) {
             loaded_files.insert(current_file);
         }
 
-        // Проверяем, что все импортированные функции существуют в импортируемых файлах
-        std::map<std::string, std::set<std::string>> file_functions;  // файл -> множество функций
+        // Проверяем, что все импортированные символы существуют в импортируемых файлах
+        std::map<std::string, std::set<std::string>> file_symbols;  // файл -> функции и классы
         for (const auto& [file, ast] : file_asts) {
             for (const auto& node : ast) {
                 if (auto func = std::dynamic_pointer_cast<FunctionDef>(node)) {
-                    file_functions[file].insert(func->name);
+                    file_symbols[file].insert(func->name);
+                } else if (auto klass = std::dynamic_pointer_cast<ClassDef>(node)) {
+                    file_symbols[file].insert(klass->name);
                 }
             }
         }
@@ -248,7 +250,7 @@ int main(int argc, char** argv) {
                         return 1;
                     }
                     const std::string& current_package = file_packages[file];
-                    std::set<std::string> available_funcs;
+                    std::set<std::string> available_symbols;
                     for (const auto& import_file : resolved_import.files) {
                         if (!file_asts.count(import_file)) {
                             std::cerr << "Error: Cannot find imported file: " << import_file << "\n";
@@ -271,13 +273,13 @@ int main(int argc, char** argv) {
                             std::cerr << err.get_traceback();
                             return 1;
                         }
-                        if (file_functions.count(import_file)) {
-                            available_funcs.insert(file_functions[import_file].begin(), file_functions[import_file].end());
+                        if (file_symbols.count(import_file)) {
+                            available_symbols.insert(file_symbols[import_file].begin(), file_symbols[import_file].end());
                         }
                     }
-                    for (const auto& func_name : import->import_names) {
-                        if (!available_funcs.count(func_name)) {
-                            SemanticError err("Function '" + func_name + "' not found in import '" + import->file_path + "'",
+                    for (const auto& symbol_name : import->import_names) {
+                        if (!available_symbols.count(symbol_name)) {
+                            SemanticError err("Symbol '" + symbol_name + "' not found in import '" + import->file_path + "'",
                                              SourceLocation(import->location.line, import->location.column, file));
                             std::cerr << err.get_traceback();
                             return 1;

@@ -14,7 +14,9 @@ package cli // библиотечный пакет, лучше держать в
 
 from // путь к файлу import // импортируем что то из файла {реализовано}
 
-function(что то) // как в go {реализовано}
+from "models/user" import User // импорт ORM class/model без функций {реализовано}
+
+function(что то) // как в js/java/ts {реализовано}
 
 function(main) // вход в програму {реализовано}
 
