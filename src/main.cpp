@@ -119,12 +119,17 @@ int generate_component_command(int argc, char** argv) {
     std::filesystem::path component_dir = std::filesystem::path("components") / name;
     std::filesystem::path component_file = component_dir / (name + ".pgt");
 
-    if (std::filesystem::exists(component_file)) {
-        std::cerr << "Component already exists: " << component_file.string() << "\n";
+    try {
+        if (std::filesystem::exists(component_file)) {
+            std::cerr << "Component already exists: " << component_file.string() << "\n";
+            return 1;
+        }
+
+        std::filesystem::create_directories(component_dir);
+    } catch (const std::filesystem::filesystem_error& error) {
+        std::cerr << "Error: Cannot prepare component directory: " << error.what() << "\n";
         return 1;
     }
-
-    std::filesystem::create_directories(component_dir);
 
     std::ofstream file(component_file);
     if (!file.is_open()) {
