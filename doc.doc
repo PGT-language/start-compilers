@@ -98,6 +98,14 @@ json_stringify(value) // сериализует объект или массив
 
 read_file("path/to/file") // читает файл и возвращает его содержимое как строку {реализовано}
 
+request_method() // возвращает HTTP метод текущего запроса внутри handler-функции {реализовано}
+
+request_path() // возвращает путь текущего запроса внутри handler-функции {реализовано}
+
+request_body() // возвращает тело текущего HTTP запроса внутри handler-функции {реализовано}
+
+request_json() // парсит тело текущего HTTP запроса как JSON {реализовано}
+
 open_log("path/to/logfile.log") // открывает файл для логирования и переключает вывод логов в файл {реализовано}
 
 log("message") // логирует сообщение с уровнем INFO {реализовано}
@@ -143,6 +151,16 @@ pgt generate component logging // генератор компонента loggin
 pgt g component logging // короткая форма генератора {реализовано}
 
 from "components/logging" import to_file, to_console, debug, info, warn, error, critical // подключение logging-компонента {реализовано}
+
+Пример записи формы в JSON-файл:
+function(api) { {реализовано}
+    if (request_method == "POST") {
+        create::file("messages.json")
+        write::file("messages.json", request_body)
+        return "{\"status\":\"saved\"}"
+    }
+    return 1
+}
 
 Маршруты сервера:
 - GET / : возвращает HTML файл или тело
