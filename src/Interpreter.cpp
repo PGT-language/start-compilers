@@ -403,10 +403,109 @@ std::string Interpreter::response_body_from_value(const Value& value) const {
     return value.to_string();
 }
 
+std::string Interpreter::normalize_log_level(const std::string& level) const {
+    size_t start = 0;
+    while (start < level.size() && std::isspace(static_cast<unsigned char>(level[start]))) {
+        start++;
+    }
+
+    size_t end = level.size();
+    while (end > start && std::isspace(static_cast<unsigned char>(level[end - 1]))) {
+        end--;
+    }
+
+    std::string normalized;
+    for (size_t i = start; i < end; ++i) {
+        char ch = level[i];
+        if (ch == '-') {
+            ch = '_';
+        }
+        normalized += static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+    }
+
+    if (normalized.empty()) return "INFO";
+    if (normalized == "WARNING") return "WARN";
+    if (normalized == "ERR") return "ERROR";
+    if (normalized == "FATAL") return "CRITICAL";
+    if (normalized == "CRIT" || normalized == "CRITECAL") return "CRITICAL";
+    return normalized;
+}
+
+std::string Interpreter::log_level_from_builtin(const std::string& name) const {
+    if (name == "log_trace") return "TRACE";
+    if (name == "log_debug") return "DEBUG";
+    if (name == "log_notice") return "NOTICE";
+    if (name == "log_warn" || name == "log_warning") return "WARN";
+    if (name == "log_error") return "ERROR";
+    if (name == "log_critical" || name == "log_critecal" || name == "log_fatal") return "CRITICAL";
+    return "INFO";
+}
+
+bool Interpreter::is_log_builtin_name(const std::string& name) const {
+    return name == "log" ||
+           name == "log_trace" ||
+           name == "log_debug" ||
+           name == "log_info" ||
+           name == "log_notice" ||
+           name == "log_warn" ||
+           name == "log_warning" ||
+           name == "log_error" ||
+           name == "log_critical" ||
+           name == "log_critecal" ||
+           name == "log_fatal";
+}
+
+Value Interpreter::execute_log_builtin(const std::string& name, const std::vector<Value>& args,
+                                       const SourceLocation& loc) {
+    if (args.empty()) {
+        throw RuntimeError("Builtin '" + name + "' expects at least 1 argument", loc);
+    }
+
+    std::string level = log_level_from_builtin(name);
+    size_t message_start = 0;
+    if (name == "log" && args.size() > 1) {
+        if (args[0].type != ValueType::STRING && args[0].type != ValueType::BYTES) {
+            throw TypeError("Builtin 'log' level must be a string", loc);
+        }
+        level = normalize_log_level(args[0].str_val);
+        message_start = 1;
+    }
+
+    std::string message;
+    for (size_t i = message_start; i < args.size(); ++i) {
+        if (!message.empty()) {
+            message += " ";
+        }
+        message += args[i].to_string();
+    }
+
+    log_message(message, level);
+    return Value::Bool(true);
+}
+
+Value Interpreter::open_log_path(const Value& arg, const SourceLocation& loc) {
+    if (arg.type != ValueType::STRING && arg.type != ValueType::BYTES) {
+        throw TypeError("Builtin 'open_log' expects a string path", loc);
+    }
+    if (log_file.is_open()) {
+        log_file.close();
+    }
+    log_file.open(arg.str_val, std::ios::app);
+    if (!log_file.is_open()) {
+        throw RuntimeError("Failed to open log file: " + arg.str_val, loc);
+    }
+    return Value::Bool(true);
+}
+
 void Interpreter::run_http_server(const std::string& host, long long port, const std::string& body, const SourceLocation& loc) {
     if (port <= 0 || port > 65535) {
         throw RuntimeError("Server port must be between 1 and 65535", loc);
     }
+
+    std::string display_host = host.empty() ? "0.0.0.0" : host;
+    std::string server_url = "http://" + display_host + ":" + std::to_string(port);
+    log_message("Server starting on " + server_url, "INFO");
+    log_message("Registered HTTP routes: " + std::to_string(http_routes.size()), "DEBUG");
 
     struct addrinfo hints {};
     std::memset(&hints, 0, sizeof(hints));
@@ -448,21 +547,24 @@ void Interpreter::run_http_server(const std::string& host, long long port, const
         throw RuntimeError("Failed to listen on local server", loc);
     }
 
-    std::cout << "PGT server listening on http://" << (host.empty() ? "0.0.0.0" : host)
-              << ":" << port << std::endl;
+    log_message("Server listening on " + server_url, "INFO");
 
     while (true) {
         int client_fd = accept(server_fd, nullptr, nullptr);
         if (client_fd < 0) {
+            log_message("Failed to accept client connection", "WARN");
             continue;
         }
+        log_message("Accepted client connection", "DEBUG");
 
         char buffer[8192] = {0};
         ssize_t received = recv(client_fd, buffer, sizeof(buffer) - 1, 0);
         if (received <= 0) {
+            log_message("Client closed connection before sending a request", "DEBUG");
             close(client_fd);
             continue;
         }
+        log_message("Received request bytes: " + std::to_string(received), "DEBUG");
         std::string request(buffer, received);
 
         std::string method, path;
@@ -714,6 +816,17 @@ void Interpreter::execute_statement(const std::shared_ptr<AstNode>& stmt, std::m
         std::vector<Value> args;
         for (const auto& arg : call->args) {
             args.push_back(eval(arg, locals));
+        }
+        if (is_log_builtin_name(call->func_name)) {
+            execute_log_builtin(call->func_name, args, call->location);
+            return;
+        }
+        if (call->func_name == "open_log") {
+            if (args.size() != 1) {
+                throw RuntimeError("Builtin 'open_log' expects 1 argument", call->location);
+            }
+            open_log_path(args[0], call->location);
+            return;
         }
         if (DEBUG) {
             std::cout << "[DEBUG] Calling " << call->func_name << " with " << args.size() << " args" << std::endl;
@@ -1044,6 +1157,13 @@ Value Interpreter::eval(const std::shared_ptr<AstNode>& node, const std::map<std
     if (!node) return Value();
     if (auto lit = std::dynamic_pointer_cast<Literal>(node)) return lit->value;
     if (auto builtin = std::dynamic_pointer_cast<BuiltinCallExpr>(node)) {
+        if (is_log_builtin_name(builtin->name)) {
+            std::vector<Value> args;
+            for (const auto& arg : builtin->args) {
+                args.push_back(eval(arg, locals));
+            }
+            return execute_log_builtin(builtin->name, args, builtin->location);
+        }
         if (builtin->name == "protocol") {
             if (builtin->args.size() != 1) {
                 throw RuntimeError("Builtin 'protocol' expects 1 argument", builtin->location);
@@ -1093,17 +1213,7 @@ Value Interpreter::eval(const std::shared_ptr<AstNode>& node, const std::map<std
                 throw RuntimeError("Builtin 'open_log' expects 1 argument", builtin->location);
             }
             Value arg = eval(builtin->args[0], locals);
-            if (arg.type != ValueType::STRING && arg.type != ValueType::BYTES) {
-                throw TypeError("Builtin 'open_log' expects a string path", builtin->location);
-            }
-            if (log_file.is_open()) {
-                log_file.close();
-            }
-            log_file.open(arg.str_val, std::ios::app);
-            if (!log_file.is_open()) {
-                throw RuntimeError("Failed to open log file: " + arg.str_val, builtin->location);
-            }
-            return Value::Bool(true);
+            return open_log_path(arg, builtin->location);
         }
         if (builtin->name == "request_method") {
             if (!builtin->args.empty()) {
@@ -1240,7 +1350,7 @@ void Interpreter::log_message(const std::string& message, const std::string& lev
     std::time_t now = std::time(nullptr);
     char time_str[20];
     std::strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", std::localtime(&now));
-    std::string log_entry = "[" + std::string(time_str) + "] [" + level + "] " + message;
+    std::string log_entry = "[" + std::string(time_str) + "] [" + normalize_log_level(level) + "] " + message;
     std::cout << log_entry << std::endl;
     if (log_file.is_open()) {
         log_file << log_entry << std::endl;

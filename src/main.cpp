@@ -11,6 +11,139 @@
 #include <fstream>
 #include <set>
 #include <map>
+#include <algorithm>
+#include <cctype>
+#include <filesystem>
+#include <sstream>
+
+namespace {
+std::string normalize_component_name(const std::string& raw_name) {
+    std::string name;
+    bool previous_was_separator = false;
+
+    for (char raw_ch : raw_name) {
+        unsigned char ch = static_cast<unsigned char>(raw_ch);
+        if (std::isalnum(ch)) {
+            name += static_cast<char>(std::tolower(ch));
+            previous_was_separator = false;
+        } else if (raw_ch == '_' || raw_ch == '-' || raw_ch == ' ') {
+            if (!name.empty() && !previous_was_separator) {
+                name += '_';
+                previous_was_separator = true;
+            }
+        }
+    }
+
+    while (!name.empty() && name.back() == '_') {
+        name.pop_back();
+    }
+
+    if (name.empty()) {
+        name = "component";
+    }
+    if (std::isdigit(static_cast<unsigned char>(name[0]))) {
+        name = "component_" + name;
+    }
+    return name;
+}
+
+std::string logging_component_source() {
+    return
+        "package logging\n"
+        "\n"
+        "function(open, path + string) {\n"
+        "    open_log(path)\n"
+        "    return 1\n"
+        "}\n"
+        "\n"
+        "function(trace, message + string) {\n"
+        "    log_trace(message)\n"
+        "    return 1\n"
+        "}\n"
+        "\n"
+        "function(debug, message + string) {\n"
+        "    log_debug(message)\n"
+        "    return 1\n"
+        "}\n"
+        "\n"
+        "function(info, message + string) {\n"
+        "    log_info(message)\n"
+        "    return 1\n"
+        "}\n"
+        "\n"
+        "function(warn, message + string) {\n"
+        "    log_warn(message)\n"
+        "    return 1\n"
+        "}\n"
+        "\n"
+        "function(error, message + string) {\n"
+        "    log_error(message)\n"
+        "    return 1\n"
+        "}\n"
+        "\n"
+        "function(critical, message + string) {\n"
+        "    log_critical(message)\n"
+        "    return 1\n"
+        "}\n";
+}
+
+std::string generic_component_source(const std::string& name) {
+    std::ostringstream source;
+    source << "package " << name << "\n"
+           << "\n"
+           << "function(init) {\n"
+           << "    log_info(\"Component " << name << " initialized\")\n"
+           << "    return 1\n"
+           << "}\n"
+           << "\n"
+           << "function(render) {\n"
+           << "    return \"" << name << " component\"\n"
+           << "    return 1\n"
+           << "}\n";
+    return source.str();
+}
+
+int generate_component_command(int argc, char** argv) {
+    if (argc < 4) {
+        std::cerr << "Usage: pgt generate component <name>\n";
+        return 1;
+    }
+
+    std::string kind = argv[2];
+    if (kind != "component" && kind != "c") {
+        std::cerr << "Unknown generator: " << kind << "\n";
+        std::cerr << "Usage: pgt generate component <name>\n";
+        return 1;
+    }
+
+    std::string name = normalize_component_name(argv[3]);
+    std::filesystem::path component_dir = std::filesystem::path("components") / name;
+    std::filesystem::path component_file = component_dir / (name + ".pgt");
+
+    if (std::filesystem::exists(component_file)) {
+        std::cerr << "Component already exists: " << component_file.string() << "\n";
+        return 1;
+    }
+
+    std::filesystem::create_directories(component_dir);
+
+    std::ofstream file(component_file);
+    if (!file.is_open()) {
+        std::cerr << "Error: Cannot create component file: " << component_file.string() << "\n";
+        return 1;
+    }
+
+    if (name == "logging") {
+        file << logging_component_source();
+    } else {
+        file << generic_component_source(name);
+    }
+    file.close();
+
+    std::cout << "Created component: " << component_file.string() << "\n";
+    return 0;
+}
+}
 
 int main(int argc, char** argv) {
     if (argc < 2) {
@@ -20,6 +153,7 @@ int main(int argc, char** argv) {
         std::cout << "  pgt version             — Show version\n";
         std::cout << "  pgt run <file.pgt>      — Run PGT program\n";
         std::cout << "  pgt run <file.pgt> --debug — Run with debug output\n";
+        std::cout << "  pgt generate component <name> — Generate a PGT component\n";
         return 0;
     }
 
@@ -32,9 +166,11 @@ int main(int argc, char** argv) {
         std::cout << "  version                 — Show compiler version\n";
         std::cout << "  run <file.pgt>          — Execute .pgt file\n";
         std::cout << "  run <file.pgt> --debug  — Execute with debug info\n\n";
+        std::cout << "  generate component <name> — Generate a PGT component\n";
         std::cout << "  history                 — Show history of commands\n";
         std::cout << "Example:\n";
         std::cout << "  ./pgt run test.pgt\n";
+        std::cout << "  ./pgt generate component logging\n";
         return 0;
     }
 
@@ -43,6 +179,10 @@ int main(int argc, char** argv) {
         std::cout << "Built on December 20, 2025\n";
         std::cout << "Author: pabla\n";
         return 0;
+    }
+
+    if (command == "generate" || command == "g") {
+        return generate_component_command(argc, argv);
     }
 
     if (command == "run") {

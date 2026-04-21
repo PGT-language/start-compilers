@@ -4,6 +4,40 @@
 #include <iostream>
 #include <limits>
 
+namespace {
+bool is_builtin_call_name(const std::string& name) {
+    static const std::vector<std::string> names = {
+        "protocol",
+        "json_parse",
+        "json_stringify",
+        "read_file",
+        "open_log",
+        "request_method",
+        "request_path",
+        "request_body",
+        "request_json",
+        "log",
+        "log_trace",
+        "log_debug",
+        "log_info",
+        "log_notice",
+        "log_warn",
+        "log_warning",
+        "log_error",
+        "log_critical",
+        "log_critecal",
+        "log_fatal"
+    };
+
+    for (const auto& builtin_name : names) {
+        if (name == builtin_name) {
+            return true;
+        }
+    }
+    return false;
+}
+}
+
 void Parser::load_tokens(std::vector<Token> t) {
     tokens = std::move(t);
     pos = 0;
@@ -409,12 +443,7 @@ std::shared_ptr<AstNode> Parser::parse_primary() {
         advance();
         return lit;
     }
-    if (current().type == T_IDENTIFIER &&
-        (current().value == "protocol" || current().value == "json_parse" ||
-         current().value == "json_stringify" || current().value == "read_file" ||
-         current().value == "open_log" || current().value == "request_method" ||
-         current().value == "request_path" || current().value == "request_body" ||
-         current().value == "request_json") &&
+    if (current().type == T_IDENTIFIER && is_builtin_call_name(current().value) &&
         pos + 1 < tokens.size() && tokens[pos + 1].type == T_LPAREN) {
         return parse_builtin_call_expr();
     }

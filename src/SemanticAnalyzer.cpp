@@ -1,6 +1,22 @@
 #include "SemanticAnalyzer.h"
 #include <iostream>
 
+namespace {
+bool is_log_builtin_name(const std::string& name) {
+    return name == "log" ||
+           name == "log_trace" ||
+           name == "log_debug" ||
+           name == "log_info" ||
+           name == "log_notice" ||
+           name == "log_warn" ||
+           name == "log_warning" ||
+           name == "log_error" ||
+           name == "log_critical" ||
+           name == "log_critecal" ||
+           name == "log_fatal";
+}
+}
+
 VarType SemanticAnalyzer::get_value_type(const Value& val) {
     switch (val.type) {
         case ValueType::INT: return VarType::INT;
@@ -71,6 +87,21 @@ VarType SemanticAnalyzer::infer_expr_type(const std::shared_ptr<AstNode>& node) 
         return get_value_type(lit->value);
     }
     if (auto builtin = std::dynamic_pointer_cast<BuiltinCallExpr>(node)) {
+        if (is_log_builtin_name(builtin->name)) {
+            if (builtin->args.empty()) {
+                throw SemanticError("Builtin '" + builtin->name + "' expects at least 1 argument", builtin->location);
+            }
+            if (builtin->name == "log" && builtin->args.size() > 1) {
+                VarType level_type = infer_expr_type(builtin->args[0]);
+                if (level_type != VarType::STRING && level_type != VarType::BYTES && level_type != VarType::UNKNOWN) {
+                    throw TypeError("Builtin 'log' level must be a string", builtin->location);
+                }
+            }
+            for (const auto& arg : builtin->args) {
+                analyze_expr(arg);
+            }
+            return VarType::BOOL;
+        }
         if (builtin->name == "protocol") {
             if (builtin->args.size() != 1) {
                 throw SemanticError("Builtin 'protocol' expects 1 argument", builtin->location);
@@ -433,6 +464,33 @@ void SemanticAnalyzer::analyze_while(const std::shared_ptr<WhileStmt>& while_stm
 }
 
 void SemanticAnalyzer::analyze_call(const std::shared_ptr<CallStmt>& call) {
+    if (is_log_builtin_name(call->func_name)) {
+        if (call->args.empty()) {
+            throw SemanticError("Builtin '" + call->func_name + "' expects at least 1 argument", call->location);
+        }
+        if (call->func_name == "log" && call->args.size() > 1) {
+            VarType level_type = infer_expr_type(call->args[0]);
+            if (level_type != VarType::STRING && level_type != VarType::BYTES && level_type != VarType::UNKNOWN) {
+                throw TypeError("Builtin 'log' level must be a string", call->location);
+            }
+        }
+        for (const auto& arg : call->args) {
+            analyze_expr(arg);
+        }
+        return;
+    }
+
+    if (call->func_name == "open_log") {
+        if (call->args.size() != 1) {
+            throw SemanticError("Builtin 'open_log' expects 1 argument", call->location);
+        }
+        VarType arg_type = infer_expr_type(call->args[0]);
+        if (arg_type != VarType::STRING && arg_type != VarType::BYTES && arg_type != VarType::UNKNOWN) {
+            throw TypeError("Builtin 'open_log' expects a string path", call->location);
+        }
+        return;
+    }
+
     if (!functions.count(call->func_name)) {
         throw UndefinedError(call->func_name, "function", call->location);
     }
