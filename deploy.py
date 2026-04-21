@@ -1,31 +1,42 @@
 import subprocess
 import sys
+import getpass
 
-IMAGE_NAME = "pgt-runtime"
-DOCKER_USER = "yourname"
-TAG = "latest"
 
-FULL_IMAGE = f"{DOCKER_USER}/{IMAGE_NAME}:{TAG}"
+IMAGE_NAME = "pgt-language"
+DOCKER_USER = "pablaofficeal"
+VERSION = "latest"
+
+FULL_LATEST = f"{DOCKER_USER}/{IMAGE_NAME}:latest"
+FULL_VERSION = f"{DOCKER_USER}/{IMAGE_NAME}:{VERSION}"
 
 
 def run(cmd):
-    print(f"[RUN] {cmd}")
+    print(f"\n🚀 {cmd}")
     result = subprocess.run(cmd, shell=True)
     if result.returncode != 0:
-        print(f"[ERROR] Command failed: {cmd}")
+        print(f"\n❌ Ошибка при выполнении: {cmd}")
         sys.exit(1)
 
 
-print("🚀 Building Docker image...")
+print("📦 Build image...")
 run(f"docker build -t {IMAGE_NAME} .")
 
-print("🏷 Tagging image...")
-run(f"docker tag {IMAGE_NAME} {FULL_IMAGE}")
+print("🏷 Tag latest...")
+run(f"docker tag {IMAGE_NAME} {FULL_LATEST}")
 
-print("🔐 Logging into Docker Hub...")
+print("🏷 Tag version...")
+run(f"docker tag {IMAGE_NAME} {FULL_VERSION}")
+
+print("🔐 Login Docker Hub...")
 run("docker login")
 
-print("📦 Pushing image...")
-run(f"docker push {FULL_IMAGE}")
+print("📤 Push latest...")
+run(f"docker push {FULL_LATEST}")
 
-print(f"✅ Done! Image available at: {FULL_IMAGE}")
+print("📤 Push version...")
+run(f"docker push {FULL_VERSION}")
+
+print("\n✅ ГОТОВО")
+print(f"👉 {FULL_LATEST}")
+print(f"👉 {FULL_VERSION}")

@@ -24,7 +24,7 @@ struct InitOptions {
     bool create_nginx = false;
 };
 
-const char* DEFAULT_PGT_DOCKER_IMAGE = "pablaofficeal/pgt:latest";
+const char* DEFAULT_PGT_DOCKER_IMAGE = "pablaofficeal/pgt-language:latest";
 
 std::string trim(const std::string& value) {
     size_t start = 0;
