@@ -16,6 +16,8 @@ from // путь к файлу import // импортируем что то из
 
 from "models/user" import User // импорт ORM class/model без функций {реализовано}
 
+from "../user" import User // импорт соседней ORM модели из models/init -> models/user {реализовано}
+
 function(что то) // как в js/java/ts {реализовано}
 
 function(main) // вход в програму {реализовано}
