@@ -10,6 +10,7 @@
 
 class Interpreter {
     std::map<std::string, std::shared_ptr<FunctionDef>> functions;
+    std::map<std::string, std::shared_ptr<ClassDef>> orm_models;
     std::map<std::string, Value> globals;  // Глобальные переменные
     std::vector<SourceLocation> call_stack;  // Стек вызовов для traceback
     std::map<std::string, std::unique_ptr<std::fstream>> open_files;  // Открытые файлы
@@ -63,6 +64,10 @@ class Interpreter {
     Value execute_sql_builtin(const std::string& name, const std::vector<Value>& args, const SourceLocation& loc);
     std::string escape_sql_identifier(const std::string& identifier, const SourceLocation& loc) const;
     std::string sql_literal(const Value& value) const;
+    std::string orm_table_name(const std::string& model_name) const;
+    std::string orm_sql_type(const OrmField& field) const;
+    std::string create_table_sql(const ClassDef& model) const;
+    std::string model_table_or_name(const std::string& model_or_table) const;
     std::string build_insert_sql(const std::string& table, const Value& data, const SourceLocation& loc) const;
     void append_sql_statement(const std::string& statement, const SourceLocation& loc) const;
     std::string normalize_log_level(const std::string& level) const;

@@ -67,6 +67,7 @@ bool is_builtin_call_name(const std::string& name) {
         "sql::table",
         "sql::insert",
         "orm::table",
+        "orm::migrate",
         "orm::save"
     };
 
@@ -164,6 +165,9 @@ std::vector<std::shared_ptr<AstNode>> Parser::parse_program() {
         } else if (current().type == T_FROM) {
             auto import = parse_import();
             if (import) nodes.push_back(import);
+        } else if (current().type == T_CLASS) {
+            auto klass = parse_class();
+            if (klass) nodes.push_back(klass);
         } else if (current().type == T_FUNCTION) {
             auto func = parse_function();
             if (func) nodes.push_back(func);
@@ -229,6 +233,143 @@ std::vector<std::shared_ptr<AstNode>> Parser::parse_program() {
         }
     }
     return nodes;
+}
+
+std::shared_ptr<ClassDef> Parser::parse_class() {
+    int class_line = current().line;
+    advance(); // class
+
+    if (current().type != T_IDENTIFIER) {
+        throw SyntaxError("Expected class name after 'class'",
+                          SourceLocation(class_line, 0));
+    }
+
+    auto klass = std::make_shared<ClassDef>();
+    klass->location = SourceLocation(class_line, 0);
+    klass->name = current().value;
+    advance(); // class name
+
+    if (current().type == T_LPAREN) {
+        advance(); // (
+        while (!is_eof() && current().type != T_RPAREN) {
+            if (!klass->base.empty()) {
+                klass->base += " ";
+            }
+            klass->base += current().value;
+            advance();
+        }
+        if (current().type != T_RPAREN) {
+            throw SyntaxError("Expected ')' after class base",
+                              SourceLocation(current().line, 0));
+        }
+        advance(); // )
+    }
+
+    if (current().type != T_LBRACE) {
+        throw SyntaxError("Expected '{' after class declaration",
+                          SourceLocation(current().line, 0));
+    }
+    advance(); // {
+
+    while (!is_eof() && current().type != T_RBRACE) {
+        klass->fields.push_back(parse_orm_field());
+    }
+
+    if (current().type != T_RBRACE) {
+        throw SyntaxError("Expected '}' to close class '" + klass->name + "'",
+                          klass->location);
+    }
+    advance(); // }
+
+    return klass;
+}
+
+OrmField Parser::parse_orm_field() {
+    if (current().type != T_IDENTIFIER) {
+        throw SyntaxError("Expected ORM field name in class body",
+                          SourceLocation(current().line, 0));
+    }
+
+    OrmField field;
+    field.location = SourceLocation(current().line, 0);
+    field.name = current().value;
+    advance(); // field name
+
+    if (current().type != T_EQUAL) {
+        throw SyntaxError("Expected '=' after ORM field name '" + field.name + "'",
+                          SourceLocation(current().line, 0));
+    }
+    advance(); // =
+
+    if (current().type != T_IDENTIFIER) {
+        throw SyntaxError("Expected db.Column(...) for ORM field '" + field.name + "'",
+                          SourceLocation(current().line, 0));
+    }
+    std::string column_call = current().value;
+    if (column_call != "db.Column" && column_call != "orm.Column") {
+        throw SyntaxError("Expected db.Column(...) for ORM field '" + field.name + "'",
+                          SourceLocation(current().line, 0));
+    }
+    advance(); // db.Column
+
+    if (current().type != T_LPAREN) {
+        throw SyntaxError("Expected '(' after db.Column",
+                          SourceLocation(current().line, 0));
+    }
+    advance(); // (
+
+    if (current().type != T_IDENTIFIER) {
+        throw SyntaxError("Expected db type in db.Column(...)",
+                          SourceLocation(current().line, 0));
+    }
+    field.db_type = current().value;
+    advance(); // db.Integer, db.String, ...
+
+    if (current().type == T_LPAREN) {
+        advance(); // (
+        if (current().type == T_NUMBER) {
+            field.size = std::stoi(current().value);
+            advance();
+        }
+        if (current().type != T_RPAREN) {
+            throw SyntaxError("Expected ')' after db type size",
+                              SourceLocation(current().line, 0));
+        }
+        advance(); // )
+    }
+
+    while (!is_eof() && current().type != T_RPAREN) {
+        if (current().type == T_COMMA) {
+            advance();
+            continue;
+        }
+        if (current().type == T_NUMBER) {
+            field.size = std::stoi(current().value);
+            advance();
+            continue;
+        }
+        if (current().type == T_IDENTIFIER && current().value == "primary_key") {
+            field.primary_key = true;
+            advance();
+            if (current().type == T_EQUAL) {
+                advance();
+                if (current().type == T_TRUE || current().type == T_FALSE) {
+                    field.primary_key = current().type == T_TRUE;
+                    advance();
+                }
+            }
+            continue;
+        }
+        advance();
+    }
+
+    if (current().type != T_RPAREN) {
+        throw SyntaxError("Expected ')' after db.Column(...)",
+                          SourceLocation(current().line, 0));
+    }
+    advance(); // )
+
+    return field;
 }
 
 std::shared_ptr<FunctionDef> Parser::parse_function() {

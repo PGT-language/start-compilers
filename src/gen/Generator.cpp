@@ -38,19 +38,48 @@ std::string normalize_component_name(const std::string& raw_name) {
     return name;
 }
 
-std::string sql_type_for(const std::string& pgt_type) {
-    if (pgt_type == "int") return "INTEGER";
-    if (pgt_type == "float") return "REAL";
-    if (pgt_type == "bool") return "INTEGER";
-    if (pgt_type == "bytes") return "BLOB";
-    return "TEXT";
+std::string class_name_for(const std::string& name) {
+    std::string class_name;
+    bool uppercase_next = true;
+
+    for (char raw_ch : name) {
+        if (raw_ch == '_') {
+            uppercase_next = true;
+            continue;
+        }
+
+        unsigned char ch = static_cast<unsigned char>(raw_ch);
+        if (uppercase_next) {
+            class_name += static_cast<char>(std::toupper(ch));
+            uppercase_next = false;
+        } else {
+            class_name += static_cast<char>(std::tolower(ch));
+        }
+    }
+
+    if (class_name.empty()) {
+        return "Model";
+    }
+    if (std::isdigit(static_cast<unsigned char>(class_name[0]))) {
+        return "Model" + class_name;
+    }
+    return class_name;
 }
 
-std::string pluralize_table_name(const std::string& name) {
-    if (!name.empty() && name.back() == 's') {
-        return name;
+std::string orm_column_type_for(const std::string& pgt_type) {
+    std::string type;
+    for (char raw_ch : pgt_type) {
+        type += static_cast<char>(std::tolower(static_cast<unsigned char>(raw_ch)));
     }
-    return name + "s";
+
+    if (type == "int" || type == "integer") return "db.Integer";
+    if (type == "float" || type == "real") return "db.Float";
+    if (type == "bool" || type == "boolean") return "db.Boolean";
+    if (type == "bytes" || type == "blob") return "db.Bytes";
+    if (type.rfind("string(", 0) == 0 && type.back() == ')') {
+        return "db.String" + pgt_type.substr(6);
+    }
+    return "db.String(100)";
 }
 
 std::string logging_component_source() {
@@ -135,9 +164,9 @@ std::string file_source(const std::string& package_name) {
 }
 
 std::string model_source(const std::string& name, char** argv, int argc) {
-    std::string table_name = pluralize_table_name(name);
-    std::ostringstream columns;
-    columns << "id INTEGER PRIMARY KEY";
+    std::string class_name = class_name_for(name);
+    std::ostringstream fields;
+    fields << "    id = db.Column(db.Integer, primary_key=True)\n";
 
     for (int i = 4; i < argc; ++i) {
         std::string field = argv[i];
@@ -147,19 +176,23 @@ std::string model_source(const std::string& name, char** argv, int argc) {
         if (field_name.empty() || field_name == "id") {
             continue;
         }
-        columns << ", " << field_name << " " << sql_type_for(field_type);
+        fields << "    " << field_name << " = db.Column(" << orm_column_type_for(field_type) << ")\n";
     }
 
     std::ostringstream source;
     source << "package " << name << "\n"
            << "\n"
+           << "class " << class_name << "(db.Model) {\n"
+           << fields.str()
+           << "}\n"
+           << "\n"
            << "function(migrate) {\n"
-           << "    sql::table(\"" << table_name << "\", \"" << columns.str() << "\")\n"
+           << "    orm::migrate(\"" << class_name << "\")\n"
            << "    return 1\n"
            << "}\n"
            << "\n"
            << "function(save, data + object) {\n"
-           << "    orm::save(\"" << table_name << "\", data)\n"
+           << "    orm::save(\"" << class_name << "\", data)\n"
            << "    return 1\n"
            << "}\n";
     return source.str();

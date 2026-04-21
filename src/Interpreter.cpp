@@ -531,6 +531,61 @@ std::string Interpreter::sql_literal(const Value& value) const {
     return escaped;
 }
 
+std::string Interpreter::orm_table_name(const std::string& model_name) const {
+    std::string table_name;
+    for (char ch : model_name) {
+        table_name += static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    if (!table_name.empty() && table_name.back() != 's') {
+        table_name += "s";
+    }
+    return table_name;
+}
+
+std::string Interpreter::orm_sql_type(const OrmField& field) const {
+    std::string type_name = field.db_type;
+    size_t dot = type_name.rfind('.');
+    if (dot != std::string::npos) {
+        type_name = type_name.substr(dot + 1);
+    }
+
+    if (type_name == "Integer" || type_name == "Int") {
+        return field.primary_key ? "INTEGER PRIMARY KEY" : "INTEGER";
+    }
+    if (type_name == "Float" || type_name == "Real") {
+        return "REAL";
+    }
+    if (type_name == "Boolean" || type_name == "Bool") {
+        return "INTEGER";
+    }
+    if (type_name == "Bytes" || type_name == "Blob") {
+        return "BLOB";
+    }
+    if (type_name == "String" && field.size > 0) {
+        return "VARCHAR(" + std::to_string(field.size) + ")";
+    }
+    return "TEXT";
+}
+
+std::string Interpreter::create_table_sql(const ClassDef& model) const {
+    std::string query = "CREATE TABLE IF NOT EXISTS " + escape_sql_identifier(orm_table_name(model.name), model.location) + " (";
+    for (size_t i = 0; i < model.fields.size(); ++i) {
+        if (i > 0) {
+            query += ", ";
+        }
+        query += escape_sql_identifier(model.fields[i].name, model.fields[i].location) + " " + orm_sql_type(model.fields[i]);
+    }
+    query += ")";
+    return query;
+}
+
+std::string Interpreter::model_table_or_name(const std::string& model_or_table) const {
+    if (orm_models.count(model_or_table)) {
+        return orm_table_name(model_or_table);
+    }
+    return model_or_table;
+}
+
 std::string Interpreter::build_insert_sql(const std::string& table, const Value& data, const SourceLocation& loc) const {
     Value object = data;
     if (object.type == ValueType::STRING || object.type == ValueType::BYTES) {
@@ -543,10 +598,28 @@ std::string Interpreter::build_insert_sql(const std::string& table, const Value&
         throw RuntimeError("SQL insert object cannot be empty", loc);
     }
 
+    const ClassDef* model = nullptr;
+    auto model_it = orm_models.find(table);
+    if (model_it != orm_models.end()) {
+        model = model_it->second.get();
+    }
+
     std::ostringstream columns;
     std::ostringstream values;
     bool first = true;
     for (const auto& [key, value] : object.obj_val) {
+        if (model) {
+            bool known_field = false;
+            for (const auto& field : model->fields) {
+                if (field.name == key) {
+                    known_field = true;
+                    break;
+                }
+            }
+            if (!known_field) {
+                continue;
+            }
+        }
         if (!first) {
             columns << ", ";
             values << ", ";
@@ -555,8 +628,11 @@ std::string Interpreter::build_insert_sql(const std::string& table, const Value&
         values << sql_literal(value);
         first = false;
     }
+    if (first) {
+        throw RuntimeError("SQL insert object does not contain fields for table/model '" + table + "'", loc);
+    }
 
-    return "INSERT INTO " + escape_sql_identifier(table, loc) +
+    return "INSERT INTO " + escape_sql_identifier(model_table_or_name(table), loc) +
            " (" + columns.str() + ") VALUES (" + values.str() + ")";
 }
 
@@ -606,6 +682,22 @@ Value Interpreter::execute_sql_builtin(const std::string& name, const std::vecto
         }
         append_sql_statement(args[0].str_val, loc);
         return Value(args[0].str_val);
+    }
+
+    if (name == "orm::migrate") {
+        if (args.size() != 1) {
+            throw RuntimeError("Builtin 'orm::migrate' expects 1 argument", loc);
+        }
+        if (args[0].type != ValueType::STRING && args[0].type != ValueType::BYTES) {
+            throw TypeError("ORM model name must be a string", loc);
+        }
+        if (!orm_models.count(args[0].str_val)) {
+            throw RuntimeError("ORM model was not found: " + args[0].str_val, loc);
+        }
+
+        std::string query = create_table_sql(*orm_models[args[0].str_val]);
+        append_sql_statement(query, loc);
+        return Value(query);
     }
 
     if (name == "sql::table" || name == "orm::table") {
@@ -1420,7 +1512,9 @@ void Interpreter::execute_statement(const std::shared_ptr<AstNode>& stmt, std::m
 void Interpreter::run(const std::vector<std::shared_ptr<AstNode>>& program) {
     // Сначала обрабатываем все функции и глобальные переменные
     for (const auto& node : program) {
-        if (auto f = std::dynamic_pointer_cast<FunctionDef>(node)) {
+        if (auto klass = std::dynamic_pointer_cast<ClassDef>(node)) {
+            orm_models[klass->name] = klass;
+        } else if (auto f = std::dynamic_pointer_cast<FunctionDef>(node)) {
             functions[f->name] = f;
             for (const auto& route : f->routes) {
                 register_http_route(route.method, route.path, f->name, route.location);

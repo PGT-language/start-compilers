@@ -201,7 +201,7 @@ VarType SemanticAnalyzer::infer_expr_type(const std::shared_ptr<AstNode>& node) 
         }
         if (is_sql_builtin_name(builtin->name)) {
             if (builtin->name == "sql::open" || builtin->name == "sql::connect" ||
-                builtin->name == "sql::exec") {
+                builtin->name == "sql::exec" || builtin->name == "orm::migrate") {
                 if (builtin->args.size() != 1) {
                     throw SemanticError("Builtin '" + builtin->name + "' expects 1 argument", builtin->location);
                 }
@@ -209,7 +209,7 @@ VarType SemanticAnalyzer::infer_expr_type(const std::shared_ptr<AstNode>& node) 
                 if (!is_string_like(arg_type)) {
                     throw TypeError("Builtin '" + builtin->name + "' expects a string argument", builtin->location);
                 }
-                return builtin->name == "sql::exec" ? VarType::STRING : VarType::BOOL;
+                return builtin->name == "sql::exec" || builtin->name == "orm::migrate" ? VarType::STRING : VarType::BOOL;
             }
             if (builtin->name == "sql::table" || builtin->name == "orm::table" ||
                 builtin->name == "sql::insert" || builtin->name == "orm::save") {

@@ -178,8 +178,8 @@ Token Lexer::next_token() {
             if (id == "if") return {T_IF, id, line};
             if (id == "else") return {T_ELSE, id, line};
             if (id == "while") return {T_WHILE, id, line};
-            if (id == "true") return {T_TRUE, id, line};
-            if (id == "false") return {T_FALSE, id, line};
+            if (id == "true" || id == "True") return {T_TRUE, id, line};
+            if (id == "false" || id == "False") return {T_FALSE, id, line};
             if (id == "create") return {T_CREATE, id, line};
             if (id == "write") return {T_WRITE, id, line};
             if (id == "read") return {T_READ, id, line};
