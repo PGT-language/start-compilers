@@ -13,3 +13,5 @@ pgt.mod
 server.log
 messages.json
 app.sql
+app.db
+app.sqlite

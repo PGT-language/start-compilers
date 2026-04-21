@@ -20,7 +20,7 @@ SOURCE_FILES = (
     "src/GarbageCollector.cpp",
     "src/gen/Generator.cpp",
 )
-LINK_LIBRARIES = ("-lssl", "-lcrypto")
+LINK_LIBRARIES = ("-lssl", "-lcrypto", "-lsqlite3")
 
 
 def project_root() -> Path:

@@ -194,9 +194,9 @@ json::write("path.json", value) // запись объекта/массива/з
 
 json::read("path.json") // чтение JSON-файла и парсинг в object/array {реализовано}
 
-sql::open("app.sql") // открыть SQL script backend без внешних зависимостей {реализовано}
+sql::open("app.sqlite") // открыть настоящую SQLite базу данных {реализовано}
 
-sql::exec("CREATE TABLE users (id INTEGER)") // записать SQL запрос в backend {реализовано}
+sql::exec("CREATE TABLE users (id INTEGER)") // выполнить SQL запрос в SQLite базе {реализовано}
 
 sql::table("users", "id INTEGER PRIMARY KEY, name TEXT") // создать CREATE TABLE IF NOT EXISTS {реализовано}
 
@@ -206,13 +206,14 @@ orm::table("users", "id INTEGER PRIMARY KEY, name TEXT") // ORM alias для tab
 
 class Test(db.Model) { // ORM модель в стиле Flask SQLAlchemy, но с фигурными скобками языка {реализовано}
     id = db.Column(db.Integer, primary_key=True)
+    message = db.Column(db.String(255))
     name = db.Column(db.String(100))
     age = db.Column(db.Integer)
 }
 
 orm::migrate("Test") // создать CREATE TABLE IF NOT EXISTS из class Test {реализовано}
 
-orm::save("Test", json::object("name", "Pabla", "age", 18)) // создать INSERT по ORM модели {реализовано}
+orm::save("Test", json::object("message", "Hello", "name", "Pabla", "age", 18)) // создать INSERT по ORM модели {реализовано}
 
 orm::save("users", json::object("name", "Pabla")) // ORM alias для insert/save по имени таблицы {реализовано}
 
@@ -240,7 +241,7 @@ function(api) { {реализовано}
 }
 
 function(main) { {реализовано}
-    sql::open("app.sql")
+    sql::open("app.sqlite")
     migrate()
     web::post("/api", "api")
     web::run("0.0.0.0", 5000)

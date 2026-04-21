@@ -8,6 +8,8 @@
 #include <fstream>
 #include <string>
 
+struct sqlite3;
+
 class Interpreter {
     std::map<std::string, std::shared_ptr<FunctionDef>> functions;
     std::map<std::string, std::shared_ptr<ClassDef>> orm_models;
@@ -16,7 +18,8 @@ class Interpreter {
     std::map<std::string, std::unique_ptr<std::fstream>> open_files;  // Открытые файлы
     std::ofstream log_file;  // Файл для логов
     std::string log_output = "console";  // console или file
-    std::string sql_output_path;  // Файл для SQL script backend
+    sqlite3* sqlite_db = nullptr;  // Активная SQLite база
+    std::string sql_output_path;  // Путь к SQLite базе
 
     struct HttpRoute {
         std::string handler;
@@ -69,7 +72,7 @@ class Interpreter {
     std::string create_table_sql(const ClassDef& model) const;
     std::string model_table_or_name(const std::string& model_or_table) const;
     std::string build_insert_sql(const std::string& table, const Value& data, const SourceLocation& loc) const;
-    void append_sql_statement(const std::string& statement, const SourceLocation& loc) const;
+    void execute_sql_statement(const std::string& statement, const SourceLocation& loc) const;
     std::string normalize_log_level(const std::string& level) const;
     bool is_known_log_level(const std::string& level) const;
     std::string log_level_from_builtin(const std::string& name) const;
@@ -95,5 +98,6 @@ private:
     void skip_whitespace(const std::string& json_str, size_t& pos) const;
 
 public:
+    ~Interpreter();
     void run(const std::vector<std::shared_ptr<AstNode>>& program);
 };

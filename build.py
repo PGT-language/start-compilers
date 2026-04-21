@@ -14,7 +14,7 @@ source_files = [
 
 output_executable = "pgt"
 object_files = []
-link_libraries = ["-lssl", "-lcrypto"]
+link_libraries = ["-lssl", "-lcrypto", "-lsqlite3"]
 
 try:
     # Compile source files into object files

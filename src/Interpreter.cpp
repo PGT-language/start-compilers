@@ -13,6 +13,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <unistd.h>
+#include <sqlite3.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 
@@ -20,6 +21,13 @@ struct FunctionReturn {
     Value value;
     bool has_expr;
 };
+
+Interpreter::~Interpreter() {
+    if (sqlite_db) {
+        sqlite3_close(sqlite_db);
+        sqlite_db = nullptr;
+    }
+}
 
 bool Interpreter::is_truthy(const Value& value) const {
     if (value.type == ValueType::INT) {
@@ -636,22 +644,23 @@ std::string Interpreter::build_insert_sql(const std::string& table, const Value&
            " (" + columns.str() + ") VALUES (" + values.str() + ")";
 }
 
-void Interpreter::append_sql_statement(const std::string& statement, const SourceLocation& loc) const {
-    if (sql_output_path.empty()) {
-        throw RuntimeError("Open SQL output first with sql::open(\"database.sql\")", loc);
+void Interpreter::execute_sql_statement(const std::string& statement, const SourceLocation& loc) const {
+    if (!sqlite_db) {
+        throw RuntimeError("Open SQLite database first with sql::open(\"app.sqlite\")", loc);
     }
 
-    std::ofstream file(sql_output_path, std::ios::out | std::ios::app);
-    if (!file.is_open()) {
-        throw RuntimeError("Failed to open SQL output: " + sql_output_path, loc);
+    std::string query = statement;
+    if (query.empty() || query.back() != ';') {
+        query += ";";
     }
 
-    file << statement;
-    if (statement.empty() || statement.back() != ';') {
-        file << ";";
+    char* error_message = nullptr;
+    int rc = sqlite3_exec(sqlite_db, query.c_str(), nullptr, nullptr, &error_message);
+    if (rc != SQLITE_OK) {
+        std::string message = error_message ? error_message : sqlite3_errmsg(sqlite_db);
+        sqlite3_free(error_message);
+        throw RuntimeError("SQLite query failed: " + message, loc);
     }
-    file << "\n";
-    file.close();
 }
 
 Value Interpreter::execute_sql_builtin(const std::string& name, const std::vector<Value>& args,
@@ -661,15 +670,37 @@ Value Interpreter::execute_sql_builtin(const std::string& name, const std::vecto
             throw RuntimeError("Builtin '" + name + "' expects 1 argument", loc);
         }
         if (args[0].type != ValueType::STRING && args[0].type != ValueType::BYTES) {
-            throw TypeError("SQL output path must be a string", loc);
+            throw TypeError("SQLite database path must be a string", loc);
+        }
+
+        if (sqlite_db) {
+            sqlite3_close(sqlite_db);
+            sqlite_db = nullptr;
         }
 
         sql_output_path = args[0].str_val;
-        std::ofstream file(sql_output_path, std::ios::out | std::ios::app);
-        if (!file.is_open()) {
-            throw RuntimeError("Failed to open SQL output: " + sql_output_path, loc);
+        int rc = sqlite3_open(sql_output_path.c_str(), &sqlite_db);
+        if (rc != SQLITE_OK) {
+            std::string message = sqlite_db ? sqlite3_errmsg(sqlite_db) : "unknown error";
+            if (sqlite_db) {
+                sqlite3_close(sqlite_db);
+                sqlite_db = nullptr;
+            }
+            throw RuntimeError("Failed to open SQLite database: " + message, loc);
         }
-        file.close();
+
+        char* error_message = nullptr;
+        rc = sqlite3_exec(sqlite_db, "PRAGMA schema_version;", nullptr, nullptr, &error_message);
+        if (rc != SQLITE_OK) {
+            std::string message = error_message ? error_message : sqlite3_errmsg(sqlite_db);
+            sqlite3_free(error_message);
+            sqlite3_close(sqlite_db);
+            sqlite_db = nullptr;
+            throw RuntimeError("File is not a SQLite database: " + sql_output_path +
+                               ". Use a new .sqlite/.db file or rename the old SQL script. SQLite says: " +
+                               message, loc);
+        }
+
         return Value::Bool(true);
     }
 
@@ -680,7 +711,7 @@ Value Interpreter::execute_sql_builtin(const std::string& name, const std::vecto
         if (args[0].type != ValueType::STRING && args[0].type != ValueType::BYTES) {
             throw TypeError("SQL query must be a string", loc);
         }
-        append_sql_statement(args[0].str_val, loc);
+        execute_sql_statement(args[0].str_val, loc);
         return Value(args[0].str_val);
     }
 
@@ -696,7 +727,7 @@ Value Interpreter::execute_sql_builtin(const std::string& name, const std::vecto
         }
 
         std::string query = create_table_sql(*orm_models[args[0].str_val]);
-        append_sql_statement(query, loc);
+        execute_sql_statement(query, loc);
         return Value(query);
     }
 
@@ -714,7 +745,7 @@ Value Interpreter::execute_sql_builtin(const std::string& name, const std::vecto
         std::string query = "CREATE TABLE IF NOT EXISTS " +
                             escape_sql_identifier(args[0].str_val, loc) +
                             " (" + args[1].str_val + ")";
-        append_sql_statement(query, loc);
+        execute_sql_statement(query, loc);
         return Value(query);
     }
 
@@ -727,7 +758,7 @@ Value Interpreter::execute_sql_builtin(const std::string& name, const std::vecto
         }
 
         std::string query = build_insert_sql(args[0].str_val, args[1], loc);
-        append_sql_statement(query, loc);
+        execute_sql_statement(query, loc);
         return Value(query);
     }
 
