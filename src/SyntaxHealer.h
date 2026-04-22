@@ -895,6 +895,72 @@ private:
         return statement_start && token.column > 0;
     }
 
+    static std::vector<std::string> strong_statement_words(const std::vector<Token>& tokens,
+                                                           size_t index) {
+        if (!is_statement_start(tokens, index) || index + 1 >= tokens.size()) {
+            return {};
+        }
+
+        TokenType next_type = tokens[index + 1].type;
+        if (next_type == T_LPAREN) {
+            return {
+                "function", "if", "while", "call",
+                "cout", "print", "printg", "println"
+            };
+        }
+        if (next_type == T_IDENTIFIER) {
+            return {"function", "class"};
+        }
+        return {};
+    }
+
+    static bool has_repeated_extra_suffix(const std::string& word,
+                                          const std::string& candidate) {
+        std::string lowered_word = lower_ascii(word);
+        std::string lowered_candidate = lower_ascii(candidate);
+        if (lowered_word.size() <= lowered_candidate.size()) return false;
+        if (lowered_word.compare(0, lowered_candidate.size(), lowered_candidate) != 0) {
+            return false;
+        }
+
+        std::string suffix = lowered_word.substr(lowered_candidate.size());
+        if (suffix.empty() || suffix.size() > 3) return false;
+        return std::all_of(suffix.begin(), suffix.end(), [&](char ch) {
+            return ch == suffix.front();
+        });
+    }
+
+    static size_t strong_statement_score(const std::string& word,
+                                         const std::string& candidate) {
+        size_t normal_score = typo_score(word, candidate, false);
+        if (normal_score < impossible_score()) return normal_score;
+        if (!has_repeated_extra_suffix(word, candidate)) return impossible_score();
+        return edit_distance(lower_ascii(word), lower_ascii(candidate));
+    }
+
+    static std::string best_strong_statement_word(const std::string& word,
+                                                  const std::vector<std::string>& candidates) {
+        std::string best;
+        size_t best_score = impossible_score();
+        bool ambiguous = false;
+
+        for (const auto& candidate : candidates) {
+            size_t score = strong_statement_score(word, candidate);
+            if (score == 0 || score >= impossible_score()) {
+                continue;
+            }
+            if (score < best_score) {
+                best = candidate;
+                best_score = score;
+                ambiguous = false;
+            } else if (score == best_score) {
+                ambiguous = true;
+            }
+        }
+
+        return ambiguous ? "" : best;
+    }
+
     static void add_word_typo_edits(std::vector<TextEdit>& edits,
                                     const std::vector<Token>& tokens,
                                     size_t index) {
@@ -909,6 +975,16 @@ private:
             std::string type_replacement = best_word(token.value, type_words(), false);
             add_replace_if_needed(edits, token, type_replacement);
             if (!type_replacement.empty()) return;
+        }
+
+        std::vector<std::string> strong_statement_replacements =
+            strong_statement_words(tokens, index);
+        std::string strong_statement_replacement =
+            best_strong_statement_word(token.value, strong_statement_replacements);
+        if (!strong_statement_replacement.empty() &&
+            should_correct_statement_word(tokens, index, strong_statement_replacement)) {
+            add_replace_if_needed(edits, token, strong_statement_replacement);
+            return;
         }
 
         std::string statement_replacement = best_word(token.value, statement_words(), false);
