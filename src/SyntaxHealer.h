@@ -335,6 +335,9 @@ private:
         if (static_cast<size_t>(line) < starts.size()) {
             end = starts[static_cast<size_t>(line)] - 1;
         }
+        if (end > start && source[end - 1] == '\n') {
+            end--;
+        }
         if (end > start && source[end - 1] == '\r') {
             end--;
         }
@@ -610,6 +613,9 @@ private:
         size_t end = source.size();
         if (static_cast<size_t>(line) < starts.size()) {
             end = starts[static_cast<size_t>(line)] - 1;
+        }
+        if (end > start && source[end - 1] == '\n') {
+            end--;
         }
         if (end > start && source[end - 1] == '\r') {
             end--;
