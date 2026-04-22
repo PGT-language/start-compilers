@@ -1243,7 +1243,11 @@ std::string readme_source(const InitOptions& options) {
            << "- `routes/routes.pgt` registers HTTP routes.\n"
            << "- `api/api.pgt` contains request handlers.\n";
     if (options.create_static) {
-        source << "- `static/index.html`, `static/styles.css`, and `static/app.js` contain frontend assets.\n";
+        source << "- `static/index.html`, `static/index.css`, and `static/index.js` contain the main frontend page.\n";
+    }
+    if (options.create_auth) {
+        source << "- `static/register.html`, `static/register.css`, and `static/register.js` contain the registration page.\n"
+               << "- `static/login.html`, `static/login.css`, and `static/login.js` contain the login page.\n";
     }
     if (options.create_api_spec) {
         source << "- `sweiger/index.html` contains Swagger UI served from `/api/v1/docs`.\n"
