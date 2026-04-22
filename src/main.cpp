@@ -194,6 +194,24 @@ int run_mod_command(int argc, char** argv) {
     std::cerr << "Usage: pgt mod <init|download> ...\n";
     return 1;
 }
+
+bool tokenize_source(const std::string& source, std::vector<Token>& tokens) {
+    tokens.clear();
+    Lexer lexer(source);
+    Token t;
+    size_t token_count = 0;
+    do {
+        t = lexer.next_token();
+        tokens.push_back(t);
+        token_count++;
+        if (token_count > 10000) {
+            std::cerr << "Error: Too many tokens, possible infinite loop in lexer" << std::endl;
+            return false;
+        }
+    } while (t.type != T_EOF);
+
+    return true;
+}
 }
 
 int main(int argc, char** argv) {
@@ -313,21 +331,32 @@ int main(int argc, char** argv) {
             if (DEBUG) std::cout << "[DEBUG] Loading file: " << current_file << std::endl;
             if (DEBUG) std::cout << "[DEBUG] File size: " << source.size() << " bytes" << std::endl;
 
-            Lexer lexer(source);
             std::vector<Token> tokens;
-            Token t;
-            size_t token_count = 0;
-            do {
-                t = lexer.next_token();
-                tokens.push_back(t);
-                token_count++;
-                if (token_count > 10000) {
-                    std::cerr << "Error: Too many tokens, possible infinite loop in lexer" << std::endl;
-                    break;
-                }
-            } while (t.type != T_EOF);
+            if (!tokenize_source(source, tokens)) {
+                return 1;
+            }
 
-            tokens = SyntaxHealer::heal(tokens);
+            SyntaxHealer::RepairResult repair = SyntaxHealer::repair_source(source, tokens);
+            if (repair.changed) {
+                for (const auto& diagnostic : repair.diagnostics) {
+                    std::cerr << "Syntax repair: " << current_file << ":"
+                              << diagnostic.line << ":" << diagnostic.column
+                              << ": " << diagnostic.message << "\n";
+                }
+
+                std::ofstream repaired_file(current_file);
+                if (!repaired_file) {
+                    std::cerr << "Error: Cannot write repaired file '" << current_file << "'\n";
+                    return 1;
+                }
+                repaired_file << repair.source;
+                repaired_file.close();
+
+                source = repair.source;
+                if (!tokenize_source(source, tokens)) {
+                    return 1;
+                }
+            }
 
             if (DEBUG) std::cout << "[DEBUG] Tokenized " << tokens.size() << " tokens" << std::endl;
 
