@@ -58,6 +58,11 @@ bool is_request_builtin_name(const std::string& name) {
     return name.rfind("request::", 0) == 0;
 }
 
+bool is_auth_builtin_name(const std::string& name) {
+    return name.rfind("auth::", 0) == 0 ||
+           name.rfind("jwt::", 0) == 0;
+}
+
 bool is_string_like(VarType type) {
     return type == VarType::STRING ||
            type == VarType::BYTES ||
@@ -198,6 +203,17 @@ VarType SemanticAnalyzer::infer_expr_type(const std::shared_ptr<AstNode>& node) 
                 }
                 return VarType::OBJECT;
             }
+            if (builtin->name == "json::get") {
+                if (builtin->args.size() != 2) {
+                    throw SemanticError("Builtin 'json::get' expects object and key", builtin->location);
+                }
+                analyze_expr(builtin->args[0]);
+                VarType key_type = infer_expr_type(builtin->args[1]);
+                if (!is_string_like(key_type)) {
+                    throw TypeError("JSON object key must be a string", builtin->location);
+                }
+                return VarType::UNKNOWN;
+            }
         }
         if (is_sql_builtin_name(builtin->name)) {
             if (builtin->name == "sql::open" || builtin->name == "sql::connect" ||
@@ -221,6 +237,53 @@ VarType SemanticAnalyzer::infer_expr_type(const std::shared_ptr<AstNode>& node) 
                     throw TypeError("SQL table name must be a string", builtin->location);
                 }
                 analyze_expr(builtin->args[1]);
+                return VarType::STRING;
+            }
+            if (builtin->name == "orm::find" || builtin->name == "sql::find") {
+                if (builtin->args.size() != 3) {
+                    throw SemanticError("Builtin '" + builtin->name + "' expects 3 arguments", builtin->location);
+                }
+                VarType table_type = infer_expr_type(builtin->args[0]);
+                VarType field_type = infer_expr_type(builtin->args[1]);
+                if (!is_string_like(table_type) || !is_string_like(field_type)) {
+                    throw TypeError("SQL table and field names must be strings", builtin->location);
+                }
+                analyze_expr(builtin->args[2]);
+                return VarType::OBJECT;
+            }
+        }
+        if (is_auth_builtin_name(builtin->name)) {
+            if (builtin->name == "auth::hash_password") {
+                if (builtin->args.size() != 1) {
+                    throw SemanticError("Builtin 'auth::hash_password' expects 1 argument", builtin->location);
+                }
+                VarType arg_type = infer_expr_type(builtin->args[0]);
+                if (!is_string_like(arg_type)) {
+                    throw TypeError("Password must be a string", builtin->location);
+                }
+                return VarType::STRING;
+            }
+            if (builtin->name == "auth::verify_password" || builtin->name == "jwt::verify") {
+                if (builtin->args.size() != 2) {
+                    throw SemanticError("Builtin '" + builtin->name + "' expects 2 arguments", builtin->location);
+                }
+                for (const auto& arg : builtin->args) {
+                    VarType arg_type = infer_expr_type(arg);
+                    if (!is_string_like(arg_type)) {
+                        throw TypeError("Builtin '" + builtin->name + "' expects string arguments", builtin->location);
+                    }
+                }
+                return VarType::BOOL;
+            }
+            if (builtin->name == "jwt::sign") {
+                if (builtin->args.size() != 2) {
+                    throw SemanticError("Builtin 'jwt::sign' expects payload and secret", builtin->location);
+                }
+                analyze_expr(builtin->args[0]);
+                VarType secret_type = infer_expr_type(builtin->args[1]);
+                if (!is_string_like(secret_type)) {
+                    throw TypeError("JWT secret must be a string", builtin->location);
+                }
                 return VarType::STRING;
             }
         }

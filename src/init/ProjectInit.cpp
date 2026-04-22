@@ -22,6 +22,7 @@ struct InitOptions {
     std::string table_type = "model";
     std::string table_name = "test";
     bool create_api = true;
+    bool create_auth = false;
     bool create_static = true;
     bool create_api_spec = true;
     bool create_docker = false;
@@ -390,6 +391,76 @@ std::string raw_table_source(const InitOptions& options) {
     return source.str();
 }
 
+std::string auth_user_model_source() {
+    return
+        "package user\n"
+        "\n"
+        "class User(db.Model) {\n"
+        "    id = db.Column(db.Integer, primary_key=True)\n"
+        "    name = db.Column(db.String(100))\n"
+        "    email = db.Column(db.String(160))\n"
+        "    password = db.Column(db.String(255))\n"
+        "    is_active = db.Column(db.Boolean)\n"
+        "}\n";
+}
+
+std::string auth_model_helpers_source() {
+    return
+        "package auth\n"
+        "\n"
+        "from \"../user\" import User\n"
+        "\n"
+        "function(migrate_user) {\n"
+        "    orm::migrate(\"User\")\n"
+        "    return 1\n"
+        "}\n";
+}
+
+std::string auth_source() {
+    return
+        "package auth\n"
+        "\n"
+        "from \"models/user\" import User\n"
+        "\n"
+        "function(register_user) {\n"
+        "    payload + object = request::json()\n"
+        "    name + string = json::get(payload, \"name\")\n"
+        "    email + string = json::get(payload, \"email\")\n"
+        "    password + string = json::get(payload, \"password\")\n"
+        "    existing + object = orm::find(\"User\", \"email\", email)\n"
+        "    if (existing) {\n"
+        "        return json::object(\"error\", \"email already registered\")\n"
+        "    }\n"
+        "    password_hash + string = auth::hash_password(password)\n"
+        "    orm::save(\"User\", json::object(\"name\", name, \"email\", email, \"password\", password_hash, \"is_active\", true))\n"
+        "    return json::object(\"status\", \"registered\", \"email\", email)\n"
+        "    return 1\n"
+        "}\n"
+        "\n"
+        "function(login_user) {\n"
+        "    payload + object = request::json()\n"
+        "    email + string = json::get(payload, \"email\")\n"
+        "    password + string = json::get(payload, \"password\")\n"
+        "    user + object = orm::find(\"User\", \"email\", email)\n"
+        "    if (user) {\n"
+        "        password_hash + string = json::get(user, \"password\")\n"
+        "        if (auth::verify_password(password, password_hash)) {\n"
+        "            token + string = jwt::sign(json::object(\"sub\", json::get(user, \"id\"), \"email\", email), \"change-me-secret\")\n"
+        "            return json::object(\"token\", token, \"user\", json::object(\"id\", json::get(user, \"id\"), \"email\", email, \"name\", json::get(user, \"name\")))\n"
+        "        }\n"
+        "    }\n"
+        "    return json::object(\"error\", \"invalid credentials\")\n"
+        "    return 1\n"
+        "}\n"
+        "\n"
+        "function(verify_token) {\n"
+        "    payload + object = request::json()\n"
+        "    token + string = json::get(payload, \"token\")\n"
+        "    return json::object(\"valid\", jwt::verify(token, \"change-me-secret\"))\n"
+        "    return 1\n"
+        "}\n";
+}
+
 std::string static_index_source(const InitOptions& options) {
     std::ostringstream source;
     source << "<!doctype html>\n"
@@ -632,6 +703,26 @@ std::string api_spec_source(const InitOptions& options) {
                << "        \"200\":\n"
                << "          description: API specification\n";
     }
+    if (options.create_auth) {
+        source << "  /auth/register:\n"
+               << "    post:\n"
+               << "      summary: Register user\n"
+               << "      responses:\n"
+               << "        \"200\":\n"
+               << "          description: Registered\n"
+               << "  /auth/login:\n"
+               << "    post:\n"
+               << "      summary: Login user and return JWT\n"
+               << "      responses:\n"
+               << "        \"200\":\n"
+               << "          description: JWT token\n"
+               << "  /auth/verify:\n"
+               << "    post:\n"
+               << "      summary: Verify JWT token\n"
+               << "      responses:\n"
+               << "        \"200\":\n"
+               << "          description: Token status\n";
+    }
     return source.str();
 }
 
@@ -658,6 +749,10 @@ std::string runtime_source(const InitOptions& options) {
         }
         has_imports = true;
     }
+    if (options.create_auth) {
+        source << "from \"models/auth\" import migrate_user\n";
+        has_imports = true;
+    }
     if (has_imports) {
         source << "\n";
     }
@@ -671,9 +766,14 @@ std::string runtime_source(const InitOptions& options) {
         }
         source << "    " << options.log_level << "(\"starting backend\")\n";
     }
-    if (options.use_database) {
-        source << "    sql::open(\"app.sqlite\")\n"
-               << "    migrate()\n";
+    if (options.use_database || options.create_auth) {
+        source << "    sql::open(\"app.sqlite\")\n";
+        if (options.use_database) {
+            source << "    migrate()\n";
+        }
+        if (options.create_auth) {
+            source << "    migrate_user()\n";
+        }
     }
     source << "    return 1\n"
            << "}\n";
@@ -746,6 +846,9 @@ std::string routes_source(const InitOptions& options) {
     if (options.create_api_spec) {
         source << "from \"sweiger\" import docs, openapi_yaml\n";
     }
+    if (options.create_auth) {
+        source << "from \"auth\" import register_user, login_user, verify_token\n";
+    }
     source << "\n"
            << "function(register) {\n"
            << "    web::route(\"/\", \"index\")\n";
@@ -760,6 +863,11 @@ std::string routes_source(const InitOptions& options) {
     if (options.create_api_spec) {
         source << "    web::get(\"/api/v1/docs\", \"docs\")\n"
                << "    web::get(\"/api/v1/openapi.yaml\", \"openapi_yaml\")\n";
+    }
+    if (options.create_auth) {
+        source << "    web::post(\"/auth/register\", \"register_user\")\n"
+               << "    web::post(\"/auth/login\", \"login_user\")\n"
+               << "    web::post(\"/auth/verify\", \"verify_token\")\n";
     }
     source << "    return 1\n"
            << "}\n";
@@ -781,6 +889,15 @@ std::string main_source() {
            << "}\n"
            << "\n"
            << "return 0\n";
+    return source.str();
+}
+
+std::string pgt_mod_source(const InitOptions& options) {
+    std::ostringstream source;
+    source << "module " << options.project_name << "\n"
+           << "\n"
+           << "require (\n"
+           << ")\n";
     return source.str();
 }
 
@@ -864,6 +981,11 @@ std::string readme_source(const InitOptions& options) {
     if (options.create_logging) {
         source << "- `components/logging/logging.pgt` wraps log output and log levels.\n";
     }
+    if (options.create_auth) {
+        source << "- `auth/auth.pgt` contains register, login, and JWT verify handlers.\n"
+               << "- `models/user/user.pgt` contains the generated auth user model.\n"
+               << "- `models/auth/auth.pgt` contains auth migration and lookup helpers.\n";
+    }
     if (options.use_database) {
         if (options.table_type == "model") {
             source << "- `models/" << table_package << "/" << table_package << ".pgt` contains the ORM model.\n"
@@ -895,6 +1017,14 @@ std::string readme_source(const InitOptions& options) {
                    << "  -H 'Content-Type: application/json' \\\n"
                    << "  -d '{\"message\":\"hello\"}'\n";
         }
+        if (options.create_auth) {
+            source << "curl -X POST http://localhost:5000/auth/register \\\n"
+                   << "  -H 'Content-Type: application/json' \\\n"
+                   << "  -d '{\"name\":\"Pabla\",\"email\":\"pabla@example.com\",\"password\":\"secret\"}'\n"
+                   << "curl -X POST http://localhost:5000/auth/login \\\n"
+                   << "  -H 'Content-Type: application/json' \\\n"
+                   << "  -d '{\"email\":\"pabla@example.com\",\"password\":\"secret\"}'\n";
+        }
         source << "```\n";
     }
     if (options.create_static) {
@@ -921,6 +1051,13 @@ std::string readme_source(const InitOptions& options) {
                << "## Database\n"
                << "\n"
                << "The app opens `app.sqlite` during startup and runs `migrate()` from `runtime/runtime.pgt`.\n";
+    }
+    if (options.create_auth) {
+        source << "\n"
+               << "## Auth\n"
+               << "\n"
+               << "Auth routes are `/auth/register`, `/auth/login`, and `/auth/verify`.\n"
+               << "Change the JWT secret in `auth/auth.pgt` before production.\n";
     }
     if (options.create_docker) {
         source << "\n"
@@ -958,10 +1095,19 @@ bool create_backend_project(const InitOptions& options) {
         std::filesystem::create_directories(project_dir);
 
         if (!write_file(project_dir / "main.pgt", main_source())) return false;
+        if (!write_file(project_dir / "pgt.mod", pgt_mod_source(options))) return false;
         if (!write_file(project_dir / "runtime" / "runtime.pgt", runtime_source(options))) return false;
         if (!write_file(project_dir / "routes" / "routes.pgt", routes_source(options))) return false;
         if (!write_file(project_dir / "api" / "api.pgt", api_source(options))) return false;
         if (!write_file(project_dir / "README.md", readme_source(options))) return false;
+
+        if (options.create_auth) {
+            if (!write_file(project_dir / "auth" / "auth.pgt", auth_source())) return false;
+            if (!write_file(project_dir / "models" / "user" / "user.pgt",
+                            auth_user_model_source())) return false;
+            if (!write_file(project_dir / "models" / "auth" / "auth.pgt",
+                            auth_model_helpers_source())) return false;
+        }
 
         if (options.create_static) {
             if (!write_file(project_dir / "static" / "index.html",
@@ -1051,6 +1197,7 @@ InitOptions collect_options(int argc, char** argv) {
     }
 
     options.create_api = prompt_yes_no("Create default /api route", true);
+    options.create_auth = prompt_yes_no("Create auth/JWT template", false);
     options.create_static = prompt_yes_no("Create static html/css/js", true);
     options.create_api_spec = prompt_yes_no("Create api.yaml and Swagger /api/v1/docs", true);
     options.create_docker = prompt_yes_no("Create Dockerfile and docker-compose.yml", false);

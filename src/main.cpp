@@ -13,6 +13,187 @@
 #include <fstream>
 #include <set>
 #include <map>
+#include <cctype>
+#include <cstdlib>
+#include <filesystem>
+#include <sstream>
+#include <string>
+#include <vector>
+
+namespace {
+std::string trim_mod_text(const std::string& value) {
+    size_t start = 0;
+    while (start < value.size() && std::isspace(static_cast<unsigned char>(value[start]))) {
+        start++;
+    }
+    size_t end = value.size();
+    while (end > start && std::isspace(static_cast<unsigned char>(value[end - 1]))) {
+        end--;
+    }
+    return value.substr(start, end - start);
+}
+
+std::vector<std::string> split_mod_words(const std::string& value) {
+    std::vector<std::string> words;
+    std::string current;
+    for (char ch : value) {
+        if (std::isspace(static_cast<unsigned char>(ch))) {
+            if (!current.empty()) {
+                words.push_back(current);
+                current.clear();
+            }
+        } else {
+            current += ch;
+        }
+    }
+    if (!current.empty()) {
+        words.push_back(current);
+    }
+    return words;
+}
+
+std::string module_cache_name(const std::string& module_path) {
+    std::string name;
+    for (char raw_ch : module_path) {
+        unsigned char ch = static_cast<unsigned char>(raw_ch);
+        if (std::isalnum(ch) || raw_ch == '_' || raw_ch == '-' || raw_ch == '.') {
+            name += raw_ch;
+        } else {
+            name += '_';
+        }
+    }
+    return name.empty() ? "module" : name;
+}
+
+std::string shell_quote(const std::string& value) {
+    std::string quoted = "'";
+    for (char ch : value) {
+        if (ch == '\'') {
+            quoted += "'\\''";
+        } else {
+            quoted += ch;
+        }
+    }
+    quoted += "'";
+    return quoted;
+}
+
+std::string clone_url_for_module(const std::string& module_path) {
+    if (module_path.find("://") != std::string::npos || module_path.find(':') != std::string::npos) {
+        return module_path;
+    }
+    return "https://" + module_path;
+}
+
+struct PgtRequirement {
+    std::string path;
+    std::string version;
+};
+
+std::vector<PgtRequirement> read_pgt_requirements() {
+    std::vector<PgtRequirement> requirements;
+    std::ifstream file("pgt.mod");
+    if (!file) {
+        return requirements;
+    }
+
+    bool in_require_block = false;
+    std::string line;
+    while (std::getline(file, line)) {
+        std::string cleaned = trim_mod_text(line);
+        if (cleaned.empty() || cleaned.rfind("//", 0) == 0) {
+            continue;
+        }
+        if (cleaned == "require (") {
+            in_require_block = true;
+            continue;
+        }
+        if (in_require_block && cleaned == ")") {
+            in_require_block = false;
+            continue;
+        }
+        if (cleaned.rfind("require ", 0) == 0) {
+            cleaned = trim_mod_text(cleaned.substr(8));
+        } else if (!in_require_block) {
+            continue;
+        }
+
+        std::vector<std::string> words = split_mod_words(cleaned);
+        if (!words.empty()) {
+            requirements.push_back({words[0], words.size() > 1 ? words[1] : ""});
+        }
+    }
+    return requirements;
+}
+
+int run_mod_command(int argc, char** argv) {
+    if (argc < 3) {
+        std::cerr << "Usage: pgt mod <init|download> ...\n";
+        return 1;
+    }
+
+    std::string subcommand = argv[2];
+    if (subcommand == "init") {
+        if (argc < 4) {
+            std::cerr << "Usage: pgt mod init <module-name>\n";
+            return 1;
+        }
+        if (std::filesystem::exists("pgt.mod")) {
+            std::cerr << "pgt.mod already exists\n";
+            return 1;
+        }
+        std::ofstream file("pgt.mod");
+        if (!file.is_open()) {
+            std::cerr << "Error: Cannot create pgt.mod\n";
+            return 1;
+        }
+        file << "module " << argv[3] << "\n"
+             << "\n"
+             << "require (\n"
+             << ")\n";
+        file.close();
+        std::cout << "Created pgt.mod\n";
+        return 0;
+    }
+
+    if (subcommand == "download") {
+        std::vector<PgtRequirement> requirements = read_pgt_requirements();
+        if (requirements.empty()) {
+            std::cerr << "No requirements found in pgt.mod\n";
+            return 1;
+        }
+        std::filesystem::create_directories(std::filesystem::path(".pgt") / "pkg");
+        for (const auto& requirement : requirements) {
+            std::filesystem::path target = std::filesystem::path(".pgt") / "pkg" / module_cache_name(requirement.path);
+            if (std::filesystem::exists(target)) {
+                std::cout << "Already downloaded: " << requirement.path << "\n";
+                continue;
+            }
+
+            std::ostringstream command;
+            command << "git clone " << shell_quote(clone_url_for_module(requirement.path)) << " "
+                    << shell_quote(target.string());
+            if (std::system(command.str().c_str()) != 0) {
+                std::cerr << "Error: Failed to download " << requirement.path << "\n";
+                return 1;
+            }
+            if (!requirement.version.empty()) {
+                std::ostringstream checkout;
+                checkout << "git -C " << shell_quote(target.string()) << " checkout " << shell_quote(requirement.version);
+                if (std::system(checkout.str().c_str()) != 0) {
+                    std::cerr << "Error: Failed to checkout " << requirement.version << " in " << requirement.path << "\n";
+                    return 1;
+                }
+            }
+        }
+        return 0;
+    }
+
+    std::cerr << "Unknown mod command: " << subcommand << "\n";
+    std::cerr << "Usage: pgt mod <init|download> ...\n";
+    return 1;
+}
+}
 
 int main(int argc, char** argv) {
     if (argc < 2) {
@@ -23,6 +204,8 @@ int main(int argc, char** argv) {
         std::cout << "  pgt run <file.pgt>      — Run PGT program\n";
         std::cout << "  pgt run <file.pgt> --debug — Run with debug output\n";
         std::cout << "  pgt init [template] [name] — Initialize a project from template\n";
+        std::cout << "  pgt mod init <module>    — Create pgt.mod\n";
+        std::cout << "  pgt mod download         — Download pgt.mod libraries\n";
         std::cout << "  pgt generate component <name> — Generate a PGT component\n";
         std::cout << "  pgt generate file <path> [package] — Generate a PGT file\n";
         std::cout << "  pgt generate model <name> [field:type ...] — Generate an ORM model\n";
@@ -42,6 +225,8 @@ int main(int argc, char** argv) {
         std::cout << "  run <file.pgt> --debug  — Execute with debug info\n\n";
         std::cout << "  init [template] [name]  — Initialize a project from template\n";
         std::cout << "  init backend test       — Create backend project named test\n\n";
+        std::cout << "  mod init <module>       — Create pgt.mod\n";
+        std::cout << "  mod download            — Download libraries from pgt.mod into .pgt/pkg\n\n";
         std::cout << "  generate component <name> — Generate a PGT component\n";
         std::cout << "  generate file <path> [package] — Generate a PGT file\n";
         std::cout << "  generate model <name> [field:type ...] — Generate an ORM model\n";
@@ -51,6 +236,8 @@ int main(int argc, char** argv) {
         std::cout << "Example:\n";
         std::cout << "  ./pgt run test.pgt\n";
         std::cout << "  ./pgt init backend test\n";
+        std::cout << "  ./pgt mod init github.com/me/app\n";
+        std::cout << "  ./pgt mod download\n";
         std::cout << "  ./pgt generate component logging\n";
         std::cout << "  ./pgt generate model user name:string email:string\n";
         std::cout << "  ./pgt generate swagger MyApi\n";
@@ -70,6 +257,10 @@ int main(int argc, char** argv) {
 
     if (command == "init") {
         return run_project_init_command(argc, argv);
+    }
+
+    if (command == "mod") {
+        return run_mod_command(argc, argv);
     }
 
     if (command == "run") {

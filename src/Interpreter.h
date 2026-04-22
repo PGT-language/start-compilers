@@ -63,6 +63,8 @@ class Interpreter {
     std::string stringify_json(const Value& value) const;
     Value read_file_path(const Value& arg, const SourceLocation& loc) const;
     Value execute_json_builtin(const std::string& name, const std::vector<Value>& args, const SourceLocation& loc);
+    Value execute_auth_builtin(const std::string& name, const std::vector<Value>& args, const SourceLocation& loc);
+    Value execute_jwt_builtin(const std::string& name, const std::vector<Value>& args, const SourceLocation& loc);
     Value execute_request_builtin(const std::string& name, const std::vector<Value>& args, const SourceLocation& loc);
     Value execute_sql_builtin(const std::string& name, const std::vector<Value>& args, const SourceLocation& loc);
     std::string escape_sql_identifier(const std::string& identifier, const SourceLocation& loc) const;
@@ -72,6 +74,7 @@ class Interpreter {
     std::string create_table_sql(const ClassDef& model) const;
     std::string model_table_or_name(const std::string& model_or_table) const;
     std::string build_insert_sql(const std::string& table, const Value& data, const SourceLocation& loc) const;
+    Value find_first_row(const std::string& table, const std::string& field, const Value& value, const SourceLocation& loc) const;
     void execute_sql_statement(const std::string& statement, const SourceLocation& loc) const;
     std::string normalize_log_level(const std::string& level) const;
     bool is_known_log_level(const std::string& level) const;

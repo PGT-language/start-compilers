@@ -60,15 +60,22 @@ bool is_builtin_call_name(const std::string& name) {
         "json::write",
         "json::save",
         "json::read",
+        "json::get",
         "json::object",
+        "auth::hash_password",
+        "auth::verify_password",
+        "jwt::sign",
+        "jwt::verify",
         "sql::open",
         "sql::connect",
         "sql::exec",
         "sql::table",
         "sql::insert",
+        "sql::find",
         "orm::table",
         "orm::migrate",
-        "orm::save"
+        "orm::save",
+        "orm::find"
     };
 
     for (const auto& builtin_name : names) {
@@ -88,6 +95,8 @@ bool is_namespaced_builtin_root(const Token& token) {
     }
     return token.value == "log" ||
            token.value == "json" ||
+           token.value == "auth" ||
+           token.value == "jwt" ||
            token.value == "sql" ||
            token.value == "orm" ||
            token.value == "request";

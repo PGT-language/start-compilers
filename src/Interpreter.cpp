@@ -16,6 +16,70 @@
 #include <sqlite3.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
+#include <openssl/hmac.h>
+#include <openssl/rand.h>
+#include <openssl/sha.h>
+
+namespace {
+std::string bytes_to_hex(const unsigned char* data, size_t size) {
+    static const char* hex = "0123456789abcdef";
+    std::string out;
+    out.reserve(size * 2);
+    for (size_t i = 0; i < size; ++i) {
+        out += hex[(data[i] >> 4) & 0x0f];
+        out += hex[data[i] & 0x0f];
+    }
+    return out;
+}
+
+std::string sha256_hex(const std::string& value) {
+    unsigned char digest[SHA256_DIGEST_LENGTH];
+    SHA256(reinterpret_cast<const unsigned char*>(value.data()), value.size(), digest);
+    return bytes_to_hex(digest, SHA256_DIGEST_LENGTH);
+}
+
+std::string random_hex(size_t bytes) {
+    std::vector<unsigned char> data(bytes);
+    if (RAND_bytes(data.data(), static_cast<int>(data.size())) != 1) {
+        for (size_t i = 0; i < data.size(); ++i) {
+            data[i] = static_cast<unsigned char>((std::time(nullptr) + i * 31) & 0xff);
+        }
+    }
+    return bytes_to_hex(data.data(), data.size());
+}
+
+std::string base64url_encode(const std::string& value) {
+    static const char* table = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+    std::string out;
+    int val = 0;
+    int bits = -6;
+    for (unsigned char ch : value) {
+        val = (val << 8) + ch;
+        bits += 8;
+        while (bits >= 0) {
+            out.push_back(table[(val >> bits) & 0x3f]);
+            bits -= 6;
+        }
+    }
+    if (bits > -6) {
+        out.push_back(table[((val << 8) >> (bits + 8)) & 0x3f]);
+    }
+    return out;
+}
+
+std::string hmac_sha256_base64url(const std::string& data, const std::string& secret) {
+    unsigned int len = 0;
+    unsigned char digest[EVP_MAX_MD_SIZE];
+    HMAC(EVP_sha256(),
+         secret.data(),
+         static_cast<int>(secret.size()),
+         reinterpret_cast<const unsigned char*>(data.data()),
+         data.size(),
+         digest,
+         &len);
+    return base64url_encode(std::string(reinterpret_cast<char*>(digest), len));
+}
+}
 
 struct FunctionReturn {
     Value value;
@@ -488,6 +552,23 @@ Value Interpreter::execute_json_builtin(const std::string& name, const std::vect
         return Value::Object(object);
     }
 
+    if (name == "json::get") {
+        if (args.size() != 2) {
+            throw RuntimeError("Builtin 'json::get' expects object and key", loc);
+        }
+        if (args[0].type != ValueType::OBJECT) {
+            throw TypeError("Builtin 'json::get' expects an object", loc);
+        }
+        if (args[1].type != ValueType::STRING && args[1].type != ValueType::BYTES) {
+            throw TypeError("JSON object key must be a string", loc);
+        }
+        auto it = args[0].obj_val.find(args[1].str_val);
+        if (it == args[0].obj_val.end()) {
+            return Value();
+        }
+        return it->second;
+    }
+
     if (name == "json::write" || name == "json::save") {
         if (args.size() != 2) {
             throw RuntimeError("Builtin '" + name + "' expects path and value", loc);
@@ -518,6 +599,85 @@ Value Interpreter::execute_json_builtin(const std::string& name, const std::vect
     }
 
     throw RuntimeError("Unknown JSON builtin: " + name, loc);
+}
+
+Value Interpreter::execute_auth_builtin(const std::string& name, const std::vector<Value>& args,
+                                        const SourceLocation& loc) {
+    if (name == "auth::hash_password") {
+        if (args.size() != 1) {
+            throw RuntimeError("Builtin 'auth::hash_password' expects 1 argument", loc);
+        }
+        if (args[0].type != ValueType::STRING && args[0].type != ValueType::BYTES) {
+            throw TypeError("Password must be a string", loc);
+        }
+        std::string salt = random_hex(16);
+        return Value("sha256$" + salt + "$" + sha256_hex(salt + ":" + args[0].str_val));
+    }
+
+    if (name == "auth::verify_password") {
+        if (args.size() != 2) {
+            throw RuntimeError("Builtin 'auth::verify_password' expects password and hash", loc);
+        }
+        if ((args[0].type != ValueType::STRING && args[0].type != ValueType::BYTES) ||
+            (args[1].type != ValueType::STRING && args[1].type != ValueType::BYTES)) {
+            throw TypeError("Password and hash must be strings", loc);
+        }
+        const std::string& stored = args[1].str_val;
+        const std::string prefix = "sha256$";
+        if (stored.rfind(prefix, 0) != 0) {
+            return Value::Bool(false);
+        }
+        size_t salt_start = prefix.size();
+        size_t salt_end = stored.find('$', salt_start);
+        if (salt_end == std::string::npos) {
+            return Value::Bool(false);
+        }
+        std::string salt = stored.substr(salt_start, salt_end - salt_start);
+        std::string expected = prefix + salt + "$" + sha256_hex(salt + ":" + args[0].str_val);
+        return Value::Bool(expected == stored);
+    }
+
+    throw RuntimeError("Unknown auth builtin: " + name, loc);
+}
+
+Value Interpreter::execute_jwt_builtin(const std::string& name, const std::vector<Value>& args,
+                                       const SourceLocation& loc) {
+    if (name == "jwt::sign") {
+        if (args.size() != 2) {
+            throw RuntimeError("Builtin 'jwt::sign' expects payload and secret", loc);
+        }
+        if (args[0].type != ValueType::OBJECT) {
+            throw TypeError("JWT payload must be an object", loc);
+        }
+        if (args[1].type != ValueType::STRING && args[1].type != ValueType::BYTES) {
+            throw TypeError("JWT secret must be a string", loc);
+        }
+        std::string header = base64url_encode("{\"alg\":\"HS256\",\"typ\":\"JWT\"}");
+        std::string payload = base64url_encode(stringify_json(args[0]));
+        std::string signing_input = header + "." + payload;
+        return Value(signing_input + "." + hmac_sha256_base64url(signing_input, args[1].str_val));
+    }
+
+    if (name == "jwt::verify") {
+        if (args.size() != 2) {
+            throw RuntimeError("Builtin 'jwt::verify' expects token and secret", loc);
+        }
+        if ((args[0].type != ValueType::STRING && args[0].type != ValueType::BYTES) ||
+            (args[1].type != ValueType::STRING && args[1].type != ValueType::BYTES)) {
+            throw TypeError("JWT token and secret must be strings", loc);
+        }
+        size_t first_dot = args[0].str_val.find('.');
+        size_t second_dot = args[0].str_val.find('.', first_dot == std::string::npos ? 0 : first_dot + 1);
+        if (first_dot == std::string::npos || second_dot == std::string::npos) {
+            return Value::Bool(false);
+        }
+        std::string signing_input = args[0].str_val.substr(0, second_dot);
+        std::string expected = hmac_sha256_base64url(signing_input, args[1].str_val);
+        std::string actual = args[0].str_val.substr(second_dot + 1);
+        return Value::Bool(expected == actual);
+    }
+
+    throw RuntimeError("Unknown JWT builtin: " + name, loc);
 }
 
 Value Interpreter::execute_request_builtin(const std::string& name, const std::vector<Value>& args,
@@ -671,6 +831,47 @@ std::string Interpreter::build_insert_sql(const std::string& table, const Value&
            " (" + columns.str() + ") VALUES (" + values.str() + ")";
 }
 
+Value Interpreter::find_first_row(const std::string& table, const std::string& field, const Value& value,
+                                  const SourceLocation& loc) const {
+    if (!sqlite_db) {
+        throw RuntimeError("Open SQLite database first with sql::open(\"app.sqlite\")", loc);
+    }
+
+    std::string query = "SELECT * FROM " + escape_sql_identifier(model_table_or_name(table), loc) +
+                        " WHERE " + escape_sql_identifier(field, loc) + " = " + sql_literal(value) + " LIMIT 1";
+    sqlite3_stmt* stmt = nullptr;
+    int rc = sqlite3_prepare_v2(sqlite_db, query.c_str(), -1, &stmt, nullptr);
+    if (rc != SQLITE_OK) {
+        throw RuntimeError("SQLite query failed: " + std::string(sqlite3_errmsg(sqlite_db)), loc);
+    }
+
+    std::map<std::string, Value> row;
+    rc = sqlite3_step(stmt);
+    if (rc == SQLITE_ROW) {
+        int columns = sqlite3_column_count(stmt);
+        for (int i = 0; i < columns; ++i) {
+            std::string column_name = sqlite3_column_name(stmt, i);
+            int column_type = sqlite3_column_type(stmt, i);
+            if (column_type == SQLITE_INTEGER) {
+                row[column_name] = Value(static_cast<long long>(sqlite3_column_int64(stmt, i)));
+            } else if (column_type == SQLITE_FLOAT) {
+                row[column_name] = Value(sqlite3_column_double(stmt, i));
+            } else if (column_type == SQLITE_NULL) {
+                row[column_name] = Value();
+            } else {
+                const unsigned char* text = sqlite3_column_text(stmt, i);
+                row[column_name] = Value(text ? reinterpret_cast<const char*>(text) : "");
+            }
+        }
+    } else if (rc != SQLITE_DONE) {
+        std::string message = sqlite3_errmsg(sqlite_db);
+        sqlite3_finalize(stmt);
+        throw RuntimeError("SQLite query failed: " + message, loc);
+    }
+    sqlite3_finalize(stmt);
+    return Value::Object(row);
+}
+
 void Interpreter::execute_sql_statement(const std::string& statement, const SourceLocation& loc) const {
     if (!sqlite_db) {
         throw RuntimeError("Open SQLite database first with sql::open(\"app.sqlite\")", loc);
@@ -787,6 +988,17 @@ Value Interpreter::execute_sql_builtin(const std::string& name, const std::vecto
         std::string query = build_insert_sql(args[0].str_val, args[1], loc);
         execute_sql_statement(query, loc);
         return Value(query);
+    }
+
+    if (name == "orm::find" || name == "sql::find") {
+        if (args.size() != 3) {
+            throw RuntimeError("Builtin '" + name + "' expects table, field and value", loc);
+        }
+        if ((args[0].type != ValueType::STRING && args[0].type != ValueType::BYTES) ||
+            (args[1].type != ValueType::STRING && args[1].type != ValueType::BYTES)) {
+            throw TypeError("SQL table and field names must be strings", loc);
+        }
+        return find_first_row(args[0].str_val, args[1].str_val, args[2], loc);
     }
 
     throw RuntimeError("Unknown SQL builtin: " + name, loc);
@@ -1671,6 +1883,20 @@ Value Interpreter::eval(const std::shared_ptr<AstNode>& node, const std::map<std
                 args.push_back(eval(arg, locals));
             }
             return execute_request_builtin(builtin->name, args, builtin->location);
+        }
+        if (builtin->name.rfind("auth::", 0) == 0) {
+            std::vector<Value> args;
+            for (const auto& arg : builtin->args) {
+                args.push_back(eval(arg, locals));
+            }
+            return execute_auth_builtin(builtin->name, args, builtin->location);
+        }
+        if (builtin->name.rfind("jwt::", 0) == 0) {
+            std::vector<Value> args;
+            for (const auto& arg : builtin->args) {
+                args.push_back(eval(arg, locals));
+            }
+            return execute_jwt_builtin(builtin->name, args, builtin->location);
         }
         if (builtin->name.rfind("sql::", 0) == 0 || builtin->name.rfind("orm::", 0) == 0) {
             std::vector<Value> args;

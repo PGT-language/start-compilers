@@ -20,6 +20,11 @@ class PackageResolver {
     std::string project_root;
     std::string compiler_root;
 
+    struct ModuleRequirement {
+        std::string path;
+        std::string version;
+    };
+
     static bool file_exists(const std::string& path) {
         std::ifstream file(path);
         return file.good();
@@ -106,6 +111,92 @@ class PackageResolver {
             return (std::filesystem::path("src/stdlib") / import_path.substr(4)).string();
         }
         return import_path;
+    }
+
+    static std::string module_cache_name(const std::string& module_path) {
+        std::string name;
+        for (char raw_ch : module_path) {
+            unsigned char ch = static_cast<unsigned char>(raw_ch);
+            if (std::isalnum(ch) || raw_ch == '_' || raw_ch == '-' || raw_ch == '.') {
+                name += raw_ch;
+            } else {
+                name += '_';
+            }
+        }
+        return name.empty() ? "module" : name;
+    }
+
+    static std::vector<std::string> split_words(const std::string& value) {
+        std::vector<std::string> words;
+        std::string current;
+        for (char ch : value) {
+            if (std::isspace(static_cast<unsigned char>(ch))) {
+                if (!current.empty()) {
+                    words.push_back(current);
+                    current.clear();
+                }
+            } else {
+                current += ch;
+            }
+        }
+        if (!current.empty()) {
+            words.push_back(current);
+        }
+        return words;
+    }
+
+    static std::vector<ModuleRequirement> read_module_requirements(const std::string& root) {
+        std::vector<ModuleRequirement> requirements;
+        std::filesystem::path mod_path = std::filesystem::path(root) / "pgt.mod";
+        std::ifstream file(mod_path);
+        if (!file) {
+            return requirements;
+        }
+
+        bool in_require_block = false;
+        std::string line;
+        while (std::getline(file, line)) {
+            std::string cleaned = trim(line);
+            if (cleaned.empty() || cleaned.rfind("//", 0) == 0) {
+                continue;
+            }
+            if (cleaned == "require (") {
+                in_require_block = true;
+                continue;
+            }
+            if (in_require_block && cleaned == ")") {
+                in_require_block = false;
+                continue;
+            }
+
+            if (cleaned.rfind("require ", 0) == 0) {
+                cleaned = trim(cleaned.substr(8));
+            } else if (!in_require_block) {
+                continue;
+            }
+
+            std::vector<std::string> words = split_words(cleaned);
+            if (!words.empty()) {
+                requirements.push_back({words[0], words.size() > 1 ? words[1] : ""});
+            }
+        }
+        return requirements;
+    }
+
+    static bool import_matches_module(const std::string& import_path, const std::string& module_path) {
+        return import_path == module_path ||
+               starts_with(import_path, module_path + "/") ||
+               starts_with(import_path, module_path + "\\");
+    }
+
+    static std::string import_suffix_for_module(const std::string& import_path, const std::string& module_path) {
+        if (import_path == module_path) {
+            return "";
+        }
+        if (import_path.size() <= module_path.size() + 1) {
+            return "";
+        }
+        return import_path.substr(module_path.size() + 1);
     }
 
     static std::vector<std::string> collect_package_files(const std::string& directory) {
@@ -224,6 +315,18 @@ public:
             add_directory_candidate(directory_candidates, base_dir, import_path);
             add_directory_candidate(directory_candidates, project_root, import_path);
             add_directory_candidate(directory_candidates, ".", import_path);
+
+            for (const auto& requirement : read_module_requirements(project_root)) {
+                if (!import_matches_module(import_path, requirement.path)) {
+                    continue;
+                }
+                std::filesystem::path module_base = std::filesystem::path(project_root) / ".pgt" / "pkg" /
+                                                    module_cache_name(requirement.path);
+                std::string suffix = import_suffix_for_module(import_path, requirement.path);
+                std::filesystem::path cached_import = suffix.empty() ? module_base : module_base / suffix;
+                add_import_candidates(file_candidates, "", cached_import.string());
+                add_directory_candidate(directory_candidates, "", cached_import.string());
+            }
         }
 
         for (const auto& candidate : file_candidates) {
