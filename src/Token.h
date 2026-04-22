@@ -19,4 +19,5 @@ struct Token {
     TokenType type = T_EOF;
     std::string value;
     int line = 0;
+    int column = 0;
 };
