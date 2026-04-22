@@ -631,17 +631,19 @@ private:
 
     static std::string apply_edits(const std::string& source,
                                    std::vector<TextEdit> edits) {
+        for (auto& edit : edits) {
+            edit.offset = offset_for(source, edit.line, edit.column);
+        }
+
         std::stable_sort(edits.begin(), edits.end(),
-                         [&source](const TextEdit& left, const TextEdit& right) {
-                             size_t left_offset = offset_for(source, left.line, left.column);
-                             size_t right_offset = offset_for(source, right.line, right.column);
-                             if (left_offset != right_offset) return left_offset > right_offset;
+                         [](const TextEdit& left, const TextEdit& right) {
+                             if (left.offset != right.offset) return left.offset > right.offset;
                              return left.order > right.order;
                          });
 
         std::string result = source;
         for (const auto& edit : edits) {
-            size_t offset = offset_for(result, edit.line, edit.column);
+            size_t offset = std::min(edit.offset, result.size());
             if (edit.kind == TextEdit::Kind::Erase) {
                 size_t length = std::min(edit.length, result.size() - offset);
                 result.erase(offset, length);
