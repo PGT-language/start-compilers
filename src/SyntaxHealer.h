@@ -179,6 +179,15 @@ private:
         if (current.type == T_ELSE) {
             return previous.type != T_RBRACE && can_end_statement(previous.type);
         }
+        if (current.type == T_RETURN &&
+            index + 1 < tokens.size() &&
+            tokens[index + 1].type == T_NUMBER &&
+            tokens[index + 1].value == "0" &&
+            previous.type == T_NUMBER &&
+            previous.value == "1" &&
+            current.line > previous.line) {
+            return true;
+        }
         if (current.type != T_FUNCTION && current.type != T_CLASS &&
             current.type != T_FROM && current.type != T_PACKAGE) {
             return false;
