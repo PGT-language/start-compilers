@@ -1,5 +1,6 @@
 #include "Lexer.h"
 #include "Parser.h"
+#include "SyntaxHealer.h"
 #include "Interpreter.h"
 #include "Utils.h"
 #include "Ast.h"
@@ -325,6 +326,8 @@ int main(int argc, char** argv) {
                     break;
                 }
             } while (t.type != T_EOF);
+
+            tokens = SyntaxHealer::heal(tokens);
 
             if (DEBUG) std::cout << "[DEBUG] Tokenized " << tokens.size() << " tokens" << std::endl;
 
