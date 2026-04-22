@@ -791,6 +791,16 @@ private:
         };
     }
 
+    static bool is_exact_builtin_pair(const std::string& root,
+                                      const std::string& member) {
+        for (const auto& pair : builtin_pairs()) {
+            if (root == pair.root && member == pair.member) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     static std::string correction_message(const std::string& original,
                                           const std::string& replacement) {
         return "syntax typo '" + original + "' was corrected to '" + replacement + "'";
@@ -815,6 +825,9 @@ private:
         const Token& member = tokens[index + 2];
         if (!is_identifier_token(root) || separator.type != T_COLON_COLON ||
             !is_identifier_token(member)) {
+            return;
+        }
+        if (is_exact_builtin_pair(root.value, member.value)) {
             return;
         }
 
@@ -887,6 +900,10 @@ private:
                                     size_t index) {
         const Token& token = tokens[index];
         if (token.type != T_IDENTIFIER) return;
+        if ((index > 0 && tokens[index - 1].type == T_COLON_COLON) ||
+            (index + 1 < tokens.size() && tokens[index + 1].type == T_COLON_COLON)) {
+            return;
+        }
 
         if (index > 0 && tokens[index - 1].type == T_PLUS) {
             std::string type_replacement = best_word(token.value, type_words(), false);
