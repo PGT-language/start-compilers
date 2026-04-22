@@ -386,8 +386,13 @@ private:
                                      const std::string& message,
                                      size_t order) {
         std::vector<size_t> starts = line_starts(source);
+        bool ends_with_newline = !source.empty() && source.back() == '\n';
         int line = static_cast<int>(starts.empty() ? 1 : starts.size());
         int column = static_cast<int>(line_end_column(source, line));
+        if (ends_with_newline) {
+            line++;
+            column = 1;
+        }
         return make_insert(line, column, text, message, order);
     }
 
