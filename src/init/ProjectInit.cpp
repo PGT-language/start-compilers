@@ -8,6 +8,8 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <termios.h>
+#include <unistd.h>
 
 namespace {
 struct InitOptions {
@@ -20,6 +22,8 @@ struct InitOptions {
     std::string table_type = "model";
     std::string table_name = "test";
     bool create_api = true;
+    bool create_static = true;
+    bool create_api_spec = true;
     bool create_docker = false;
     bool create_nginx = false;
 };
@@ -112,7 +116,8 @@ void print_init_help() {
     std::cout << "Usage:\n";
     std::cout << "  pgt init [template] [project-name]\n\n";
     std::cout << "Templates:\n";
-    std::cout << "  backend  Create a modular backend project with optional logging, database, API, Docker, and nginx\n\n";
+    std::cout << "  backend  Create a modular backend project with optional logging, database, API, static files, Docker, and nginx\n\n";
+    std::cout << "Interactive choices support Up/Down arrows and Enter.\n\n";
     std::cout << "Example:\n";
     std::cout << "  pgt init backend test\n";
 }
@@ -140,32 +145,105 @@ std::string prompt_text(const std::string& question, const std::string& default_
     }
 }
 
-bool prompt_yes_no(const std::string& question, bool default_value) {
-    std::string suffix = default_value ? "Y/n" : "y/N";
-    while (true) {
-        std::cout << question << " (" << suffix << "): ";
-        std::string answer;
-        if (!std::getline(std::cin, answer)) {
-            return default_value;
-        }
+std::string prompt_choice(const std::string& question,
+                          const std::vector<std::string>& choices,
+                          const std::string& default_value);
 
-        answer = lowercase(trim(answer));
-        if (answer.empty()) {
-            return default_value;
-        }
-        if (answer == "y" || answer == "yes" || answer == "да" || answer == "d") {
-            return true;
-        }
-        if (answer == "n" || answer == "no" || answer == "нет") {
-            return false;
-        }
-        std::cout << "Please answer yes or no.\n";
-    }
+bool prompt_yes_no(const std::string& question, bool default_value) {
+    return prompt_choice(question, {"yes", "no"}, default_value ? "yes" : "no") == "yes";
 }
 
 std::string prompt_choice(const std::string& question,
                           const std::vector<std::string>& choices,
                           const std::string& default_value) {
+    if (choices.empty()) {
+        return default_value;
+    }
+
+    size_t selected = 0;
+    for (size_t i = 0; i < choices.size(); ++i) {
+        if (choices[i] == default_value) {
+            selected = i;
+            break;
+        }
+    }
+
+    if (isatty(STDIN_FILENO)) {
+        termios original {};
+        bool raw_enabled = tcgetattr(STDIN_FILENO, &original) == 0;
+        if (raw_enabled) {
+            termios raw = original;
+            raw.c_lflag &= static_cast<tcflag_t>(~(ICANON | ECHO));
+            raw.c_cc[VMIN] = 1;
+            raw.c_cc[VTIME] = 0;
+            raw_enabled = tcsetattr(STDIN_FILENO, TCSANOW, &raw) == 0;
+        }
+
+        auto render = [&]() {
+            std::cout << "\033[?25l";
+            std::cout << question << "\n";
+            for (size_t i = 0; i < choices.size(); ++i) {
+                std::cout << (i == selected ? "> " : "  ") << choices[i] << "\n";
+            }
+            std::cout.flush();
+        };
+
+        if (raw_enabled) {
+            render();
+            while (true) {
+                char ch = 0;
+                if (read(STDIN_FILENO, &ch, 1) != 1) {
+                    break;
+                }
+                if (ch == '\n' || ch == '\r') {
+                    break;
+                }
+                if (choices.size() == 2 && choices[0] == "yes" && choices[1] == "no" &&
+                    (ch == 'y' || ch == 'd')) {
+                    selected = 0;
+                    break;
+                }
+                if (choices.size() == 2 && choices[0] == "yes" && choices[1] == "no" && ch == 'n') {
+                    selected = 1;
+                    break;
+                }
+                if (ch >= '1' && ch <= '9') {
+                    size_t index = static_cast<size_t>(ch - '1');
+                    if (index < choices.size()) {
+                        selected = index;
+                        break;
+                    }
+                }
+                if (ch == '\033') {
+                    char seq[2] = {0, 0};
+                    if (read(STDIN_FILENO, &seq[0], 1) != 1 ||
+                        read(STDIN_FILENO, &seq[1], 1) != 1) {
+                        continue;
+                    }
+                    if (seq[0] == '[' && seq[1] == 'A') {
+                        selected = selected == 0 ? choices.size() - 1 : selected - 1;
+                    } else if (seq[0] == '[' && seq[1] == 'B') {
+                        selected = (selected + 1) % choices.size();
+                    }
+                } else if (ch == 'k' || ch == 'w') {
+                    selected = selected == 0 ? choices.size() - 1 : selected - 1;
+                } else if (ch == 'j' || ch == 's') {
+                    selected = (selected + 1) % choices.size();
+                }
+
+                std::cout << "\033[" << (choices.size() + 1) << "A";
+                render();
+            }
+
+            tcsetattr(STDIN_FILENO, TCSANOW, &original);
+            std::cout << "\033[?25h";
+            std::cout << "\033[" << (choices.size() + 1) << "A";
+            std::cout << "\033[J";
+            std::cout << question << ": " << choices[selected] << "\n";
+            return choices[selected];
+        }
+    }
+
     std::ostringstream choices_text;
     for (size_t i = 0; i < choices.size(); ++i) {
         if (i > 0) {
@@ -176,6 +254,14 @@ std::string prompt_choice(const std::string& question,
 
     while (true) {
         std::string answer = lowercase(prompt_text(question + " (" + choices_text.str() + ")", default_value));
+        if (choices.size() == 2 && choices[0] == "yes" && choices[1] == "no") {
+            if (answer == "y" || answer == "d" || answer == "yes" || answer == "da" || answer == "да") {
+                return "yes";
+            }
+            if (answer == "n" || answer == "no" || answer == "net" || answer == "нет") {
+                return "no";
+            }
+        }
         if (contains_choice(choices, answer)) {
             return answer;
         }
@@ -262,7 +348,18 @@ std::string model_source(const InitOptions& options) {
            << "class " << class_name << "(db.Model) {\n"
            << "    id = db.Column(db.Integer, primary_key=True)\n"
            << "    message = db.Column(db.String(255))\n"
-           << "}\n"
+           << "}\n";
+    return source.str();
+}
+
+std::string orm_init_source(const InitOptions& options) {
+    std::string package_name = normalize_identifier(options.table_name, "model");
+    std::string class_name = class_name_for(package_name);
+
+    std::ostringstream source;
+    source << "package init\n"
+           << "\n"
+           << "from \"../" << package_name << "\" import " << class_name << "\n"
            << "\n"
            << "function(migrate) {\n"
            << "    orm::migrate(\"" << class_name << "\")\n"
@@ -293,6 +390,204 @@ std::string raw_table_source(const InitOptions& options) {
     return source.str();
 }
 
+std::string static_index_source(const InitOptions& options) {
+    std::ostringstream source;
+    source << "<!doctype html>\n"
+           << "<html lang=\"en\">\n"
+           << "<head>\n"
+           << "    <meta charset=\"utf-8\">\n"
+           << "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+           << "    <title>" << options.project_name << "</title>\n"
+           << "    <link rel=\"stylesheet\" href=\"/static/styles.css\">\n"
+           << "</head>\n"
+           << "<body>\n"
+           << "    <main>\n"
+           << "        <section class=\"hero\">\n"
+           << "            <p class=\"eyebrow\">PGT backend</p>\n"
+           << "            <h1>" << options.project_name << "</h1>\n"
+           << "            <p id=\"status\">Backend is ready.</p>\n";
+    if (options.create_api) {
+        source << "            <form id=\"message-form\">\n"
+               << "                <input id=\"message\" name=\"message\" type=\"text\" placeholder=\"Message\" autocomplete=\"off\">\n"
+               << "                <button type=\"submit\">Send</button>\n"
+               << "            </form>\n"
+               << "            <pre id=\"response\"></pre>\n";
+    }
+    if (options.create_api_spec) {
+        source << "            <a href=\"/api/v1/docs\">Open api.yaml</a>\n";
+    }
+    source << "        </section>\n"
+           << "    </main>\n"
+           << "    <script src=\"/static/app.js\"></script>\n"
+           << "</body>\n"
+           << "</html>\n";
+    return source.str();
+}
+
+std::string static_css_source() {
+    return
+        ":root {\n"
+        "    color-scheme: light;\n"
+        "    font-family: Inter, Arial, sans-serif;\n"
+        "    background: #f5f7fb;\n"
+        "    color: #18202f;\n"
+        "}\n"
+        "\n"
+        "* {\n"
+        "    box-sizing: border-box;\n"
+        "}\n"
+        "\n"
+        "body {\n"
+        "    margin: 0;\n"
+        "}\n"
+        "\n"
+        "main {\n"
+        "    min-height: 100vh;\n"
+        "    display: grid;\n"
+        "    place-items: center;\n"
+        "    padding: 32px;\n"
+        "}\n"
+        "\n"
+        ".hero {\n"
+        "    width: min(680px, 100%);\n"
+        "    padding: 32px;\n"
+        "    background: #ffffff;\n"
+        "    border: 1px solid #dce3ee;\n"
+        "    border-radius: 8px;\n"
+        "    box-shadow: 0 18px 45px rgba(24, 32, 47, 0.08);\n"
+        "}\n"
+        "\n"
+        ".eyebrow {\n"
+        "    margin: 0 0 8px;\n"
+        "    color: #4d647f;\n"
+        "    font-size: 14px;\n"
+        "    font-weight: 700;\n"
+        "    text-transform: uppercase;\n"
+        "}\n"
+        "\n"
+        "h1 {\n"
+        "    margin: 0;\n"
+        "    font-size: 44px;\n"
+        "    line-height: 1.1;\n"
+        "}\n"
+        "\n"
+        "form {\n"
+        "    display: flex;\n"
+        "    gap: 12px;\n"
+        "    margin-top: 24px;\n"
+        "}\n"
+        "\n"
+        "input,\n"
+        "button {\n"
+        "    min-height: 44px;\n"
+        "    border-radius: 8px;\n"
+        "    font: inherit;\n"
+        "}\n"
+        "\n"
+        "input {\n"
+        "    flex: 1;\n"
+        "    min-width: 0;\n"
+        "    border: 1px solid #b9c5d4;\n"
+        "    padding: 0 14px;\n"
+        "}\n"
+        "\n"
+        "button {\n"
+        "    border: 0;\n"
+        "    padding: 0 18px;\n"
+        "    background: #156d72;\n"
+        "    color: #ffffff;\n"
+        "    font-weight: 700;\n"
+        "    cursor: pointer;\n"
+        "}\n"
+        "\n"
+        "pre {\n"
+        "    overflow: auto;\n"
+        "    margin-top: 18px;\n"
+        "    padding: 16px;\n"
+        "    background: #18202f;\n"
+        "    color: #ecf3ff;\n"
+        "    border-radius: 8px;\n"
+        "}\n"
+        "\n"
+        "a {\n"
+        "    display: inline-block;\n"
+        "    margin-top: 18px;\n"
+        "    color: #156d72;\n"
+        "    font-weight: 700;\n"
+        "}\n";
+}
+
+std::string static_js_source(const InitOptions& options) {
+    std::ostringstream source;
+    source << "const form = document.querySelector('#message-form');\n"
+           << "const response = document.querySelector('#response');\n"
+           << "const statusLine = document.querySelector('#status');\n"
+           << "\n"
+           << "if (statusLine) {\n"
+           << "    statusLine.textContent = 'Backend is ready.';\n"
+           << "}\n";
+    if (options.create_api) {
+        source << "\n"
+               << "if (form && response) {\n"
+               << "    form.addEventListener('submit', async (event) => {\n"
+               << "        event.preventDefault();\n"
+               << "        const message = new FormData(form).get('message') || '';\n"
+               << "        const result = await fetch('/api', {\n"
+               << "            method: 'POST',\n"
+               << "            headers: { 'Content-Type': 'application/json' },\n"
+               << "            body: JSON.stringify({ message })\n"
+               << "        });\n"
+               << "        response.textContent = await result.text();\n"
+               << "        form.reset();\n"
+               << "    });\n"
+               << "}\n";
+    }
+    return source.str();
+}
+
+std::string api_spec_source(const InitOptions& options) {
+    std::ostringstream source;
+    source << "openapi: 3.0.3\n"
+           << "info:\n"
+           << "  title: " << options.project_name << " API\n"
+           << "  version: 0.1.0\n"
+           << "paths:\n"
+           << "  /:\n"
+           << "    get:\n"
+           << "      summary: Index route\n"
+           << "      responses:\n"
+           << "        \"200\":\n"
+           << "          description: OK\n";
+    if (options.create_api) {
+        source << "  /api:\n"
+               << "    get:\n"
+               << "      summary: Default API status\n"
+               << "      responses:\n"
+               << "        \"200\":\n"
+               << "          description: OK\n"
+               << "    post:\n"
+               << "      summary: Save JSON payload\n"
+               << "      requestBody:\n"
+               << "        required: true\n"
+               << "        content:\n"
+               << "          application/json:\n"
+               << "            schema:\n"
+               << "              type: object\n"
+               << "      responses:\n"
+               << "        \"200\":\n"
+               << "          description: Saved\n";
+    }
+    if (options.create_api_spec) {
+        source << "  /api/v1/docs:\n"
+               << "    get:\n"
+               << "      summary: OpenAPI YAML\n"
+               << "      responses:\n"
+               << "        \"200\":\n"
+               << "          description: API specification\n";
+    }
+    return source.str();
+}
+
 std::string runtime_source(const InitOptions& options) {
     bool model_database = options.use_database && options.table_type == "model";
     std::string table_package = normalize_identifier(options.table_name, "model");
@@ -310,7 +605,7 @@ std::string runtime_source(const InitOptions& options) {
     }
     if (options.use_database) {
         if (model_database) {
-            source << "from \"models/" << table_package << "\" import migrate\n";
+            source << "from \"models/init\" import migrate\n";
         } else {
             source << "from \"database/" << table_package << "\" import migrate\n";
         }
@@ -340,20 +635,23 @@ std::string runtime_source(const InitOptions& options) {
 
 std::string api_source(const InitOptions& options) {
     bool model_database = options.use_database && options.table_type == "model";
-    std::string table_package = normalize_identifier(options.table_name, "model");
 
     std::ostringstream source;
     source << "package api\n"
            << "\n";
 
-    if (model_database) {
-        source << "from \"models/" << table_package << "\" import save\n"
+    if (model_database && options.create_api) {
+        source << "from \"models/init\" import save\n"
                << "\n";
     }
 
-    source << "function(index) {\n"
-           << "    return \"" << options.project_name << " backend is running\"\n"
-           << "    return 1\n"
+    source << "function(index) {\n";
+    if (options.create_static) {
+        source << "    return read::file(\"static/index.html\")\n";
+    } else {
+        source << "    return \"" << options.project_name << " backend is running\"\n";
+    }
+    source << "    return 1\n"
            << "}\n";
 
     if (options.create_api) {
@@ -365,7 +663,28 @@ std::string api_source(const InitOptions& options) {
                    << "        return json::object(\"status\", \"saved\")\n"
                    << "    }\n";
         }
-        source << "    return \"I'm is working\"\n"
+        source << "    return \"I am working\"\n"
+               << "    return 1\n"
+               << "}\n";
+    }
+
+    if (options.create_static) {
+        source << "\n"
+               << "function(static_css) {\n"
+               << "    return read::file(\"static/styles.css\")\n"
+               << "    return 1\n"
+               << "}\n"
+               << "\n"
+               << "function(static_js) {\n"
+               << "    return read::file(\"static/app.js\")\n"
+               << "    return 1\n"
+               << "}\n";
+    }
+
+    if (options.create_api_spec) {
+        source << "\n"
+               << "function(docs) {\n"
+               << "    return read::file(\"api.yaml\")\n"
                << "    return 1\n"
                << "}\n";
     }
@@ -381,6 +700,12 @@ std::string routes_source(const InitOptions& options) {
     if (options.create_api) {
         source << ", api";
     }
+    if (options.create_static) {
+        source << ", static_css, static_js";
+    }
+    if (options.create_api_spec) {
+        source << ", docs";
+    }
     source << "\n"
            << "\n"
            << "function(register) {\n"
@@ -388,6 +713,13 @@ std::string routes_source(const InitOptions& options) {
     if (options.create_api) {
         source << "    web::get(\"/api\", \"api\")\n"
                << "    web::post(\"/api\", \"api\")\n";
+    }
+    if (options.create_static) {
+        source << "    web::get(\"/static/styles.css\", \"static_css\")\n"
+               << "    web::get(\"/static/app.js\", \"static_js\")\n";
+    }
+    if (options.create_api_spec) {
+        source << "    web::get(\"/api/v1/docs\", \"docs\")\n";
     }
     source << "    return 1\n"
            << "}\n";
@@ -481,12 +813,19 @@ std::string readme_source(const InitOptions& options) {
            << "- `runtime/runtime.pgt` prepares logging and database startup.\n"
            << "- `routes/routes.pgt` registers HTTP routes.\n"
            << "- `api/api.pgt` contains request handlers.\n";
+    if (options.create_static) {
+        source << "- `static/index.html`, `static/styles.css`, and `static/app.js` contain frontend assets.\n";
+    }
+    if (options.create_api_spec) {
+        source << "- `api.yaml` contains the editable API specification served from `/api/v1/docs`.\n";
+    }
     if (options.create_logging) {
         source << "- `components/logging/logging.pgt` wraps log output and log levels.\n";
     }
     if (options.use_database) {
         if (options.table_type == "model") {
-            source << "- `models/" << table_package << "/" << table_package << ".pgt` contains the ORM model.\n";
+            source << "- `models/" << table_package << "/" << table_package << ".pgt` contains the ORM model.\n"
+                   << "- `models/init/init-db.pgt` runs ORM migration and save helpers.\n";
         } else {
             source << "- `database/" << table_package << "/" << table_package << ".pgt` contains raw SQL migration helpers.\n";
         }
@@ -505,12 +844,27 @@ std::string readme_source(const InitOptions& options) {
                << "```bash\n"
                << "curl http://localhost:5000/\n"
                << "curl http://localhost:5000/api\n";
+        if (options.create_api_spec) {
+            source << "curl http://localhost:5000/api/v1/docs\n";
+        }
         if (options.use_database && options.table_type == "model") {
             source << "curl -X POST http://localhost:5000/api \\\n"
                    << "  -H 'Content-Type: application/json' \\\n"
                    << "  -d '{\"message\":\"hello\"}'\n";
         }
         source << "```\n";
+    }
+    if (options.create_static) {
+        source << "\n"
+               << "## Static Files\n"
+               << "\n"
+               << "The root route returns `static/index.html`. Edit the files in `static/` to change the page, styles, and browser script.\n";
+    }
+    if (options.create_api_spec) {
+        source << "\n"
+               << "## API Spec\n"
+               << "\n"
+               << "Edit `api.yaml` when you add routes. The backend serves the current file at `/api/v1/docs`.\n";
     }
     if (options.create_logging) {
         source << "\n"
@@ -566,6 +920,19 @@ bool create_backend_project(const InitOptions& options) {
         if (!write_file(project_dir / "api" / "api.pgt", api_source(options))) return false;
         if (!write_file(project_dir / "README.md", readme_source(options))) return false;
 
+        if (options.create_static) {
+            if (!write_file(project_dir / "static" / "index.html",
+                            static_index_source(options))) return false;
+            if (!write_file(project_dir / "static" / "styles.css",
+                            static_css_source())) return false;
+            if (!write_file(project_dir / "static" / "app.js",
+                            static_js_source(options))) return false;
+        }
+
+        if (options.create_api_spec) {
+            if (!write_file(project_dir / "api.yaml", api_spec_source(options))) return false;
+        }
+
         if (options.create_logging) {
             if (!write_file(project_dir / "components" / "logging" / "logging.pgt",
                             logging_component_source())) return false;
@@ -576,6 +943,8 @@ bool create_backend_project(const InitOptions& options) {
             if (options.table_type == "model") {
                 if (!write_file(project_dir / "models" / table_package / (table_package + ".pgt"),
                                 model_source(options))) return false;
+                if (!write_file(project_dir / "models" / "init" / "init-db.pgt",
+                                orm_init_source(options))) return false;
             } else {
                 if (!write_file(project_dir / "database" / table_package / (table_package + ".pgt"),
                                 raw_table_source(options))) return false;
@@ -635,6 +1004,8 @@ InitOptions collect_options(int argc, char** argv) {
     }
 
     options.create_api = prompt_yes_no("Create default /api route", true);
+    options.create_static = prompt_yes_no("Create static html/css/js", true);
+    options.create_api_spec = prompt_yes_no("Create api.yaml and /api/v1/docs", true);
     options.create_docker = prompt_yes_no("Create Dockerfile and docker-compose.yml", false);
     options.create_nginx = prompt_yes_no("Create nginx config", false);
 

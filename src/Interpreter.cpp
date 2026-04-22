@@ -22,6 +22,33 @@ struct FunctionReturn {
     bool has_expr;
 };
 
+static bool path_ends_with(const std::string& value, const std::string& suffix) {
+    return value.size() >= suffix.size() &&
+           value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+static std::string response_content_type_for_path(const std::string& path) {
+    if (path == "/api/v1/docs" || path_ends_with(path, ".yaml") || path_ends_with(path, ".yml")) {
+        return "application/yaml; charset=utf-8";
+    }
+    if (path_ends_with(path, ".html")) {
+        return "text/html; charset=utf-8";
+    }
+    if (path_ends_with(path, ".css")) {
+        return "text/css; charset=utf-8";
+    }
+    if (path_ends_with(path, ".js")) {
+        return "application/javascript; charset=utf-8";
+    }
+    if (path_ends_with(path, ".json")) {
+        return "application/json; charset=utf-8";
+    }
+    if (path_ends_with(path, ".svg")) {
+        return "image/svg+xml";
+    }
+    return "";
+}
+
 Interpreter::~Interpreter() {
     if (sqlite_db) {
         sqlite3_close(sqlite_db);
@@ -1048,6 +1075,10 @@ void Interpreter::run_http_server(const std::string& host, long long port, const
                 Value result = call_http_handler(route->second, normalize_http_method(method), path, request_body);
                 response_body = response_body_from_value(result);
                 content_type = response_content_type(result);
+                std::string route_content_type = response_content_type_for_path(path);
+                if (!route_content_type.empty()) {
+                    content_type = route_content_type;
+                }
             } else if (!body.empty() && normalize_http_method(method) == "GET" && path == "/") {
                 response_body = read_response_body(body, loc);
                 if (body.find(".html") != std::string::npos) {

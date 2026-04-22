@@ -221,7 +221,7 @@ orm::save("Test", json::object("message", "Hello", "name", "Pabla", "age", 18)) 
 
 orm::save("users", json::object("name", "Pabla")) // ORM alias для insert/save по имени таблицы {реализовано}
 
-pgt init // интерактивная инициализация проекта из шаблона {реализовано}
+pgt init // интерактивная инициализация проекта из шаблона, выбор пунктов стрелками вверх/вниз и Enter {реализовано}
 
 pgt init backend test // создать backend проект test, template/name уже выбраны и первые два шага скипаются {реализовано}
 
@@ -234,17 +234,29 @@ pgt init backend test // создать backend проект test, template/name
 6. включить database или пропустить {реализовано}
 7. если database включена: выбрать table type model или sql {реализовано}
 8. если database включена: выбрать table/model name {реализовано}
-9. создать default /api route с ответом "Я работаю" или пропустить {реализовано}
-10. создать Dockerfile и docker-compose.yml или пропустить {реализовано}
-11. создать nginx/default.conf или пропустить {реализовано}
+9. создать default /api route с ответом "I am working" или пропустить {реализовано}
+10. создать static html/css/js или пропустить {реализовано}
+11. создать api.yaml и маршрут /api/v1/docs или пропустить {реализовано}
+12. создать Dockerfile и docker-compose.yml или пропустить {реализовано}
+13. создать nginx/default.conf или пропустить {реализовано}
 
 pgt init backend создаёт модульную структуру:
 - main.pgt // минимальный вход: setup(), register(), web::run(...) {реализовано}
 - runtime/runtime.pgt // startup: logging, sql::open, migrate {реализовано}
 - routes/routes.pgt // регистрация web::route/web::get/web::post {реализовано}
 - api/api.pgt // index/api handlers и сохранение POST JSON через ORM, если model включён {реализовано}
-- models/<name>/<name>.pgt или database/<name>/<name>.pgt // слой базы данных {реализовано}
+- static/index.html, static/styles.css, static/app.js // frontend assets, если static включён {реализовано}
+- api.yaml // OpenAPI-like спецификация, отдаётся через /api/v1/docs {реализовано}
+- models/<name>/<name>.pgt // ORM model class, если database model включён {реализовано}
+- models/init/init-db.pgt // ORM migrate/save слой для базы данных {реализовано}
+- database/<name>/<name>.pgt // raw SQL слой, если database sql включён {реализовано}
 - Dockerfile // использует PGT runtime image через ARG PGT_IMAGE {реализовано}
+
+from "models/init" import migrate, save // подключение DB init слоя из сгенерированного backend проекта {реализовано}
+
+web::get("/api/v1/docs", "docs") // маршрут для выдачи api.yaml {реализовано}
+
+read::file("api.yaml") // отдача API спецификации как файла {реализовано}
 
 pgt generate component logging // генератор компонента logging {реализовано}
 

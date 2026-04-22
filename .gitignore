@@ -23,3 +23,11 @@ hki/docker-compose.yml
 hki/Dockerfile
 hki/README.md
 hki/nginx/default.conf
+hhhdks/api.yaml
+hhhdks/docker-compose.yml
+hhhdks/Dockerfile
+hhhdks/README.md
+hhhdks/nginx/default.conf
+hhhdks/static/app.js
+hhhdks/static/index.html
+hhhdks/static/styles.css
