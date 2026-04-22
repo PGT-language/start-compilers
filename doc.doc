@@ -249,6 +249,7 @@ pgt init backend создаёт модульную структуру:
 - api/api.pgt // index/api handlers и сохранение POST JSON через ORM, если model включён {реализовано}
 - auth/auth.pgt // регистрация, логин, JWT verify, если auth включён {реализовано}
 - static/index.html, static/styles.css, static/app.js // frontend assets, если static включён {реализовано}
+- static/auth.html, static/auth.css, static/auth.js // отдельные auth страницы и assets, если auth включён {реализовано}
 - sweiger/index.html // Swagger UI, отдаётся через /api/v1/docs {реализовано}
 - sweiger/sweiger.pgt // handlers Swagger UI и api.yaml {реализовано}
 - api.yaml // OpenAPI-like спецификация, отдаётся через /api/v1/openapi.yaml {реализовано}
