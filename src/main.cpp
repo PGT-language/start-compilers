@@ -336,8 +336,12 @@ int main(int argc, char** argv) {
                 return 1;
             }
 
-            SyntaxHealer::RepairResult repair = SyntaxHealer::repair_source(source, tokens);
-            if (repair.changed) {
+            for (int repair_pass = 0; repair_pass < 5; ++repair_pass) {
+                SyntaxHealer::RepairResult repair = SyntaxHealer::repair_source(source, tokens);
+                if (!repair.changed) {
+                    break;
+                }
+
                 for (const auto& diagnostic : repair.diagnostics) {
                     std::cerr << "Syntax repair: " << current_file << ":"
                               << diagnostic.line << ":" << diagnostic.column
