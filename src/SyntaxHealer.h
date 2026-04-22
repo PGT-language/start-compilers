@@ -414,6 +414,26 @@ private:
         return make_insert(line, column, text, message, order);
     }
 
+    static TextEdit replace_gap_after_token(const std::string& source,
+                                            const Token& previous,
+                                            const Token& current,
+                                            const std::string& text,
+                                            const std::string& message,
+                                            size_t order) {
+        TextEdit edit;
+        edit.kind = TextEdit::Kind::Replace;
+        edit.line = previous.line;
+        edit.column = previous.column + static_cast<int>(source_token_length(previous));
+        edit.text = text;
+        edit.order = order;
+        edit.message = message;
+
+        size_t start = offset_for(source, edit.line, edit.column);
+        size_t end = offset_for(source, current.line, current.column);
+        edit.length = end > start ? end - start : 0;
+        return edit;
+    }
+
     static std::string close_message(TokenType type) {
         if (type == T_RPAREN) return "missing ')' was inserted";
         if (type == T_RBRACE) return "missing '}' was inserted";
@@ -438,6 +458,17 @@ private:
         }
 
         if (close_type == T_RBRACE) {
+            if (current.type == T_RETURN &&
+                previous.type == T_NUMBER &&
+                previous.value == "1" &&
+                current.line > previous.line) {
+                return replace_gap_after_token(source,
+                                               previous,
+                                               current,
+                                               "\n" + text + "\n\n",
+                                               message,
+                                               order);
+            }
             return insert_line_before_token(current, text + "\n", message, order);
         }
 
@@ -850,6 +881,70 @@ private:
                                    edits.size()));
     }
 
+    static bool has_package_main(const std::vector<Token>& tokens) {
+        for (size_t i = 0; i + 1 < tokens.size(); ++i) {
+            if (tokens[i].type == T_PACKAGE &&
+                tokens[i + 1].type == T_IDENTIFIER &&
+                tokens[i + 1].value == "main") {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static int brace_depth_before(const std::vector<Token>& tokens, size_t index) {
+        int depth = 0;
+        for (size_t i = 0; i < index; ++i) {
+            if (tokens[i].type == T_LBRACE) {
+                depth++;
+            } else if (tokens[i].type == T_RBRACE && depth > 0) {
+                depth--;
+            }
+        }
+        return depth;
+    }
+
+    static bool only_closing_braces_after(const std::vector<Token>& tokens,
+                                          size_t index) {
+        for (size_t i = index + 1; i < tokens.size(); ++i) {
+            if (is_eof(tokens[i].type)) return true;
+            if (tokens[i].type != T_RBRACE) return false;
+        }
+        return true;
+    }
+
+    static bool previous_statement_is_return_one(const std::vector<Token>& tokens,
+                                                 size_t index) {
+        if (index < 2) return false;
+        size_t value_index = index - 1;
+        return tokens[value_index].type == T_NUMBER &&
+               tokens[value_index].value == "1" &&
+               tokens[value_index - 1].type == T_RETURN;
+    }
+
+    static void add_main_exit_return_edits(std::vector<TextEdit>& edits,
+                                           const std::vector<Token>& tokens,
+                                           size_t index,
+                                           bool package_main) {
+        if (!package_main || index + 1 >= tokens.size()) return;
+        const Token& token = tokens[index];
+        const Token& value = tokens[index + 1];
+        if (token.type != T_RETURN || value.type != T_NUMBER) return;
+        if (value.value == "0" || !only_closing_braces_after(tokens, index + 1)) {
+            return;
+        }
+
+        int depth = brace_depth_before(tokens, index);
+        if (depth > 0 && !previous_statement_is_return_one(tokens, index)) {
+            return;
+        }
+
+        edits.push_back(make_replace(value,
+                                     "0",
+                                     "main exit code '" + value.value + "' was corrected to '0'",
+                                     edits.size()));
+    }
+
     static void add_namespace_typo_edits(std::vector<TextEdit>& edits,
                                          const std::vector<Token>& tokens,
                                          size_t index) {
@@ -1041,9 +1136,11 @@ private:
 
     static std::vector<TextEdit> plan_typo_edits(const std::vector<Token>& tokens) {
         std::vector<TextEdit> edits;
+        bool package_main = has_package_main(tokens);
         for (size_t i = 0; i < tokens.size(); ++i) {
             if (is_eof(tokens[i].type)) break;
             add_numeric_suffix_edits(edits, tokens, i);
+            add_main_exit_return_edits(edits, tokens, i, package_main);
             add_namespace_typo_edits(edits, tokens, i);
             add_word_typo_edits(edits, tokens, i);
         }
