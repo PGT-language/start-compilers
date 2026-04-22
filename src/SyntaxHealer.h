@@ -1038,9 +1038,25 @@ private:
             };
         }
         if (next_type == T_IDENTIFIER) {
+            if (index == 0) {
+                return {"package", "function", "class"};
+            }
             return {"function", "class"};
         }
         return {};
+    }
+
+    static bool has_keyword_prefix_damage(const std::string& word,
+                                          const std::string& candidate) {
+        std::string lowered_word = lower_ascii(word);
+        std::string lowered_candidate = lower_ascii(candidate);
+        size_t prefix = 0;
+        while (prefix < lowered_word.size() &&
+               prefix < lowered_candidate.size() &&
+               lowered_word[prefix] == lowered_candidate[prefix]) {
+            prefix++;
+        }
+        return prefix >= std::min<size_t>(5, lowered_candidate.size() - 1);
     }
 
     static bool has_repeated_extra_suffix(const std::string& word,
@@ -1063,8 +1079,14 @@ private:
                                          const std::string& candidate) {
         size_t normal_score = typo_score(word, candidate, false);
         if (normal_score < impossible_score()) return normal_score;
-        if (!has_repeated_extra_suffix(word, candidate)) return impossible_score();
-        return edit_distance(lower_ascii(word), lower_ascii(candidate));
+        if (has_repeated_extra_suffix(word, candidate)) {
+            return edit_distance(lower_ascii(word), lower_ascii(candidate));
+        }
+        if (candidate == "package" && has_keyword_prefix_damage(word, candidate)) {
+            size_t package_score = typo_score(word, candidate, true);
+            if (package_score < impossible_score()) return package_score;
+        }
+        return impossible_score();
     }
 
     static std::string best_strong_statement_word(const std::string& word,
