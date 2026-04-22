@@ -648,7 +648,8 @@ void SemanticAnalyzer::analyze_if(const std::shared_ptr<IfStmt>& if_stmt) {
     try {
         VarType cond_type = infer_expr_type(if_stmt->condition);
         if (cond_type != VarType::INT && cond_type != VarType::BOOL && cond_type != VarType::UNKNOWN &&
-            cond_type != VarType::FLOAT && cond_type != VarType::STRING && cond_type != VarType::BYTES) {
+            cond_type != VarType::FLOAT && cond_type != VarType::STRING && cond_type != VarType::BYTES &&
+            cond_type != VarType::OBJECT && cond_type != VarType::ARRAY) {
             throw TypeError("Condition must be a boolean-compatible expression", if_stmt->condition->location);
         }
     } catch (const UndefinedError&) {
@@ -674,7 +675,8 @@ void SemanticAnalyzer::analyze_while(const std::shared_ptr<WhileStmt>& while_stm
     try {
         VarType cond_type = infer_expr_type(while_stmt->condition);
         if (cond_type != VarType::INT && cond_type != VarType::BOOL && cond_type != VarType::UNKNOWN &&
-            cond_type != VarType::FLOAT && cond_type != VarType::STRING && cond_type != VarType::BYTES) {
+            cond_type != VarType::FLOAT && cond_type != VarType::STRING && cond_type != VarType::BYTES &&
+            cond_type != VarType::OBJECT && cond_type != VarType::ARRAY) {
             throw TypeError("While condition must be a boolean-compatible expression", while_stmt->condition->location);
         }
     } catch (const UndefinedError&) {

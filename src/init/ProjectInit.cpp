@@ -422,13 +422,28 @@ std::string auth_source() {
         "\n"
         "from \"models/user\" import User\n"
         "\n"
+        "function(auth_page) {\n"
+        "    return read::file(\"static/auth.html\")\n"
+        "    return 1\n"
+        "}\n"
+        "\n"
+        "function(auth_css) {\n"
+        "    return read::file(\"static/auth.css\")\n"
+        "    return 1\n"
+        "}\n"
+        "\n"
+        "function(auth_js) {\n"
+        "    return read::file(\"static/auth.js\")\n"
+        "    return 1\n"
+        "}\n"
+        "\n"
         "function(register_user) {\n"
         "    payload + object = request::json()\n"
         "    name + string = json::get(payload, \"name\")\n"
         "    email + string = json::get(payload, \"email\")\n"
         "    password + string = json::get(payload, \"password\")\n"
         "    existing + object = orm::find(\"User\", \"email\", email)\n"
-        "    if (existing) {\n"
+        "    if (json::stringify(existing) != \"{}\") {\n"
         "        return json::object(\"error\", \"email already registered\")\n"
         "    }\n"
         "    password_hash + string = auth::hash_password(password)\n"
@@ -442,7 +457,7 @@ std::string auth_source() {
         "    email + string = json::get(payload, \"email\")\n"
         "    password + string = json::get(payload, \"password\")\n"
         "    user + object = orm::find(\"User\", \"email\", email)\n"
-        "    if (user) {\n"
+        "    if (json::stringify(user) != \"{}\") {\n"
         "        password_hash + string = json::get(user, \"password\")\n"
         "        if (auth::verify_password(password, password_hash)) {\n"
         "            token + string = jwt::sign(json::object(\"sub\", json::get(user, \"id\"), \"email\", email), \"change-me-secret\")\n"
@@ -469,7 +484,7 @@ std::string static_index_source(const InitOptions& options) {
            << "    <meta charset=\"utf-8\">\n"
            << "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
            << "    <title>" << options.project_name << "</title>\n"
-           << "    <link rel=\"stylesheet\" href=\"/static/styles.css\">\n"
+           << "    <link rel=\"stylesheet\" href=\"/static/auth.css\">\n"
            << "</head>\n"
            << "<body>\n"
            << "    <main>\n"
@@ -487,7 +502,50 @@ std::string static_index_source(const InitOptions& options) {
     if (options.create_api_spec) {
         source << "            <a href=\"/api/v1/docs\">Open Swagger docs</a>\n";
     }
+    if (options.create_auth) {
+        source << "            <a href=\"/auth/login\">Open auth</a>\n";
+    }
     source << "        </section>\n"
+           << "    </main>\n"
+           << "    <script src=\"/static/auth.js\"></script>\n"
+           << "</body>\n"
+           << "</html>\n";
+    return source.str();
+}
+
+std::string static_auth_source(const InitOptions& options) {
+    std::ostringstream source;
+    source << "<!doctype html>\n"
+           << "<html lang=\"en\">\n"
+           << "<head>\n"
+           << "    <meta charset=\"utf-8\">\n"
+           << "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+           << "    <title>" << options.project_name << " Auth</title>\n"
+           << "    <link rel=\"stylesheet\" href=\"/static/styles.css\">\n"
+           << "</head>\n"
+           << "<body>\n"
+           << "    <main>\n"
+           << "        <section class=\"hero auth-shell\">\n"
+           << "            <p class=\"eyebrow\">Account</p>\n"
+           << "            <h1>Auth</h1>\n"
+           << "            <div class=\"auth-grid\">\n"
+           << "                <form id=\"register-form\" class=\"stack-form\">\n"
+           << "                    <h2>Register</h2>\n"
+           << "                    <input name=\"name\" type=\"text\" placeholder=\"Name\" autocomplete=\"name\">\n"
+           << "                    <input name=\"email\" type=\"email\" placeholder=\"Email\" autocomplete=\"email\">\n"
+           << "                    <input name=\"password\" type=\"password\" placeholder=\"Password\" autocomplete=\"new-password\">\n"
+           << "                    <button type=\"submit\">Create account</button>\n"
+           << "                </form>\n"
+           << "                <form id=\"login-form\" class=\"stack-form\">\n"
+           << "                    <h2>Login</h2>\n"
+           << "                    <input name=\"email\" type=\"email\" placeholder=\"Email\" autocomplete=\"email\">\n"
+           << "                    <input name=\"password\" type=\"password\" placeholder=\"Password\" autocomplete=\"current-password\">\n"
+           << "                    <button type=\"submit\">Sign in</button>\n"
+           << "                </form>\n"
+           << "            </div>\n"
+           << "            <pre id=\"auth-response\"></pre>\n"
+           << "            <a href=\"/\">Back to index</a>\n"
+           << "        </section>\n"
            << "    </main>\n"
            << "    <script src=\"/static/app.js\"></script>\n"
            << "</body>\n"
@@ -583,6 +641,7 @@ std::string static_css_source() {
         "a {\n"
         "    display: inline-block;\n"
         "    margin-top: 18px;\n"
+        "    margin-right: 16px;\n"
         "    color: #156d72;\n"
         "    font-weight: 700;\n"
         "}\n";
@@ -593,6 +652,9 @@ std::string static_js_source(const InitOptions& options) {
     source << "const form = document.querySelector('#message-form');\n"
            << "const response = document.querySelector('#response');\n"
            << "const statusLine = document.querySelector('#status');\n"
+           << "const registerForm = document.querySelector('#register-form');\n"
+           << "const loginForm = document.querySelector('#login-form');\n"
+           << "const authResponse = document.querySelector('#auth-response');\n"
            << "\n"
            << "if (statusLine) {\n"
            << "    statusLine.textContent = 'Backend is ready.';\n"
@@ -610,6 +672,34 @@ std::string static_js_source(const InitOptions& options) {
                << "        });\n"
                << "        response.textContent = await result.text();\n"
                << "        form.reset();\n"
+               << "    });\n"
+               << "}\n";
+    }
+    if (options.create_auth) {
+        source << "\n"
+               << "async function submitJson(formElement, url) {\n"
+               << "    const payload = Object.fromEntries(new FormData(formElement).entries());\n"
+               << "    const result = await fetch(url, {\n"
+               << "        method: 'POST',\n"
+               << "        headers: { 'Content-Type': 'application/json' },\n"
+               << "        body: JSON.stringify(payload)\n"
+               << "    });\n"
+               << "    return result.text();\n"
+               << "}\n"
+               << "\n"
+               << "if (registerForm && authResponse) {\n"
+               << "    registerForm.addEventListener('submit', async (event) => {\n"
+               << "        event.preventDefault();\n"
+               << "        authResponse.textContent = await submitJson(registerForm, '/auth/register');\n"
+               << "        registerForm.reset();\n"
+               << "    });\n"
+               << "}\n"
+               << "\n"
+               << "if (loginForm && authResponse) {\n"
+               << "    loginForm.addEventListener('submit', async (event) => {\n"
+               << "        event.preventDefault();\n"
+               << "        authResponse.textContent = await submitJson(loginForm, '/auth/login');\n"
+               << "        loginForm.reset();\n"
                << "    });\n"
                << "}\n";
     }
@@ -847,7 +937,7 @@ std::string routes_source(const InitOptions& options) {
         source << "from \"sweiger\" import docs, openapi_yaml\n";
     }
     if (options.create_auth) {
-        source << "from \"auth\" import register_user, login_user, verify_token\n";
+        source << "from \"auth\" import auth_page, register_user, login_user, verify_token\n";
     }
     source << "\n"
            << "function(register) {\n"
@@ -865,7 +955,9 @@ std::string routes_source(const InitOptions& options) {
                << "    web::get(\"/api/v1/openapi.yaml\", \"openapi_yaml\")\n";
     }
     if (options.create_auth) {
-        source << "    web::post(\"/auth/register\", \"register_user\")\n"
+        source << "    web::get(\"/auth/register\", \"auth_page\")\n"
+               << "    web::get(\"/auth/login\", \"auth_page\")\n"
+               << "    web::post(\"/auth/register\", \"register_user\")\n"
                << "    web::post(\"/auth/login\", \"login_user\")\n"
                << "    web::post(\"/auth/verify\", \"verify_token\")\n";
     }
@@ -1112,6 +1204,10 @@ bool create_backend_project(const InitOptions& options) {
         if (options.create_static) {
             if (!write_file(project_dir / "static" / "index.html",
                             static_index_source(options))) return false;
+            if (options.create_auth) {
+                if (!write_file(project_dir / "static" / "auth.html",
+                                static_auth_source(options))) return false;
+            }
             if (!write_file(project_dir / "static" / "styles.css",
                             static_css_source())) return false;
             if (!write_file(project_dir / "static" / "app.js",
@@ -1199,6 +1295,9 @@ InitOptions collect_options(int argc, char** argv) {
     options.create_api = prompt_yes_no("Create default /api route", true);
     options.create_auth = prompt_yes_no("Create auth/JWT template", false);
     options.create_static = prompt_yes_no("Create static html/css/js", true);
+    if (options.create_auth) {
+        options.create_static = true;
+    }
     options.create_api_spec = prompt_yes_no("Create api.yaml and Swagger /api/v1/docs", true);
     options.create_docker = prompt_yes_no("Create Dockerfile and docker-compose.yml", false);
     options.create_nginx = prompt_yes_no("Create nginx config", false);
