@@ -2,7 +2,9 @@
 
 #include "Token.h"
 #include <algorithm>
+#include <cctype>
 #include <cstddef>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -53,7 +55,8 @@ private:
     struct TextEdit {
         enum class Kind {
             Insert,
-            Erase
+            Erase,
+            Replace
         };
 
         Kind kind = Kind::Insert;
@@ -318,6 +321,21 @@ private:
         edit.kind = TextEdit::Kind::Erase;
         edit.line = token.line;
         edit.column = token.column;
+        edit.length = source_token_length(token);
+        edit.order = order;
+        edit.message = message;
+        return edit;
+    }
+
+    static TextEdit make_replace(const Token& token,
+                                 const std::string& replacement,
+                                 const std::string& message,
+                                 size_t order) {
+        TextEdit edit;
+        edit.kind = TextEdit::Kind::Replace;
+        edit.line = token.line;
+        edit.column = token.column;
+        edit.text = replacement;
         edit.length = source_token_length(token);
         edit.order = order;
         edit.message = message;
