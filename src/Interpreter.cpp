@@ -28,7 +28,7 @@ static bool path_ends_with(const std::string& value, const std::string& suffix) 
 }
 
 static std::string response_content_type_for_path(const std::string& path) {
-    if (path == "/api/v1/docs" || path_ends_with(path, ".yaml") || path_ends_with(path, ".yml")) {
+    if (path_ends_with(path, ".yaml") || path_ends_with(path, ".yml")) {
         return "application/yaml; charset=utf-8";
     }
     if (path_ends_with(path, ".html")) {

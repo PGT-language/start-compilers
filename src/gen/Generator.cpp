@@ -198,6 +198,48 @@ std::string model_source(const std::string& name, char** argv, int argc) {
     return source.str();
 }
 
+std::string swagger_html_source(const std::string& title) {
+    std::ostringstream source;
+    source << "<!doctype html>\n"
+           << "<html lang=\"en\">\n"
+           << "<head>\n"
+           << "    <meta charset=\"utf-8\">\n"
+           << "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+           << "    <title>" << title << " Swagger</title>\n"
+           << "    <link rel=\"stylesheet\" href=\"https://unpkg.com/swagger-ui-dist@5/swagger-ui.css\">\n"
+           << "</head>\n"
+           << "<body>\n"
+           << "    <div id=\"swagger-ui\"></div>\n"
+           << "    <script src=\"https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js\"></script>\n"
+           << "    <script>\n"
+           << "        window.addEventListener('load', () => {\n"
+           << "            SwaggerUIBundle({\n"
+           << "                url: '/api/v1/openapi.yaml',\n"
+           << "                dom_id: '#swagger-ui'\n"
+           << "            });\n"
+           << "        });\n"
+           << "    </script>\n"
+           << "</body>\n"
+           << "</html>\n";
+    return source.str();
+}
+
+std::string default_api_spec_source(const std::string& title) {
+    std::ostringstream source;
+    source << "openapi: 3.0.3\n"
+           << "info:\n"
+           << "  title: " << title << " API\n"
+           << "  version: 0.1.0\n"
+           << "paths:\n"
+           << "  /:\n"
+           << "    get:\n"
+           << "      summary: Index route\n"
+           << "      responses:\n"
+           << "        \"200\":\n"
+           << "          description: OK\n";
+    return source.str();
+}
+
 int generate_file_command(int argc, char** argv) {
     if (argc < 4) {
         std::cerr << "Usage: pgt generate file <path> [package]\n";
@@ -235,6 +277,45 @@ int generate_file_command(int argc, char** argv) {
     file.close();
 
     std::cout << "Created file: " << file_path.string() << "\n";
+    return 0;
+}
+
+int generate_swagger_command(int argc, char** argv) {
+    std::string title = argc >= 4 ? argv[3] : "PGT";
+    std::filesystem::path swagger_dir = "sweiger";
+    std::filesystem::path swagger_file = swagger_dir / "index.html";
+    std::filesystem::path api_spec_file = "api.yaml";
+
+    try {
+        if (std::filesystem::exists(swagger_file)) {
+            std::cerr << "Swagger HTML already exists: " << swagger_file.string() << "\n";
+            return 1;
+        }
+        std::filesystem::create_directories(swagger_dir);
+    } catch (const std::filesystem::filesystem_error& error) {
+        std::cerr << "Error: Cannot prepare swagger directory: " << error.what() << "\n";
+        return 1;
+    }
+
+    std::ofstream file(swagger_file);
+    if (!file.is_open()) {
+        std::cerr << "Error: Cannot create swagger HTML: " << swagger_file.string() << "\n";
+        return 1;
+    }
+    file << swagger_html_source(title);
+    file.close();
+
+    if (!std::filesystem::exists(api_spec_file)) {
+        std::ofstream spec_file(api_spec_file);
+        if (!spec_file.is_open()) {
+            std::cerr << "Error: Cannot create API spec: " << api_spec_file.string() << "\n";
+            return 1;
+        }
+        spec_file << default_api_spec_source(title);
+        spec_file.close();
+    }
+
+    std::cout << "Created Swagger HTML: " << swagger_file.string() << "\n";
     return 0;
 }
 
@@ -320,7 +401,7 @@ int generate_component_command(int argc, char** argv) {
 
 int run_generator_command(int argc, char** argv) {
     if (argc < 3) {
-        std::cerr << "Usage: pgt generate <component|file|model|class> ...\n";
+        std::cerr << "Usage: pgt generate <component|file|model|class|swagger> ...\n";
         return 1;
     }
 
@@ -334,8 +415,11 @@ int run_generator_command(int argc, char** argv) {
     if (kind == "model" || kind == "class" || kind == "m") {
         return generate_model_command(argc, argv);
     }
+    if (kind == "swagger" || kind == "swag" || kind == "sweiger") {
+        return generate_swagger_command(argc, argv);
+    }
 
     std::cerr << "Unknown generator: " << kind << "\n";
-    std::cerr << "Usage: pgt generate <component|file|model|class> ...\n";
+    std::cerr << "Usage: pgt generate <component|file|model|class|swagger> ...\n";
     return 1;
 }

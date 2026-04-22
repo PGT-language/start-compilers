@@ -236,7 +236,7 @@ pgt init backend test // создать backend проект test, template/name
 8. если database включена: выбрать table/model name {реализовано}
 9. создать default /api route с ответом "I am working" или пропустить {реализовано}
 10. создать static html/css/js или пропустить {реализовано}
-11. создать api.yaml и маршрут /api/v1/docs или пропустить {реализовано}
+11. создать api.yaml, Swagger HTML и маршрут /api/v1/docs или пропустить {реализовано}
 12. создать Dockerfile и docker-compose.yml или пропустить {реализовано}
 13. создать nginx/default.conf или пропустить {реализовано}
 
@@ -246,7 +246,8 @@ pgt init backend создаёт модульную структуру:
 - routes/routes.pgt // регистрация web::route/web::get/web::post {реализовано}
 - api/api.pgt // index/api handlers и сохранение POST JSON через ORM, если model включён {реализовано}
 - static/index.html, static/styles.css, static/app.js // frontend assets, если static включён {реализовано}
-- api.yaml // OpenAPI-like спецификация, отдаётся через /api/v1/docs {реализовано}
+- sweiger/index.html // Swagger UI, отдаётся через /api/v1/docs {реализовано}
+- api.yaml // OpenAPI-like спецификация, отдаётся через /api/v1/openapi.yaml {реализовано}
 - models/<name>/<name>.pgt // ORM model class, если database model включён {реализовано}
 - models/init/init-db.pgt // ORM migrate/save слой для базы данных {реализовано}
 - database/<name>/<name>.pgt // raw SQL слой, если database sql включён {реализовано}
@@ -254,8 +255,10 @@ pgt init backend создаёт модульную структуру:
 
 from "models/init" import migrate, save // подключение DB init слоя из сгенерированного backend проекта {реализовано}
 
-web::get("/api/v1/docs", "docs") // маршрут для выдачи api.yaml {реализовано}
+web::get("/api/v1/docs", "docs") // маршрут для выдачи Swagger UI {реализовано}
+web::get("/api/v1/openapi.yaml", "openapi_yaml") // маршрут для выдачи api.yaml {реализовано}
 
+read::file("sweiger/index.html") // отдача Swagger HTML как файла {реализовано}
 read::file("api.yaml") // отдача API спецификации как файла {реализовано}
 
 pgt generate component logging // генератор компонента logging {реализовано}
@@ -267,6 +270,8 @@ pgt generate file src/new_file main // генератор нового .pgt фа
 pgt generate model user name:string email:string // генератор ORM модели class User(db.Model) {реализовано}
 
 pgt generate class user name:string email:string // alias для генератора ORM модели {реализовано}
+
+pgt generate swagger MyApi // генератор Swagger UI в sweiger/index.html и дефолтного api.yaml, если его ещё нет {реализовано}
 
 from "components/logging" import to_file, to_console, debug, info, warn, error, critical // подключение logging-компонента {реализовано}
 

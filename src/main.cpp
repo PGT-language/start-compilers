@@ -27,6 +27,7 @@ int main(int argc, char** argv) {
         std::cout << "  pgt generate file <path> [package] — Generate a PGT file\n";
         std::cout << "  pgt generate model <name> [field:type ...] — Generate an ORM model\n";
         std::cout << "  pgt generate class <name> [field:type ...] — Alias for model\n";
+        std::cout << "  pgt generate swagger [title] — Generate Swagger UI in sweiger/\n";
         return 0;
     }
 
@@ -45,12 +46,14 @@ int main(int argc, char** argv) {
         std::cout << "  generate file <path> [package] — Generate a PGT file\n";
         std::cout << "  generate model <name> [field:type ...] — Generate an ORM model\n";
         std::cout << "  generate class <name> [field:type ...] — Alias for model\n";
+        std::cout << "  generate swagger [title] — Generate Swagger UI in sweiger/\n";
         std::cout << "  history                 — Show history of commands\n";
         std::cout << "Example:\n";
         std::cout << "  ./pgt run test.pgt\n";
         std::cout << "  ./pgt init backend test\n";
         std::cout << "  ./pgt generate component logging\n";
         std::cout << "  ./pgt generate model user name:string email:string\n";
+        std::cout << "  ./pgt generate swagger MyApi\n";
         return 0;
     }
 
