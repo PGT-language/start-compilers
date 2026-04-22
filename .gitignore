@@ -15,9 +15,8 @@ messages.json
 app.sql
 app.db
 app.sqlite
-jjjsksks/api.yaml
-jjjsksks/README.md
-jjjsksks/static/app.js
-jjjsksks/static/index.html
-jjjsksks/static/styles.css
-jjjsksks/sweiger/index.html
+*.yaml
+*.md
+*.js
+*.css
+*.html

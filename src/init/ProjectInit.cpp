@@ -422,18 +422,33 @@ std::string auth_source() {
         "\n"
         "from \"models/user\" import User\n"
         "\n"
-        "function(auth_page) {\n"
-        "    return read::file(\"static/auth.html\")\n"
+        "function(register_page) {\n"
+        "    return read::file(\"static/register.html\")\n"
         "    return 1\n"
         "}\n"
         "\n"
-        "function(auth_css) {\n"
-        "    return read::file(\"static/auth.css\")\n"
+        "function(login_page) {\n"
+        "    return read::file(\"static/login.html\")\n"
         "    return 1\n"
         "}\n"
         "\n"
-        "function(auth_js) {\n"
-        "    return read::file(\"static/auth.js\")\n"
+        "function(register_css) {\n"
+        "    return read::file(\"static/register.css\")\n"
+        "    return 1\n"
+        "}\n"
+        "\n"
+        "function(register_js) {\n"
+        "    return read::file(\"static/register.js\")\n"
+        "    return 1\n"
+        "}\n"
+        "\n"
+        "function(login_css) {\n"
+        "    return read::file(\"static/login.css\")\n"
+        "    return 1\n"
+        "}\n"
+        "\n"
+        "function(login_js) {\n"
+        "    return read::file(\"static/login.js\")\n"
         "    return 1\n"
         "}\n"
         "\n"
@@ -484,7 +499,7 @@ std::string static_index_source(const InitOptions& options) {
            << "    <meta charset=\"utf-8\">\n"
            << "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
            << "    <title>" << options.project_name << "</title>\n"
-           << "    <link rel=\"stylesheet\" href=\"/static/auth.css\">\n"
+           << "    <link rel=\"stylesheet\" href=\"/static/index.css\">\n"
            << "</head>\n"
            << "<body>\n"
            << "    <main>\n"
@@ -507,47 +522,70 @@ std::string static_index_source(const InitOptions& options) {
     }
     source << "        </section>\n"
            << "    </main>\n"
-           << "    <script src=\"/static/auth.js\"></script>\n"
+           << "    <script src=\"/static/index.js\"></script>\n"
            << "</body>\n"
            << "</html>\n";
     return source.str();
 }
 
-std::string static_auth_source(const InitOptions& options) {
+std::string static_register_source(const InitOptions& options) {
     std::ostringstream source;
     source << "<!doctype html>\n"
            << "<html lang=\"en\">\n"
            << "<head>\n"
            << "    <meta charset=\"utf-8\">\n"
            << "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
-           << "    <title>" << options.project_name << " Auth</title>\n"
-           << "    <link rel=\"stylesheet\" href=\"/static/styles.css\">\n"
+           << "    <title>" << options.project_name << " Register</title>\n"
+           << "    <link rel=\"stylesheet\" href=\"/static/register.css\">\n"
            << "</head>\n"
            << "<body>\n"
            << "    <main>\n"
-           << "        <section class=\"hero auth-shell\">\n"
+           << "        <section class=\"hero\">\n"
            << "            <p class=\"eyebrow\">Account</p>\n"
-           << "            <h1>Auth</h1>\n"
-           << "            <div class=\"auth-grid\">\n"
-           << "                <form id=\"register-form\" class=\"stack-form\">\n"
-           << "                    <h2>Register</h2>\n"
-           << "                    <input name=\"name\" type=\"text\" placeholder=\"Name\" autocomplete=\"name\">\n"
-           << "                    <input name=\"email\" type=\"email\" placeholder=\"Email\" autocomplete=\"email\">\n"
-           << "                    <input name=\"password\" type=\"password\" placeholder=\"Password\" autocomplete=\"new-password\">\n"
-           << "                    <button type=\"submit\">Create account</button>\n"
-           << "                </form>\n"
-           << "                <form id=\"login-form\" class=\"stack-form\">\n"
-           << "                    <h2>Login</h2>\n"
-           << "                    <input name=\"email\" type=\"email\" placeholder=\"Email\" autocomplete=\"email\">\n"
-           << "                    <input name=\"password\" type=\"password\" placeholder=\"Password\" autocomplete=\"current-password\">\n"
-           << "                    <button type=\"submit\">Sign in</button>\n"
-           << "                </form>\n"
-           << "            </div>\n"
+           << "            <h1>Register</h1>\n"
+           << "            <form id=\"register-form\" class=\"stack-form\">\n"
+           << "                <input name=\"name\" type=\"text\" placeholder=\"Name\" autocomplete=\"name\">\n"
+           << "                <input name=\"email\" type=\"email\" placeholder=\"Email\" autocomplete=\"email\">\n"
+           << "                <input name=\"password\" type=\"password\" placeholder=\"Password\" autocomplete=\"new-password\">\n"
+           << "                <button type=\"submit\">Create account</button>\n"
+           << "            </form>\n"
            << "            <pre id=\"auth-response\"></pre>\n"
+           << "            <a href=\"/auth/login\">Login</a>\n"
            << "            <a href=\"/\">Back to index</a>\n"
            << "        </section>\n"
            << "    </main>\n"
-           << "    <script src=\"/static/app.js\"></script>\n"
+           << "    <script src=\"/static/register.js\"></script>\n"
+           << "</body>\n"
+           << "</html>\n";
+    return source.str();
+}
+
+std::string static_login_source(const InitOptions& options) {
+    std::ostringstream source;
+    source << "<!doctype html>\n"
+           << "<html lang=\"en\">\n"
+           << "<head>\n"
+           << "    <meta charset=\"utf-8\">\n"
+           << "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+           << "    <title>" << options.project_name << " Login</title>\n"
+           << "    <link rel=\"stylesheet\" href=\"/static/login.css\">\n"
+           << "</head>\n"
+           << "<body>\n"
+           << "    <main>\n"
+           << "        <section class=\"hero\">\n"
+           << "            <p class=\"eyebrow\">Account</p>\n"
+           << "            <h1>Login</h1>\n"
+           << "            <form id=\"login-form\" class=\"stack-form\">\n"
+           << "                <input name=\"email\" type=\"email\" placeholder=\"Email\" autocomplete=\"email\">\n"
+           << "                <input name=\"password\" type=\"password\" placeholder=\"Password\" autocomplete=\"current-password\">\n"
+           << "                <button type=\"submit\">Sign in</button>\n"
+           << "            </form>\n"
+           << "            <pre id=\"auth-response\"></pre>\n"
+           << "            <a href=\"/auth/register\">Register</a>\n"
+           << "            <a href=\"/\">Back to index</a>\n"
+           << "        </section>\n"
+           << "    </main>\n"
+           << "    <script src=\"/static/login.js\"></script>\n"
            << "</body>\n"
            << "</html>\n";
     return source.str();
@@ -796,10 +834,9 @@ std::string static_auth_css_source() {
         "}\n";
 }
 
-std::string static_auth_js_source() {
+std::string static_register_js_source() {
     return
         "const registerForm = document.querySelector('#register-form');\n"
-        "const loginForm = document.querySelector('#login-form');\n"
         "const authResponse = document.querySelector('#auth-response');\n"
         "\n"
         "async function submitJson(formElement, url) {\n"
@@ -818,6 +855,22 @@ std::string static_auth_js_source() {
         "        authResponse.textContent = await submitJson(registerForm, '/auth/register');\n"
         "        registerForm.reset();\n"
         "    });\n"
+        "}\n";
+}
+
+std::string static_login_js_source() {
+    return
+        "const loginForm = document.querySelector('#login-form');\n"
+        "const authResponse = document.querySelector('#auth-response');\n"
+        "\n"
+        "async function submitJson(formElement, url) {\n"
+        "    const payload = Object.fromEntries(new FormData(formElement).entries());\n"
+        "    const result = await fetch(url, {\n"
+        "        method: 'POST',\n"
+        "        headers: { 'Content-Type': 'application/json' },\n"
+        "        body: JSON.stringify(payload)\n"
+        "    });\n"
+        "    return result.text();\n"
         "}\n"
         "\n"
         "if (loginForm && authResponse) {\n"
@@ -1030,13 +1083,13 @@ std::string api_source(const InitOptions& options) {
 
     if (options.create_static) {
         source << "\n"
-               << "function(static_css) {\n"
-               << "    return read::file(\"static/styles.css\")\n"
+               << "function(index_css) {\n"
+               << "    return read::file(\"static/index.css\")\n"
                << "    return 1\n"
                << "}\n"
                << "\n"
-               << "function(static_js) {\n"
-               << "    return read::file(\"static/app.js\")\n"
+               << "function(index_js) {\n"
+               << "    return read::file(\"static/index.js\")\n"
                << "    return 1\n"
                << "}\n";
     }
@@ -1053,14 +1106,14 @@ std::string routes_source(const InitOptions& options) {
         source << ", api";
     }
     if (options.create_static) {
-        source << ", static_css, static_js";
+        source << ", index_css, index_js";
     }
     source << "\n";
     if (options.create_api_spec) {
         source << "from \"sweiger\" import docs, openapi_yaml\n";
     }
     if (options.create_auth) {
-        source << "from \"auth\" import auth_page, auth_css, auth_js, register_user, login_user, verify_token\n";
+        source << "from \"auth\" import register_page, login_page, register_css, register_js, login_css, login_js, register_user, login_user, verify_token\n";
     }
     source << "\n"
            << "function(register) {\n"
@@ -1070,18 +1123,20 @@ std::string routes_source(const InitOptions& options) {
                << "    web::post(\"/api\", \"api\")\n";
     }
     if (options.create_static) {
-        source << "    web::get(\"/static/styles.css\", \"static_css\")\n"
-               << "    web::get(\"/static/app.js\", \"static_js\")\n";
+        source << "    web::get(\"/static/index.css\", \"index_css\")\n"
+               << "    web::get(\"/static/index.js\", \"index_js\")\n";
     }
     if (options.create_api_spec) {
         source << "    web::get(\"/api/v1/docs\", \"docs\")\n"
                << "    web::get(\"/api/v1/openapi.yaml\", \"openapi_yaml\")\n";
     }
     if (options.create_auth) {
-        source << "    web::get(\"/static/auth.css\", \"auth_css\")\n"
-               << "    web::get(\"/static/auth.js\", \"auth_js\")\n"
-               << "    web::get(\"/auth/register\", \"auth_page\")\n"
-               << "    web::get(\"/auth/login\", \"auth_page\")\n"
+        source << "    web::get(\"/static/register.css\", \"register_css\")\n"
+               << "    web::get(\"/static/register.js\", \"register_js\")\n"
+               << "    web::get(\"/static/login.css\", \"login_css\")\n"
+               << "    web::get(\"/static/login.js\", \"login_js\")\n"
+               << "    web::get(\"/auth/register\", \"register_page\")\n"
+               << "    web::get(\"/auth/login\", \"login_page\")\n"
                << "    web::post(\"/auth/register\", \"register_user\")\n"
                << "    web::post(\"/auth/login\", \"login_user\")\n"
                << "    web::post(\"/auth/verify\", \"verify_token\")\n";
@@ -1330,16 +1385,22 @@ bool create_backend_project(const InitOptions& options) {
             if (!write_file(project_dir / "static" / "index.html",
                             static_index_source(options))) return false;
             if (options.create_auth) {
-                if (!write_file(project_dir / "static" / "auth.html",
-                                static_auth_source(options))) return false;
-                if (!write_file(project_dir / "static" / "auth.css",
+                if (!write_file(project_dir / "static" / "register.html",
+                                static_register_source(options))) return false;
+                if (!write_file(project_dir / "static" / "register.css",
                                 static_auth_css_source())) return false;
-                if (!write_file(project_dir / "static" / "auth.js",
-                                static_auth_js_source())) return false;
+                if (!write_file(project_dir / "static" / "register.js",
+                                static_register_js_source())) return false;
+                if (!write_file(project_dir / "static" / "login.html",
+                                static_login_source(options))) return false;
+                if (!write_file(project_dir / "static" / "login.css",
+                                static_auth_css_source())) return false;
+                if (!write_file(project_dir / "static" / "login.js",
+                                static_login_js_source())) return false;
             }
-            if (!write_file(project_dir / "static" / "styles.css",
+            if (!write_file(project_dir / "static" / "index.css",
                             static_css_source())) return false;
-            if (!write_file(project_dir / "static" / "app.js",
+            if (!write_file(project_dir / "static" / "index.js",
                             static_js_source(options))) return false;
         }
 
