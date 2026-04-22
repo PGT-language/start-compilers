@@ -156,12 +156,33 @@ private:
                token.value == "request";
     }
 
+    static bool is_network_root(const Token& token) {
+        return token.type == T_IDENTIFIER &&
+               (token.value == "web" || token.value == "net");
+    }
+
+    static bool is_network_method(const Token& token) {
+        return token.type == T_IDENTIFIER &&
+               (token.value == "get" || token.value == "post" ||
+                token.value == "route" || token.value == "serve" ||
+                token.value == "run");
+    }
+
+    static bool is_network_transport(const Token& token) {
+        return token.type == T_IDENTIFIER &&
+               (token.value == "http" || token.value == "https");
+    }
+
     static bool expects_paren_after(const std::vector<Token>& tokens, size_t index) {
         const Token& token = tokens[index];
         if (token.type == T_FUNCTION || token.type == T_IF ||
             token.type == T_CALL || token.type == T_COUT ||
             is_print(token.type)) {
             return true;
+        }
+
+        if (index + 1 < tokens.size() && tokens[index + 1].type == T_COLON_COLON) {
+            return false;
         }
 
         if (index >= 2 && tokens[index - 1].type == T_COLON_COLON) {
@@ -337,6 +358,23 @@ private:
         edit.column = token.column;
         edit.text = replacement;
         edit.length = source_token_length(token);
+        edit.order = order;
+        edit.message = message;
+        return edit;
+    }
+
+    static TextEdit make_replace_range(int line,
+                                       int column,
+                                       size_t length,
+                                       const std::string& replacement,
+                                       const std::string& message,
+                                       size_t order) {
+        TextEdit edit;
+        edit.kind = TextEdit::Kind::Replace;
+        edit.line = line;
+        edit.column = column;
+        edit.length = length;
+        edit.text = replacement;
         edit.order = order;
         edit.message = message;
         return edit;
@@ -744,6 +782,12 @@ private:
         return false;
     }
 
+    static void add_unique_word(std::vector<std::string>& values,
+                                const std::string& word) {
+        if (word.empty() || contains_word(values, word)) return;
+        values.push_back(word);
+    }
+
     static std::string best_word(const std::string& word,
                                  const std::vector<std::string>& candidates,
                                  bool strong_context) {
@@ -788,6 +832,41 @@ private:
             "log_notice", "log_warn", "log_warning", "log_error",
             "log_critical", "log_critecal", "log_fatal"
         };
+    }
+
+    static bool is_plain_builtin_word(const std::string& word) {
+        return contains_word(plain_builtin_words(), word);
+    }
+
+    static std::vector<std::string> callable_words(const std::vector<Token>& tokens) {
+        std::vector<std::string> words;
+
+        for (size_t i = 0; i < tokens.size(); ++i) {
+            if (is_eof(tokens[i].type)) break;
+
+            if (tokens[i].type == T_IMPORT) {
+                int import_line = tokens[i].line;
+                for (size_t j = i + 1; j < tokens.size() && tokens[j].line == import_line; ++j) {
+                    if (tokens[j].type == T_IDENTIFIER) {
+                        add_unique_word(words, tokens[j].value);
+                    }
+                }
+                continue;
+            }
+
+            if (tokens[i].type != T_FUNCTION) {
+                continue;
+            }
+            if (i + 2 < tokens.size() &&
+                tokens[i + 1].type == T_LPAREN &&
+                tokens[i + 2].type == T_IDENTIFIER) {
+                add_unique_word(words, tokens[i + 2].value);
+            } else if (i + 1 < tokens.size() && tokens[i + 1].type == T_IDENTIFIER) {
+                add_unique_word(words, tokens[i + 1].value);
+            }
+        }
+
+        return words;
     }
 
     struct BuiltinPair {
@@ -945,6 +1024,58 @@ private:
                                      edits.size()));
     }
 
+    static bool add_malformed_network_call_edits(std::vector<TextEdit>& edits,
+                                                 const std::vector<Token>& tokens,
+                                                 size_t index) {
+        if (index + 5 >= tokens.size()) return false;
+
+        const Token& root = tokens[index];
+        const Token& separator = tokens[index + 1];
+        const Token& first_part = tokens[index + 2];
+        const Token& outer_open = tokens[index + 3];
+        if (!is_network_root(root) || separator.type != T_COLON_COLON ||
+            outer_open.type != T_LPAREN) {
+            return false;
+        }
+
+        if (index + 6 < tokens.size() &&
+            is_network_transport(first_part) &&
+            tokens[index + 4].type == T_COLON_COLON &&
+            is_network_method(tokens[index + 5]) &&
+            tokens[index + 6].type == T_LPAREN &&
+            outer_open.line == tokens[index + 5].line) {
+            int start_column = outer_open.column;
+            int end_column = tokens[index + 5].column;
+            if (end_column <= start_column) return false;
+            edits.push_back(make_replace_range(outer_open.line,
+                                               start_column,
+                                               static_cast<size_t>(end_column - start_column),
+                                               "::",
+                                               "malformed network transport call was normalized",
+                                               edits.size()));
+            return true;
+        }
+
+        if (is_network_method(first_part) &&
+            is_network_method(tokens[index + 4]) &&
+            first_part.value == tokens[index + 4].value &&
+            tokens[index + 5].type == T_LPAREN &&
+            outer_open.line == tokens[index + 5].line) {
+            int start_column = outer_open.column + 1;
+            int end_column = tokens[index + 5].column + static_cast<int>(source_token_length(tokens[index + 5]));
+            if (end_column <= start_column) return false;
+            edits.push_back(make_replace_range(outer_open.line,
+                                               start_column,
+                                               static_cast<size_t>(end_column - start_column),
+                                               "",
+                                               "duplicated network method wrapper was removed",
+                                               edits.size()));
+            return true;
+        }
+
+        return false;
+    }
+
     static void add_namespace_typo_edits(std::vector<TextEdit>& edits,
                                          const std::vector<Token>& tokens,
                                          size_t index) {
@@ -954,6 +1085,10 @@ private:
         const Token& member = tokens[index + 2];
         if (!is_identifier_token(root) || separator.type != T_COLON_COLON ||
             !is_identifier_token(member)) {
+            return;
+        }
+        if ((index > 0 && tokens[index - 1].type == T_COLON_COLON) ||
+            (index + 3 < tokens.size() && tokens[index + 3].type == T_COLON_COLON)) {
             return;
         }
         if (is_exact_builtin_pair(root.value, member.value)) {
@@ -1060,7 +1195,8 @@ private:
     }
 
     static bool has_repeated_extra_suffix(const std::string& word,
-                                          const std::string& candidate) {
+                                          const std::string& candidate,
+                                          size_t max_suffix_length = 3) {
         std::string lowered_word = lower_ascii(word);
         std::string lowered_candidate = lower_ascii(candidate);
         if (lowered_word.size() <= lowered_candidate.size()) return false;
@@ -1069,10 +1205,63 @@ private:
         }
 
         std::string suffix = lowered_word.substr(lowered_candidate.size());
-        if (suffix.empty() || suffix.size() > 3) return false;
+        if (suffix.empty() || suffix.size() > max_suffix_length) return false;
         return std::all_of(suffix.begin(), suffix.end(), [&](char ch) {
             return ch == suffix.front();
         });
+    }
+
+    static bool contains_candidate_as_subsequence(const std::string& word,
+                                                  const std::string& candidate) {
+        std::string lowered_word = lower_ascii(word);
+        std::string lowered_candidate = lower_ascii(candidate);
+        if (lowered_word.empty() || lowered_candidate.empty()) return false;
+        if (lowered_word.front() != lowered_candidate.front()) return false;
+        if (lowered_word.back() != lowered_candidate.back()) return false;
+
+        size_t candidate_index = 0;
+        for (char ch : lowered_word) {
+            if (candidate_index < lowered_candidate.size() &&
+                ch == lowered_candidate[candidate_index]) {
+                candidate_index++;
+            }
+        }
+        return candidate_index == lowered_candidate.size();
+    }
+
+    static size_t noisy_callable_score(const std::string& word,
+                                       const std::string& candidate) {
+        size_t normal_score = typo_score(word, candidate, false);
+        if (normal_score < impossible_score()) return normal_score;
+        if (has_repeated_extra_suffix(word, candidate, 6) ||
+            contains_candidate_as_subsequence(word, candidate)) {
+            size_t score = typo_score(word, candidate, true);
+            if (score < impossible_score()) return score;
+        }
+        return impossible_score();
+    }
+
+    static std::string best_callable_word(const std::string& word,
+                                          const std::vector<std::string>& candidates) {
+        std::string best;
+        size_t best_score = impossible_score();
+        bool ambiguous = false;
+
+        for (const auto& candidate : candidates) {
+            size_t score = noisy_callable_score(word, candidate);
+            if (score == 0 || score >= impossible_score()) {
+                continue;
+            }
+            if (score < best_score) {
+                best = candidate;
+                best_score = score;
+                ambiguous = false;
+            } else if (score == best_score) {
+                ambiguous = true;
+            }
+        }
+
+        return ambiguous ? "" : best;
     }
 
     static size_t strong_statement_score(const std::string& word,
@@ -1114,7 +1303,8 @@ private:
 
     static void add_word_typo_edits(std::vector<TextEdit>& edits,
                                     const std::vector<Token>& tokens,
-                                    size_t index) {
+                                    size_t index,
+                                    const std::vector<std::string>& callables) {
         const Token& token = tokens[index];
         if (token.type != T_IDENTIFIER) return;
         if ((index > 0 && tokens[index - 1].type == T_COLON_COLON) ||
@@ -1145,6 +1335,23 @@ private:
             return;
         }
 
+        if (index + 1 < tokens.size() &&
+            tokens[index + 1].type == T_LPAREN &&
+            (contains_word(callables, token.value) ||
+             is_plain_builtin_word(token.value))) {
+            return;
+        }
+
+        if (index + 1 < tokens.size() &&
+            tokens[index + 1].type == T_LPAREN &&
+            !contains_word(callables, token.value)) {
+            std::string callable_replacement = best_callable_word(token.value, callables);
+            if (!callable_replacement.empty()) {
+                add_replace_if_needed(edits, token, callable_replacement);
+                return;
+            }
+        }
+
         if (index + 1 < tokens.size() && tokens[index + 1].type == T_LPAREN) {
             std::vector<std::string> builtin_words = plain_builtin_words();
             builtin_words.push_back("print");
@@ -1159,12 +1366,16 @@ private:
     static std::vector<TextEdit> plan_typo_edits(const std::vector<Token>& tokens) {
         std::vector<TextEdit> edits;
         bool package_main = has_package_main(tokens);
+        std::vector<std::string> callables = callable_words(tokens);
         for (size_t i = 0; i < tokens.size(); ++i) {
             if (is_eof(tokens[i].type)) break;
             add_numeric_suffix_edits(edits, tokens, i);
             add_main_exit_return_edits(edits, tokens, i, package_main);
+            if (add_malformed_network_call_edits(edits, tokens, i)) {
+                continue;
+            }
             add_namespace_typo_edits(edits, tokens, i);
-            add_word_typo_edits(edits, tokens, i);
+            add_word_typo_edits(edits, tokens, i, callables);
         }
         return edits;
     }
