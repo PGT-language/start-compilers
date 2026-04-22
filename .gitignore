@@ -20,3 +20,6 @@ app.sqlite
 *.js
 *.css
 *.html
+jjjsksks/nginx/default.conf
+jjjsksks/Dockerfile
+jjjsksks/docker-compose.yml

@@ -356,21 +356,49 @@ std::string model_source(const InitOptions& options) {
 std::string orm_init_source(const InitOptions& options) {
     std::string package_name = normalize_identifier(options.table_name, "model");
     std::string class_name = class_name_for(package_name);
+    bool model_database = options.use_database && options.table_type == "model";
+    bool raw_database = options.use_database && options.table_type == "sql";
+    std::string table_name = package_name;
+    if (!table_name.empty() && table_name.back() != 's') {
+        table_name += "s";
+    }
 
     std::ostringstream source;
     source << "package init\n"
-           << "\n"
-           << "from \"../" << package_name << "\" import " << class_name << "\n"
-           << "\n"
-           << "function(migrate) {\n"
-           << "    orm::migrate(\"" << class_name << "\")\n"
-           << "    return 1\n"
-           << "}\n"
-           << "\n"
-           << "function(save, data + object) {\n"
-           << "    orm::save(\"" << class_name << "\", data)\n"
-           << "    return 1\n"
+           << "\n";
+    if (model_database) {
+        source << "from \"../" << package_name << "\" import " << class_name << "\n";
+    }
+    if (options.create_auth && (!model_database || package_name != "user")) {
+        source << "from \"../user\" import User\n";
+    }
+    source << "\n"
+           << "function(migrate) {\n";
+    if (model_database) {
+        source << "    orm::migrate(\"" << class_name << "\")\n";
+    }
+    if (options.create_auth && (!model_database || class_name != "User")) {
+        source << "    orm::migrate(\"User\")\n";
+    }
+    if (raw_database) {
+        source << "    sql::table(\"" << table_name << "\", \"id INTEGER PRIMARY KEY, message TEXT\")\n";
+    }
+    source << "    return 1\n"
            << "}\n";
+    if (model_database) {
+        source << "\n"
+               << "function(save, data + object) {\n"
+               << "    orm::save(\"" << class_name << "\", data)\n"
+               << "    return 1\n"
+               << "}\n";
+    }
+    if (options.create_auth) {
+        source << "\n"
+               << "function(save_user, data + object) {\n"
+               << "    orm::save(\"User\", data)\n"
+               << "    return 1\n"
+               << "}\n";
+    }
     return source.str();
 }
 
@@ -404,23 +432,11 @@ std::string auth_user_model_source() {
         "}\n";
 }
 
-std::string auth_model_helpers_source() {
-    return
-        "package auth\n"
-        "\n"
-        "from \"../user\" import User\n"
-        "\n"
-        "function(migrate_user) {\n"
-        "    orm::migrate(\"User\")\n"
-        "    return 1\n"
-        "}\n";
-}
-
 std::string auth_source() {
     return
         "package auth\n"
         "\n"
-        "from \"models/user\" import User\n"
+        "from \"models/init\" import save_user\n"
         "\n"
         "function(register_page) {\n"
         "    return read::file(\"static/register.html\")\n"
@@ -462,7 +478,7 @@ std::string auth_source() {
         "        return json::object(\"error\", \"email already registered\")\n"
         "    }\n"
         "    password_hash + string = auth::hash_password(password)\n"
-        "    orm::save(\"User\", json::object(\"name\", name, \"email\", email, \"password\", password_hash, \"is_active\", true))\n"
+        "    save_user(json::object(\"name\", name, \"email\", email, \"password\", password_hash, \"is_active\", true))\n"
         "    return json::object(\"status\", \"registered\", \"email\", email)\n"
         "    return 1\n"
         "}\n"
@@ -993,9 +1009,6 @@ std::string api_spec_source(const InitOptions& options) {
 }
 
 std::string runtime_source(const InitOptions& options) {
-    bool model_database = options.use_database && options.table_type == "model";
-    std::string table_package = normalize_identifier(options.table_name, "model");
-
     std::ostringstream source;
     source << "package runtime\n"
            << "\n";
@@ -1008,15 +1021,10 @@ std::string runtime_source(const InitOptions& options) {
         has_imports = true;
     }
     if (options.use_database) {
-        if (model_database) {
-            source << "from \"models/init\" import migrate\n";
-        } else {
-            source << "from \"database/" << table_package << "\" import migrate\n";
-        }
+        source << "from \"models/init\" import migrate\n";
         has_imports = true;
-    }
-    if (options.create_auth) {
-        source << "from \"models/auth\" import migrate_user\n";
+    } else if (options.create_auth) {
+        source << "from \"models/init\" import migrate\n";
         has_imports = true;
     }
     if (has_imports) {
@@ -1034,12 +1042,7 @@ std::string runtime_source(const InitOptions& options) {
     }
     if (options.use_database || options.create_auth) {
         source << "    sql::open(\"app.sqlite\")\n";
-        if (options.use_database) {
-            source << "    migrate()\n";
-        }
-        if (options.create_auth) {
-            source << "    migrate_user()\n";
-        }
+        source << "    migrate()\n";
     }
     source << "    return 1\n"
            << "}\n";
@@ -1259,16 +1262,17 @@ std::string readme_source(const InitOptions& options) {
     }
     if (options.create_auth) {
         source << "- `auth/auth.pgt` contains register, login, and JWT verify handlers.\n"
-               << "- `models/user/user.pgt` contains the generated auth user model.\n"
-               << "- `models/auth/auth.pgt` contains auth migration and lookup helpers.\n";
+               << "- `models/user/user.pgt` contains the generated auth user model.\n";
     }
     if (options.use_database) {
         if (options.table_type == "model") {
-            source << "- `models/" << table_package << "/" << table_package << ".pgt` contains the ORM model.\n"
-                   << "- `models/init/init-db.pgt` runs ORM migration and save helpers.\n";
+            source << "- `models/" << table_package << "/" << table_package << ".pgt` contains the ORM model.\n";
         } else {
             source << "- `database/" << table_package << "/" << table_package << ".pgt` contains raw SQL migration helpers.\n";
         }
+    }
+    if (options.use_database || options.create_auth) {
+        source << "- `models/init/init-db.pgt` runs database migrations and ORM save helpers.\n";
     }
 
     source << "\n"
@@ -1381,8 +1385,6 @@ bool create_backend_project(const InitOptions& options) {
             if (!write_file(project_dir / "auth" / "auth.pgt", auth_source())) return false;
             if (!write_file(project_dir / "models" / "user" / "user.pgt",
                             auth_user_model_source())) return false;
-            if (!write_file(project_dir / "models" / "auth" / "auth.pgt",
-                            auth_model_helpers_source())) return false;
         }
 
         if (options.create_static) {
@@ -1424,14 +1426,19 @@ bool create_backend_project(const InitOptions& options) {
         if (options.use_database) {
             std::string table_package = normalize_identifier(options.table_name, "model");
             if (options.table_type == "model") {
-                if (!write_file(project_dir / "models" / table_package / (table_package + ".pgt"),
-                                model_source(options))) return false;
-                if (!write_file(project_dir / "models" / "init" / "init-db.pgt",
-                                orm_init_source(options))) return false;
+                if (!(options.create_auth && table_package == "user")) {
+                    if (!write_file(project_dir / "models" / table_package / (table_package + ".pgt"),
+                                    model_source(options))) return false;
+                }
             } else {
                 if (!write_file(project_dir / "database" / table_package / (table_package + ".pgt"),
                                 raw_table_source(options))) return false;
             }
+        }
+
+        if (options.use_database || options.create_auth) {
+            if (!write_file(project_dir / "models" / "init" / "init-db.pgt",
+                            orm_init_source(options))) return false;
         }
 
         if (options.create_docker) {

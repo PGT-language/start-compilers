@@ -244,7 +244,7 @@ pgt init backend test // создать backend проект test, template/name
 pgt init backend создаёт модульную структуру:
 - main.pgt // минимальный вход: setup(), register(), web::run(...) {реализовано}
 - pgt.mod // модуль проекта и список библиотек require {реализовано}
-- runtime/runtime.pgt // startup: logging, sql::open, migrate {реализовано}
+- runtime/runtime.pgt // startup: logging, sql::open, migrate из models/init {реализовано}
 - routes/routes.pgt // регистрация web::route/web::get/web::post {реализовано}
 - api/api.pgt // index/api handlers и сохранение POST JSON через ORM, если model включён {реализовано}
 - auth/auth.pgt // регистрация, логин, JWT verify, если auth включён {реализовано}
@@ -255,9 +255,8 @@ pgt init backend создаёт модульную структуру:
 - sweiger/sweiger.pgt // handlers Swagger UI и api.yaml {реализовано}
 - api.yaml // OpenAPI-like спецификация, отдаётся через /api/v1/openapi.yaml {реализовано}
 - models/user/user.pgt // auth user model, если auth включён {реализовано}
-- models/auth/auth.pgt // auth migrate helper, если auth включён {реализовано}
 - models/<name>/<name>.pgt // ORM model class, если database model включён {реализовано}
-- models/init/init-db.pgt // ORM migrate/save слой для базы данных {реализовано}
+- models/init/init-db.pgt // единый migrate/save слой для базы данных и auth User {реализовано}
 - database/<name>/<name>.pgt // raw SQL слой, если database sql включён {реализовано}
 - Dockerfile // использует PGT runtime image через ARG PGT_IMAGE {реализовано}
 
