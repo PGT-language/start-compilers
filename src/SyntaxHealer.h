@@ -816,6 +816,40 @@ private:
                                      edits.size()));
     }
 
+    static bool tokens_are_adjacent(const Token& left, const Token& right) {
+        return left.line == right.line &&
+               right.column == left.column + static_cast<int>(source_token_length(left));
+    }
+
+    static bool can_follow_number_suffix_removal(TokenType type) {
+        return type == T_EOF ||
+               type == T_RBRACE || type == T_RPAREN || type == T_COMMA ||
+               type == T_PLUS || type == T_MINUS || type == T_STAR || type == T_SLASH ||
+               type == T_GREATER || type == T_LESS ||
+               type == T_EQUAL_EQUAL || type == T_NOT_EQUAL ||
+               type == T_GREATER_EQUAL || type == T_LESS_EQUAL;
+    }
+
+    static void add_numeric_suffix_edits(std::vector<TextEdit>& edits,
+                                         const std::vector<Token>& tokens,
+                                         size_t index) {
+        if (index == 0 || index >= tokens.size()) return;
+        const Token& token = tokens[index];
+        const Token& previous = tokens[index - 1];
+        if (token.type != T_IDENTIFIER || previous.type != T_NUMBER) return;
+        if (!tokens_are_adjacent(previous, token)) return;
+
+        TokenType next_type = index + 1 < tokens.size() ? tokens[index + 1].type : T_EOF;
+        if (!can_follow_number_suffix_removal(next_type) &&
+            !(index + 1 < tokens.size() && tokens[index + 1].line > token.line)) {
+            return;
+        }
+
+        edits.push_back(make_erase(token,
+                                   "invalid numeric suffix '" + token.value + "' was removed",
+                                   edits.size()));
+    }
+
     static void add_namespace_typo_edits(std::vector<TextEdit>& edits,
                                          const std::vector<Token>& tokens,
                                          size_t index) {
@@ -1009,6 +1043,7 @@ private:
         std::vector<TextEdit> edits;
         for (size_t i = 0; i < tokens.size(); ++i) {
             if (is_eof(tokens[i].type)) break;
+            add_numeric_suffix_edits(edits, tokens, i);
             add_namespace_typo_edits(edits, tokens, i);
             add_word_typo_edits(edits, tokens, i);
         }
