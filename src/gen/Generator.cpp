@@ -240,6 +240,21 @@ std::string default_api_spec_source(const std::string& title) {
     return source.str();
 }
 
+std::string swagger_package_source() {
+    return
+        "package sweiger\n"
+        "\n"
+        "function(docs) {\n"
+        "    return read::file(\"sweiger/index.html\")\n"
+        "    return 1\n"
+        "}\n"
+        "\n"
+        "function(openapi_yaml) {\n"
+        "    return read::file(\"api.yaml\")\n"
+        "    return 1\n"
+        "}\n";
+}
+
 int generate_file_command(int argc, char** argv) {
     if (argc < 4) {
         std::cerr << "Usage: pgt generate file <path> [package]\n";
@@ -284,11 +299,16 @@ int generate_swagger_command(int argc, char** argv) {
     std::string title = argc >= 4 ? argv[3] : "PGT";
     std::filesystem::path swagger_dir = "sweiger";
     std::filesystem::path swagger_file = swagger_dir / "index.html";
+    std::filesystem::path swagger_package = swagger_dir / "sweiger.pgt";
     std::filesystem::path api_spec_file = "api.yaml";
 
     try {
         if (std::filesystem::exists(swagger_file)) {
             std::cerr << "Swagger HTML already exists: " << swagger_file.string() << "\n";
+            return 1;
+        }
+        if (std::filesystem::exists(swagger_package)) {
+            std::cerr << "Swagger package already exists: " << swagger_package.string() << "\n";
             return 1;
         }
         std::filesystem::create_directories(swagger_dir);
@@ -305,6 +325,14 @@ int generate_swagger_command(int argc, char** argv) {
     file << swagger_html_source(title);
     file.close();
 
+    std::ofstream package_file(swagger_package);
+    if (!package_file.is_open()) {
+        std::cerr << "Error: Cannot create swagger package: " << swagger_package.string() << "\n";
+        return 1;
+    }
+    package_file << swagger_package_source();
+    package_file.close();
+
     if (!std::filesystem::exists(api_spec_file)) {
         std::ofstream spec_file(api_spec_file);
         if (!spec_file.is_open()) {
@@ -316,6 +344,7 @@ int generate_swagger_command(int argc, char** argv) {
     }
 
     std::cout << "Created Swagger HTML: " << swagger_file.string() << "\n";
+    std::cout << "Created Swagger package: " << swagger_package.string() << "\n";
     return 0;
 }
 

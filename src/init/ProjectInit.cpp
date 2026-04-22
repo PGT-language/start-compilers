@@ -571,6 +571,21 @@ std::string swagger_html_source(const InitOptions& options) {
     return source.str();
 }
 
+std::string swagger_package_source() {
+    return
+        "package sweiger\n"
+        "\n"
+        "function(docs) {\n"
+        "    return read::file(\"sweiger/index.html\")\n"
+        "    return 1\n"
+        "}\n"
+        "\n"
+        "function(openapi_yaml) {\n"
+        "    return read::file(\"api.yaml\")\n"
+        "    return 1\n"
+        "}\n";
+}
+
 std::string api_spec_source(const InitOptions& options) {
     std::ostringstream source;
     source << "openapi: 3.0.3\n"
@@ -713,19 +728,6 @@ std::string api_source(const InitOptions& options) {
                << "}\n";
     }
 
-    if (options.create_api_spec) {
-        source << "\n"
-               << "function(docs) {\n"
-               << "    return read::file(\"sweiger/index.html\")\n"
-               << "    return 1\n"
-               << "}\n"
-               << "\n"
-               << "function(openapi_yaml) {\n"
-               << "    return read::file(\"api.yaml\")\n"
-               << "    return 1\n"
-               << "}\n";
-    }
-
     return source.str();
 }
 
@@ -740,11 +742,11 @@ std::string routes_source(const InitOptions& options) {
     if (options.create_static) {
         source << ", static_css, static_js";
     }
+    source << "\n";
     if (options.create_api_spec) {
-        source << ", docs, openapi_yaml";
+        source << "from \"sweiger\" import docs, openapi_yaml\n";
     }
     source << "\n"
-           << "\n"
            << "function(register) {\n"
            << "    web::route(\"/\", \"index\")\n";
     if (options.create_api) {
@@ -856,6 +858,7 @@ std::string readme_source(const InitOptions& options) {
     }
     if (options.create_api_spec) {
         source << "- `sweiger/index.html` contains Swagger UI served from `/api/v1/docs`.\n"
+               << "- `sweiger/sweiger.pgt` contains Swagger route handlers.\n"
                << "- `api.yaml` contains the editable API specification served from `/api/v1/openapi.yaml`.\n";
     }
     if (options.create_logging) {
@@ -971,6 +974,8 @@ bool create_backend_project(const InitOptions& options) {
 
         if (options.create_api_spec) {
             if (!write_file(project_dir / "api.yaml", api_spec_source(options))) return false;
+            if (!write_file(project_dir / "sweiger" / "sweiger.pgt",
+                            swagger_package_source())) return false;
             if (!write_file(project_dir / "sweiger" / "index.html",
                             swagger_html_source(options))) return false;
         }
