@@ -14,7 +14,7 @@ server.log
 messages.json
 app.sql
 app.db
-app.sqlite
+*.sqlite
 *.yaml
 *.md
 *.js
