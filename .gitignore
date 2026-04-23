@@ -25,3 +25,7 @@ jjjsksks/Dockerfile
 jjjsksks/docker-compose.yml
 jjjsksks/data/posts.json
 *pgt-ide/
+marcetplase/docker-compose.yml
+marcetplase/Dockerfile
+marcetplase/nginx/default.conf
+marcetplase/data/plugins.jsonl
