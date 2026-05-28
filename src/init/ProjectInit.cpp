@@ -336,7 +336,7 @@ std::string logging_component_source() {
         "function(critical, message + string) {\n"
         "    log::critical(message)\n"
         "    return 1\n"
-        "}\n";
+        "}";
 }
 
 std::string model_source(const InitOptions& options) {
@@ -349,7 +349,7 @@ std::string model_source(const InitOptions& options) {
            << "class " << class_name << "(db.Model) {\n"
            << "    id = db.Column(db.Integer, primary_key=True)\n"
            << "    message = db.Column(db.String(255))\n"
-           << "}\n";
+           << "}";
     return source.str();
 }
 
@@ -384,20 +384,20 @@ std::string orm_init_source(const InitOptions& options) {
         source << "    sql::table(\"" << table_name << "\", \"id INTEGER PRIMARY KEY, message TEXT\")\n";
     }
     source << "    return 1\n"
-           << "}\n";
+           << "}";
     if (model_database) {
         source << "\n"
                << "function(save, data + object) {\n"
                << "    orm::save(\"" << class_name << "\", data)\n"
                << "    return 1\n"
-               << "}\n";
+               << "}";
     }
     if (options.create_auth) {
         source << "\n"
                << "function(save_user, data + object) {\n"
                << "    orm::save(\"User\", data)\n"
                << "    return 1\n"
-               << "}\n";
+               << "}";
     }
     return source.str();
 }
@@ -415,7 +415,7 @@ std::string raw_table_source(const InitOptions& options) {
            << "function(migrate) {\n"
            << "    sql::table(\"" << table_name << "\", \"id INTEGER PRIMARY KEY, message TEXT\")\n"
            << "    return 1\n"
-           << "}\n";
+           << "}";
     return source.str();
 }
 
@@ -429,7 +429,7 @@ std::string auth_user_model_source() {
         "    email = db.Column(db.String(160))\n"
         "    password = db.Column(db.String(255))\n"
         "    is_active = db.Column(db.Boolean)\n"
-        "}\n";
+        "}";
 }
 
 std::string auth_source() {
@@ -504,7 +504,7 @@ std::string auth_source() {
         "    token + string = json::get(payload, \"token\")\n"
         "    return json::object(\"valid\", jwt::verify(token, \"change-me-secret\"))\n"
         "    return 1\n"
-        "}\n";
+        "}";
 }
 
 std::string static_index_source(const InitOptions& options) {
@@ -540,7 +540,7 @@ std::string static_index_source(const InitOptions& options) {
            << "    </main>\n"
            << "    <script src=\"/static/index.js\"></script>\n"
            << "</body>\n"
-           << "</html>\n";
+           << "</html>";
     return source.str();
 }
 
