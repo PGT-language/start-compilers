@@ -8,7 +8,8 @@
 #include <memory>
 
 // Информация о типе переменной
-enum class VarType {
+enum class VarType
+{
     INT,
     FLOAT,
     STRING,
@@ -16,60 +17,63 @@ enum class VarType {
     BYTES,
     OBJECT,
     ARRAY,
-    UNKNOWN  // Тип еще не определен
+    UNKNOWN // Тип еще не определен
 };
 
-struct VariableInfo {
+struct VariableInfo
+{
     VarType type;
     SourceLocation decl_location;
     bool is_initialized;
 
-    VariableInfo(VarType t = VarType::UNKNOWN, const SourceLocation& loc = SourceLocation())
+    VariableInfo(VarType t = VarType::UNKNOWN, const SourceLocation &loc = SourceLocation())
         : type(t), decl_location(loc), is_initialized(false) {}
 };
 
-struct FunctionInfo {
+struct FunctionInfo
+{
     std::vector<VarType> param_types;
     VarType return_type;
     SourceLocation decl_location;
 
-    FunctionInfo(const std::vector<VarType>& params = {}, VarType ret = VarType::UNKNOWN,
-                 const SourceLocation& loc = SourceLocation())
+    FunctionInfo(const std::vector<VarType> &params = {}, VarType ret = VarType::UNKNOWN,
+                 const SourceLocation &loc = SourceLocation())
         : param_types(params), return_type(ret), decl_location(loc) {}
 };
 
 // Семантический анализатор
-class SemanticAnalyzer {
+class SemanticAnalyzer
+{
     std::map<std::string, VariableInfo> global_vars;
     std::map<std::string, FunctionInfo> functions;
-    std::vector<std::map<std::string, VariableInfo>> scopes;  // Стек областей видимости
+    std::vector<std::map<std::string, VariableInfo>> scopes; // Стек областей видимости
 
     // Вспомогательные функции
-    VarType get_value_type(const Value& val);
-    VarType type_from_name(const std::string& type_name);
+    VarType get_value_type(const Value &val);
+    VarType type_from_name(const std::string &type_name);
     std::string type_to_string(VarType type);
     bool is_assignable(VarType expected, VarType actual);
-    VarType infer_expr_type(const std::shared_ptr<AstNode>& node);
+    VarType infer_expr_type(const std::shared_ptr<AstNode> &node);
     void enter_scope();
     void exit_scope();
-    void declare_variable(const std::string& name, VarType type, const SourceLocation& loc);
-    VariableInfo* find_variable(const std::string& name);
+    void declare_variable(const std::string &name, VarType type, const SourceLocation &loc);
+    VariableInfo *find_variable(const std::string &name);
 
     // Анализ узлов AST
-    void analyze_program(const std::vector<std::shared_ptr<AstNode>>& program);
-    void analyze_function(const std::shared_ptr<FunctionDef>& func);
-    void analyze_statement(const std::shared_ptr<AstNode>& stmt);
-    void analyze_var_decl(const std::shared_ptr<VarDecl>& decl);
-    void analyze_expr(const std::shared_ptr<AstNode>& expr);
-    void analyze_print(const std::shared_ptr<PrintStmt>& print);
-    void analyze_input(const std::shared_ptr<InputStmt>& input);
-    void analyze_if(const std::shared_ptr<IfStmt>& if_stmt);
-    void analyze_while(const std::shared_ptr<WhileStmt>& while_stmt);
-    void analyze_call(const std::shared_ptr<CallStmt>& call);
-    void analyze_return(const std::shared_ptr<ReturnStmt>& ret);
-    void analyze_net_op(const std::shared_ptr<NetOp>& net_op);
-    void analyze_file_op(const std::shared_ptr<FileOp>& file_op);
+    void analyze_program(const std::vector<std::shared_ptr<AstNode>> &program);
+    void analyze_function(const std::shared_ptr<FunctionDef> &func);
+    void analyze_statement(const std::shared_ptr<AstNode> &stmt);
+    void analyze_var_decl(const std::shared_ptr<VarDecl> &decl);
+    void analyze_expr(const std::shared_ptr<AstNode> &expr);
+    void analyze_print(const std::shared_ptr<PrintStmt> &print);
+    void analyze_input(const std::shared_ptr<InputStmt> &input);
+    void analyze_if(const std::shared_ptr<IfStmt> &if_stmt);
+    void analyze_while(const std::shared_ptr<WhileStmt> &while_stmt);
+    void analyze_call(const std::shared_ptr<CallStmt> &call);
+    void analyze_return(const std::shared_ptr<ReturnStmt> &ret);
+    void analyze_net_op(const std::shared_ptr<NetOp> &net_op);
+    void analyze_file_op(const std::shared_ptr<FileOp> &file_op);
 
 public:
-    void analyze(const std::vector<std::shared_ptr<AstNode>>& program);
+    void analyze(const std::vector<std::shared_ptr<AstNode>> &program);
 };

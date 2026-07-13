@@ -4,7 +4,8 @@
 #include <string>
 #include <vector>
 
-class Lexer {
+class Lexer
+{
     std::string source;
     size_t pos = 0;
     int line = 1;

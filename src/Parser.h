@@ -5,7 +5,8 @@
 #include <vector>
 #include <memory>
 
-class Parser {
+class Parser
+{
     std::vector<Token> tokens;
     size_t pos = 0;
     bool has_package_decl = false;
@@ -14,7 +15,7 @@ class Parser {
     std::vector<RouteDef> pending_routes;
 
     bool is_eof() const;
-    const Token& current() const;
+    const Token &current() const;
     void advance();
 
     std::shared_ptr<FunctionDef> parse_function();
@@ -45,6 +46,6 @@ public:
     std::vector<std::shared_ptr<AstNode>> parse_program();
     bool found_package_main() const { return has_package_decl && package_name == "main"; }
     bool found_package_decl() const { return has_package_decl; }
-    const std::string& parsed_package_name() const { return package_name; }
+    const std::string &parsed_package_name() const { return package_name; }
     bool found_return_zero() const { return has_return_zero; }
 };

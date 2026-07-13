@@ -5,135 +5,154 @@
 #include <limits>
 #include <vector>
 
-namespace {
-bool is_builtin_call_name(const std::string& name) {
-    static const std::vector<std::string> names = {
-        "protocol",
-        "json_parse",
-        "json_stringify",
-        "read_file",
-        "open_log",
-        "request_method",
-        "request_path",
-        "request_body",
-        "request_json",
-        "request::method",
-        "request::path",
-        "request::body",
-        "request::json",
-        "read::file",
-        "log",
-        "log_output",
-        "set_log_output",
-        "log_console",
-        "log_file",
-        "log::output",
-        "log::set_output",
-        "log::console",
-        "log::file",
-        "log::trace",
-        "log::debug",
-        "log::info",
-        "log::notice",
-        "log::warn",
-        "log::warning",
-        "log::error",
-        "log::critical",
-        "log::critecal",
-        "log::fatal",
-        "log_trace",
-        "log_debug",
-        "log_info",
-        "log_notice",
-        "log_warn",
-        "log_warning",
-        "log_error",
-        "log_critical",
-        "log_critecal",
-        "log_fatal",
-        "json::parse",
-        "json::decode",
-        "json::unmarshal",
-        "json::stringify",
-        "json::encode",
-        "json::marshal",
-        "json::write",
-        "json::save",
-        "json::read",
-        "json::get",
-        "json::object",
-        "auth::hash_password",
-        "auth::verify_password",
-        "jwt::sign",
-        "jwt::verify",
-        "sql::open",
-        "sql::connect",
-        "sql::exec",
-        "sql::table",
-        "sql::insert",
-        "sql::find",
-        "orm::table",
-        "orm::migrate",
-        "orm::save",
-        "orm::find"
-    };
+namespace
+{
+    bool is_builtin_call_name(const std::string &name)
+    {
+        static const std::vector<std::string> names = {
+            "protocol",
+            "json_parse",
+            "json_stringify",
+            "read_file",
+            "open_log",
+            "request_method",
+            "request_path",
+            "request_body",
+            "request_json",
+            "request::method",
+            "request::path",
+            "request::body",
+            "request::json",
+            "read::file",
+            "log",
+            "log_output",
+            "set_log_output",
+            "log_console",
+            "log_file",
+            "log::output",
+            "log::set_output",
+            "log::console",
+            "log::file",
+            "log::trace",
+            "log::debug",
+            "log::info",
+            "log::notice",
+            "log::warn",
+            "log::warning",
+            "log::error",
+            "log::critical",
+            "log::critecal",
+            "log::fatal",
+            "log_trace",
+            "log_debug",
+            "log_info",
+            "log_notice",
+            "log_warn",
+            "log_warning",
+            "log_error",
+            "log_critical",
+            "log_critecal",
+            "log_fatal",
+            "json::parse",
+            "json::decode",
+            "json::unmarshal",
+            "json::stringify",
+            "json::encode",
+            "json::marshal",
+            "json::write",
+            "json::save",
+            "json::read",
+            "json::get",
+            "json::object",
+            "auth::hash_password",
+            "auth::verify_password",
+            "jwt::sign",
+            "jwt::verify",
+            "sql::open",
+            "sql::connect",
+            "sql::exec",
+            "sql::table",
+            "sql::insert",
+            "sql::find",
+            "orm::table",
+            "orm::migrate",
+            "orm::save",
+            "orm::find"};
 
-    for (const auto& builtin_name : names) {
-        if (name == builtin_name) {
-            return true;
+        for (const auto &builtin_name : names)
+        {
+            if (name == builtin_name)
+            {
+                return true;
+            }
         }
-    }
-    return false;
-}
-
-bool is_namespaced_builtin_root(const Token& token) {
-    if (token.type == T_READ) {
-        return true;
-    }
-    if (token.type != T_IDENTIFIER) {
         return false;
     }
-    return token.value == "log" ||
-           token.value == "json" ||
-           token.value == "auth" ||
-           token.value == "jwt" ||
-           token.value == "sql" ||
-           token.value == "orm" ||
-           token.value == "request";
+
+    bool is_namespaced_builtin_root(const Token &token)
+    {
+        if (token.type == T_READ)
+        {
+            return true;
+        }
+        if (token.type != T_IDENTIFIER)
+        {
+            return false;
+        }
+        return token.value == "log" ||
+               token.value == "json" ||
+               token.value == "auth" ||
+               token.value == "jwt" ||
+               token.value == "sql" ||
+               token.value == "orm" ||
+               token.value == "request";
+    }
+
+    bool is_namespaced_builtin_member(const Token &token)
+    {
+        return token.type == T_IDENTIFIER ||
+               token.type == T_FILE ||
+               token.type == T_OBJECT ||
+               token.type == T_READ ||
+               token.type == T_WRITE;
+    }
 }
 
-bool is_namespaced_builtin_member(const Token& token) {
-    return token.type == T_IDENTIFIER ||
-           token.type == T_FILE ||
-           token.type == T_OBJECT ||
-           token.type == T_READ ||
-           token.type == T_WRITE;
-}
-}
-
-void Parser::load_tokens(std::vector<Token> t) {
+void Parser::load_tokens(std::vector<Token> t)
+{
     tokens = std::move(t);
     pos = 0;
-    if (tokens.empty() || tokens.back().type != T_EOF) tokens.push_back({T_EOF});
+    if (tokens.empty() || tokens.back().type != T_EOF)
+        tokens.push_back({T_EOF});
 }
 
-bool Parser::is_eof() const {
+bool Parser::is_eof() const
+{
     return pos >= tokens.size() || tokens[pos].type == T_EOF;
 }
 
-const Token& Parser::current() const {
+const Token &Parser::current() const
+{
     static const Token eof_token{T_EOF, "", 0};
-    if (tokens.empty()) return eof_token;
-    if (pos >= tokens.size()) return tokens.back();
+    if (tokens.empty())
+        return eof_token;
+    if (pos >= tokens.size())
+        return tokens.back();
     return tokens[pos];
 }
-void Parser::advance() { if (!is_eof()) ++pos; }
+void Parser::advance()
+{
+    if (!is_eof())
+        ++pos;
+}
 
-std::string Parser::parse_type_name() {
+std::string Parser::parse_type_name()
+{
     if (current().type == T_INT || current().type == T_FLOAT ||
         current().type == T_STRING || current().type == T_BOOL_TYPE ||
         current().type == T_BYTES || current().type == T_OBJECT ||
-        current().type == T_ARRAY) {
+        current().type == T_ARRAY)
+    {
         std::string type_name = current().value;
         advance();
         return type_name;
@@ -143,7 +162,8 @@ std::string Parser::parse_type_name() {
                       SourceLocation(current().line, 0));
 }
 
-std::vector<std::shared_ptr<AstNode>> Parser::parse_program() {
+std::vector<std::shared_ptr<AstNode>> Parser::parse_program()
+{
     // Сбрасываем флаги для нового парсинга
     has_package_decl = false;
     package_name.clear();
@@ -153,98 +173,133 @@ std::vector<std::shared_ptr<AstNode>> Parser::parse_program() {
     std::vector<std::shared_ptr<AstNode>> nodes;
     size_t last_pos = pos;
     size_t iterations = 0;
-    while (!is_eof()) {
-        if (pos == last_pos) {
+    while (!is_eof())
+    {
+        if (pos == last_pos)
+        {
             iterations++;
-            if (iterations > 1000) {
-                if (DEBUG) std::cout << "[DEBUG] Parser stuck in parse_program at token: " << current().type << " (" << current().value << ")" << std::endl;
+            if (iterations > 1000)
+            {
+                if (DEBUG)
+                    std::cout << "[DEBUG] Parser stuck in parse_program at token: " << current().type << " (" << current().value << ")" << std::endl;
                 break;
             }
-        } else {
+        }
+        else
+        {
             iterations = 0;
         }
         last_pos = pos;
 
-        if (current().type == T_PACKAGE) {
+        if (current().type == T_PACKAGE)
+        {
             int package_line = current().line;
             advance(); // package
-            if (current().type != T_IDENTIFIER) {
+            if (current().type != T_IDENTIFIER)
+            {
                 throw SyntaxError("Expected package name after 'package'",
                                   SourceLocation(package_line, 0));
             }
-            if (has_package_decl) {
+            if (has_package_decl)
+            {
                 throw SyntaxError("Duplicate package declaration",
                                   SourceLocation(package_line, 0));
             }
             has_package_decl = true;
             package_name = current().value;
             advance(); // main или другое значение
-        } else if (current().type == T_FROM) {
+        }
+        else if (current().type == T_FROM)
+        {
             auto import = parse_import();
-            if (import) nodes.push_back(import);
-        } else if (current().type == T_CLASS) {
+            if (import)
+                nodes.push_back(import);
+        }
+        else if (current().type == T_CLASS)
+        {
             auto klass = parse_class();
-            if (klass) nodes.push_back(klass);
-        } else if (current().type == T_FUNCTION) {
+            if (klass)
+                nodes.push_back(klass);
+        }
+        else if (current().type == T_FUNCTION)
+        {
             auto func = parse_function();
-            if (func) nodes.push_back(func);
-        } else if (current().type == T_IDENTIFIER && pos + 1 < tokens.size() && tokens[pos + 1].type == T_PLUS) {
+            if (func)
+                nodes.push_back(func);
+        }
+        else if (current().type == T_IDENTIFIER && pos + 1 < tokens.size() && tokens[pos + 1].type == T_PLUS)
+        {
             // Глобальная переменная
             auto var = parse_var_decl();
-            if (var) nodes.push_back(var);
-        } else if (current().type == T_RETURN) {
+            if (var)
+                nodes.push_back(var);
+        }
+        else if (current().type == T_RETURN)
+        {
             // Проверяем, является ли это return 0 в конце файла
             size_t save_pos = pos;
             advance(); // return
-            if (!is_eof() && current().type == T_NUMBER && current().value == "0") {
+            if (!is_eof() && current().type == T_NUMBER && current().value == "0")
+            {
                 has_return_zero = true;
             }
             pos = save_pos; // Возвращаемся назад
-            advance(); // пропускаем return вне функций
-        } else {
+            advance();      // пропускаем return вне функций
+        }
+        else
+        {
             auto stmt = parse_statement();
-            if (stmt) {
-                if (auto net_op = std::dynamic_pointer_cast<NetOp>(stmt)) {
+            if (stmt)
+            {
+                if (auto net_op = std::dynamic_pointer_cast<NetOp>(stmt))
+                {
                     if ((net_op->method == "get" || net_op->method == "post") &&
                         !net_op->data && !net_op->path && !net_op->port &&
-                        current().type == T_FUNCTION) {
-                        if (auto lit = std::dynamic_pointer_cast<Literal>(net_op->url)) {
+                        current().type == T_FUNCTION)
+                    {
+                        if (auto lit = std::dynamic_pointer_cast<Literal>(net_op->url))
+                        {
                             if (lit->value.type == ValueType::STRING &&
-                                lit->value.str_val.rfind("/", 0) == 0) {
-                                pending_routes.push_back({
-                                    net_op->method == "post" ? "POST" : "GET",
-                                    lit->value.str_val,
-                                    net_op->location
-                                });
+                                lit->value.str_val.rfind("/", 0) == 0)
+                            {
+                                pending_routes.push_back({net_op->method == "post" ? "POST" : "GET",
+                                                          lit->value.str_val,
+                                                          net_op->location});
                                 continue;
                             }
                         }
                     }
                     if (net_op->method == "route" && !net_op->data && !net_op->port &&
-                        current().type == T_FUNCTION) {
-                        if (auto path_lit = std::dynamic_pointer_cast<Literal>(net_op->url)) {
+                        current().type == T_FUNCTION)
+                    {
+                        if (auto path_lit = std::dynamic_pointer_cast<Literal>(net_op->url))
+                        {
                             std::string route_method = "GET";
-                            if (net_op->path) {
-                                if (auto method_lit = std::dynamic_pointer_cast<Literal>(net_op->path)) {
-                                    if (method_lit->value.type == ValueType::STRING) {
+                            if (net_op->path)
+                            {
+                                if (auto method_lit = std::dynamic_pointer_cast<Literal>(net_op->path))
+                                {
+                                    if (method_lit->value.type == ValueType::STRING)
+                                    {
                                         route_method = method_lit->value.str_val;
                                     }
                                 }
                             }
                             if (path_lit->value.type == ValueType::STRING &&
-                                path_lit->value.str_val.rfind("/", 0) == 0) {
-                                pending_routes.push_back({
-                                    route_method,
-                                    path_lit->value.str_val,
-                                    net_op->location
-                                });
+                                path_lit->value.str_val.rfind("/", 0) == 0)
+                            {
+                                pending_routes.push_back({route_method,
+                                                          path_lit->value.str_val,
+                                                          net_op->location});
                                 continue;
                             }
                         }
                     }
                 }
                 nodes.push_back(stmt);
-            } else {
+            }
+            else
+            {
                 advance();
             }
         }
@@ -252,11 +307,13 @@ std::vector<std::shared_ptr<AstNode>> Parser::parse_program() {
     return nodes;
 }
 
-std::shared_ptr<ClassDef> Parser::parse_class() {
+std::shared_ptr<ClassDef> Parser::parse_class()
+{
     int class_line = current().line;
     advance(); // class
 
-    if (current().type != T_IDENTIFIER) {
+    if (current().type != T_IDENTIFIER)
+    {
         throw SyntaxError("Expected class name after 'class'",
                           SourceLocation(class_line, 0));
     }
@@ -266,33 +323,40 @@ std::shared_ptr<ClassDef> Parser::parse_class() {
     klass->name = current().value;
     advance(); // class name
 
-    if (current().type == T_LPAREN) {
+    if (current().type == T_LPAREN)
+    {
         advance(); // (
-        while (!is_eof() && current().type != T_RPAREN) {
-            if (!klass->base.empty()) {
+        while (!is_eof() && current().type != T_RPAREN)
+        {
+            if (!klass->base.empty())
+            {
                 klass->base += " ";
             }
             klass->base += current().value;
             advance();
         }
-        if (current().type != T_RPAREN) {
+        if (current().type != T_RPAREN)
+        {
             throw SyntaxError("Expected ')' after class base",
                               SourceLocation(current().line, 0));
         }
         advance(); // )
     }
 
-    if (current().type != T_LBRACE) {
+    if (current().type != T_LBRACE)
+    {
         throw SyntaxError("Expected '{' after class declaration",
                           SourceLocation(current().line, 0));
     }
     advance(); // {
 
-    while (!is_eof() && current().type != T_RBRACE) {
+    while (!is_eof() && current().type != T_RBRACE)
+    {
         klass->fields.push_back(parse_orm_field());
     }
 
-    if (current().type != T_RBRACE) {
+    if (current().type != T_RBRACE)
+    {
         throw SyntaxError("Expected '}' to close class '" + klass->name + "'",
                           klass->location);
     }
@@ -301,8 +365,10 @@ std::shared_ptr<ClassDef> Parser::parse_class() {
     return klass;
 }
 
-OrmField Parser::parse_orm_field() {
-    if (current().type != T_IDENTIFIER) {
+OrmField Parser::parse_orm_field()
+{
+    if (current().type != T_IDENTIFIER)
+    {
         throw SyntaxError("Expected ORM field name in class body",
                           SourceLocation(current().line, 0));
     }
@@ -312,65 +378,79 @@ OrmField Parser::parse_orm_field() {
     field.name = current().value;
     advance(); // field name
 
-    if (current().type != T_EQUAL) {
+    if (current().type != T_EQUAL)
+    {
         throw SyntaxError("Expected '=' after ORM field name '" + field.name + "'",
                           SourceLocation(current().line, 0));
     }
     advance(); // =
 
-    if (current().type != T_IDENTIFIER) {
+    if (current().type != T_IDENTIFIER)
+    {
         throw SyntaxError("Expected db.Column(...) for ORM field '" + field.name + "'",
                           SourceLocation(current().line, 0));
     }
     std::string column_call = current().value;
-    if (column_call != "db.Column" && column_call != "orm.Column") {
+    if (column_call != "db.Column" && column_call != "orm.Column")
+    {
         throw SyntaxError("Expected db.Column(...) for ORM field '" + field.name + "'",
                           SourceLocation(current().line, 0));
     }
     advance(); // db.Column
 
-    if (current().type != T_LPAREN) {
+    if (current().type != T_LPAREN)
+    {
         throw SyntaxError("Expected '(' after db.Column",
                           SourceLocation(current().line, 0));
     }
     advance(); // (
 
-    if (current().type != T_IDENTIFIER) {
+    if (current().type != T_IDENTIFIER)
+    {
         throw SyntaxError("Expected db type in db.Column(...)",
                           SourceLocation(current().line, 0));
     }
     field.db_type = current().value;
     advance(); // db.Integer, db.String, ...
 
-    if (current().type == T_LPAREN) {
+    if (current().type == T_LPAREN)
+    {
         advance(); // (
-        if (current().type == T_NUMBER) {
+        if (current().type == T_NUMBER)
+        {
             field.size = std::stoi(current().value);
             advance();
         }
-        if (current().type != T_RPAREN) {
+        if (current().type != T_RPAREN)
+        {
             throw SyntaxError("Expected ')' after db type size",
                               SourceLocation(current().line, 0));
         }
         advance(); // )
     }
 
-    while (!is_eof() && current().type != T_RPAREN) {
-        if (current().type == T_COMMA) {
+    while (!is_eof() && current().type != T_RPAREN)
+    {
+        if (current().type == T_COMMA)
+        {
             advance();
             continue;
         }
-        if (current().type == T_NUMBER) {
+        if (current().type == T_NUMBER)
+        {
             field.size = std::stoi(current().value);
             advance();
             continue;
         }
-        if (current().type == T_IDENTIFIER && current().value == "primary_key") {
+        if (current().type == T_IDENTIFIER && current().value == "primary_key")
+        {
             field.primary_key = true;
             advance();
-            if (current().type == T_EQUAL) {
+            if (current().type == T_EQUAL)
+            {
                 advance();
-                if (current().type == T_TRUE || current().type == T_FALSE) {
+                if (current().type == T_TRUE || current().type == T_FALSE)
+                {
                     field.primary_key = current().type == T_TRUE;
                     advance();
                 }
@@ -380,7 +460,8 @@ OrmField Parser::parse_orm_field() {
         advance();
     }
 
-    if (current().type != T_RPAREN) {
+    if (current().type != T_RPAREN)
+    {
         throw SyntaxError("Expected ')' after db.Column(...)",
                           SourceLocation(current().line, 0));
     }
@@ -389,7 +470,8 @@ OrmField Parser::parse_orm_field() {
     return field;
 }
 
-std::shared_ptr<FunctionDef> Parser::parse_function() {
+std::shared_ptr<FunctionDef> Parser::parse_function()
+{
     advance(); // function
     advance(); // (
 
@@ -402,10 +484,13 @@ std::shared_ptr<FunctionDef> Parser::parse_function() {
     pending_routes.clear();
 
     // Пропускаем запятую после имени функции, если она есть
-    if (current().type == T_COMMA) advance();
+    if (current().type == T_COMMA)
+        advance();
 
-    while (!is_eof() && current().type == T_IDENTIFIER) {
-        if (pos + 1 >= tokens.size() || tokens[pos + 1].type != T_PLUS) break;
+    while (!is_eof() && current().type == T_IDENTIFIER)
+    {
+        if (pos + 1 >= tokens.size() || tokens[pos + 1].type != T_PLUS)
+            break;
 
         std::string param_name = current().value;
         advance();
@@ -415,7 +500,8 @@ std::shared_ptr<FunctionDef> Parser::parse_function() {
         func->param_names.push_back(param_name);
         func->param_types.push_back(param_type);
 
-        if (current().type == T_COMMA) advance();
+        if (current().type == T_COMMA)
+            advance();
     }
 
     advance(); // )
@@ -424,114 +510,149 @@ std::shared_ptr<FunctionDef> Parser::parse_function() {
 
     size_t iterations = 0;
     size_t last_pos = pos;
-    while (!is_eof() && current().type != T_RBRACE) {
+    while (!is_eof() && current().type != T_RBRACE)
+    {
         // Защита от бесконечного цикла
-        if (pos == last_pos) {
+        if (pos == last_pos)
+        {
             iterations++;
-            if (iterations > 100) {
-                if (DEBUG) std::cout << "[DEBUG] Parser stuck in parse_function at token: " << current().type << " (" << current().value << "), skipping to }" << std::endl;
+            if (iterations > 100)
+            {
+                if (DEBUG)
+                    std::cout << "[DEBUG] Parser stuck in parse_function at token: " << current().type << " (" << current().value << "), skipping to }" << std::endl;
                 // Пропускаем до закрывающей скобки функции
-                while (!is_eof() && current().type != T_RBRACE) {
+                while (!is_eof() && current().type != T_RBRACE)
+                {
                     advance();
                 }
                 break;
             }
-        } else {
+        }
+        else
+        {
             iterations = 0;
         }
         last_pos = pos;
 
         size_t start_pos = pos;
-        try {
+        try
+        {
             auto stmt = parse_statement();
-            if (auto ret = std::dynamic_pointer_cast<ReturnStmt>(stmt)) {
-                if (auto lit = std::dynamic_pointer_cast<Literal>(ret->expr)) {
-                    if (lit->value.type == ValueType::INT && lit->value.int_val == 1) {
+            if (auto ret = std::dynamic_pointer_cast<ReturnStmt>(stmt))
+            {
+                if (auto lit = std::dynamic_pointer_cast<Literal>(ret->expr))
+                {
+                    if (lit->value.type == ValueType::INT && lit->value.int_val == 1)
+                    {
                         func->has_return_one = true;
                     }
                 }
             }
-            if (stmt) {
+            if (stmt)
+            {
                 func->body.push_back(stmt);
-        } else {
-            // Если не удалось распарсить и позиция не изменилась, значит застряли
-            if (pos == start_pos) {
-                // Проверяем, не является ли это попыткой вызвать файловую операцию с ошибкой
-                std::string token_val = current().value;
-                if (current().type == T_IDENTIFIER &&
-                    (token_val.find("write") != std::string::npos ||
-                     token_val.find("create") != std::string::npos ||
-                     token_val.find("read") != std::string::npos ||
-                     token_val.find("close") != std::string::npos ||
-                     token_val.find("delete") != std::string::npos)) {
-                    // Похоже на опечатку в файловой операции
-                    throw SyntaxError("Unknown file operation: '" + token_val + "'. Did you mean 'write', 'create', 'read', 'close', or 'delete'?",
-                                     SourceLocation(current().line, 0));
+            }
+            else
+            {
+                // Если не удалось распарсить и позиция не изменилась, значит застряли
+                if (pos == start_pos)
+                {
+                    // Проверяем, не является ли это попыткой вызвать файловую операцию с ошибкой
+                    std::string token_val = current().value;
+                    if (current().type == T_IDENTIFIER &&
+                        (token_val.find("write") != std::string::npos ||
+                         token_val.find("create") != std::string::npos ||
+                         token_val.find("read") != std::string::npos ||
+                         token_val.find("close") != std::string::npos ||
+                         token_val.find("delete") != std::string::npos))
+                    {
+                        // Похоже на опечатку в файловой операции
+                        throw SyntaxError("Unknown file operation: '" + token_val + "'. Did you mean 'write', 'create', 'read', 'close', or 'delete'?",
+                                          SourceLocation(current().line, 0));
+                    }
+                    // Выбрасываем ошибку синтаксиса
+                    throw SyntaxError("Unexpected token: '" + current().value + "' at line " + std::to_string(current().line),
+                                      SourceLocation(current().line, 0));
                 }
-                // Выбрасываем ошибку синтаксиса
-                throw SyntaxError("Unexpected token: '" + current().value + "' at line " + std::to_string(current().line),
-                                 SourceLocation(current().line, 0));
-            } else {
-                // Позиция изменилась, просто продолжаем (возможно, это был return или другой оператор)
+                else
+                {
+                    // Позиция изменилась, просто продолжаем (возможно, это был return или другой оператор)
+                }
             }
         }
-        } catch (const SyntaxError& e) {
-            throw;  // Пробрасываем ошибку синтаксиса дальше
+        catch (const SyntaxError &e)
+        {
+            throw; // Пробрасываем ошибку синтаксиса дальше
         }
     }
 
-    if (is_eof()) {
+    if (is_eof())
+    {
         throw SyntaxError("Expected '}' to close function '" + func->name + "'", func->location);
     }
 
     advance(); // }
 
-    if (DEBUG) std::cout << "[DEBUG] Defined function: " << func->name << " with " << func->param_names.size() << " params" << std::endl;
+    if (DEBUG)
+        std::cout << "[DEBUG] Defined function: " << func->name << " with " << func->param_names.size() << " params" << std::endl;
 
     return func;
 }
 
-std::shared_ptr<AstNode> Parser::parse_statement() {
-    if (current().type == T_COUT) {
-        return parse_input();  // cout(input, "{type}")
+std::shared_ptr<AstNode> Parser::parse_statement()
+{
+    if (current().type == T_COUT)
+    {
+        return parse_input(); // cout(input, "{type}")
     }
-    if (current().type == T_PRINT || current().type == T_PRINTG || current().type == T_PRINTLN) {
+    if (current().type == T_PRINT || current().type == T_PRINTG || current().type == T_PRINTLN)
+    {
         return parse_print();
     }
-    if (current().type == T_IF) {
+    if (current().type == T_IF)
+    {
         return parse_if();
     }
-    if (current().type == T_WHILE) {
+    if (current().type == T_WHILE)
+    {
         return parse_while();
     }
     // Проверяем файловые операции: create::file, write::file, read::file, close::file, delete::file
     if ((current().type == T_CREATE || current().type == T_WRITE || current().type == T_READ ||
          current().type == T_CLOSE || current().type == T_DELETE) &&
         pos + 1 < tokens.size() && tokens[pos + 1].type == T_COLON_COLON &&
-        pos + 2 < tokens.size() && tokens[pos + 2].type == T_FILE) {
+        pos + 2 < tokens.size() && tokens[pos + 2].type == T_FILE)
+    {
         return parse_file_op();
     }
     if (current().type == T_IDENTIFIER && (current().value == "net" || current().value == "web") &&
-        pos + 1 < tokens.size() && tokens[pos + 1].type == T_COLON_COLON) {
+        pos + 1 < tokens.size() && tokens[pos + 1].type == T_COLON_COLON)
+    {
         return parse_net_op();
     }
     if (is_namespaced_builtin_root(current()) &&
-        pos + 1 < tokens.size() && tokens[pos + 1].type == T_COLON_COLON) {
+        pos + 1 < tokens.size() && tokens[pos + 1].type == T_COLON_COLON)
+    {
         return parse_namespaced_builtin_call_expr();
     }
-    if (current().type == T_IDENTIFIER && pos + 1 < tokens.size() && tokens[pos + 1].type == T_PLUS) {
+    if (current().type == T_IDENTIFIER && pos + 1 < tokens.size() && tokens[pos + 1].type == T_PLUS)
+    {
         return parse_var_decl();
     }
-    if (current().type == T_IDENTIFIER && pos + 1 < tokens.size() && tokens[pos + 1].type == T_LPAREN) {
-        return parse_function_call();  // func1()
+    if (current().type == T_IDENTIFIER && pos + 1 < tokens.size() && tokens[pos + 1].type == T_LPAREN)
+    {
+        return parse_function_call(); // func1()
     }
-    if (current().type == T_CALL) return parse_call();
-    if (current().type == T_RETURN) {
+    if (current().type == T_CALL)
+        return parse_call();
+    if (current().type == T_RETURN)
+    {
         int return_line = current().line;
         advance(); // return
         auto ret = std::make_shared<ReturnStmt>();
         ret->location = SourceLocation(return_line, 0);
-        if (!is_eof() && current().type != T_RBRACE) {
+        if (!is_eof() && current().type != T_RBRACE)
+        {
             ret->expr = parse_expr();
         }
         return ret;
@@ -539,10 +660,12 @@ std::shared_ptr<AstNode> Parser::parse_statement() {
     return nullptr;
 }
 
-std::shared_ptr<VarDecl> Parser::parse_var_decl() {
+std::shared_ptr<VarDecl> Parser::parse_var_decl()
+{
     auto decl = std::make_shared<VarDecl>();
-    decl->location = SourceLocation(current().line, 0);  // Сохраняем позицию
-    std::string name = current().value; advance();
+    decl->location = SourceLocation(current().line, 0); // Сохраняем позицию
+    std::string name = current().value;
+    advance();
     advance(); // +
     std::string type_name = parse_type_name();
     advance(); // =
@@ -555,58 +678,75 @@ std::shared_ptr<VarDecl> Parser::parse_var_decl() {
 
 std::shared_ptr<AstNode> Parser::parse_expr() { return parse_comparison(); }
 
-std::shared_ptr<AstNode> Parser::parse_comparison() {
+std::shared_ptr<AstNode> Parser::parse_comparison()
+{
     auto node = parse_add_sub();
     while (!is_eof() && (current().type == T_GREATER || current().type == T_LESS ||
                          current().type == T_GREATER_EQUAL || current().type == T_LESS_EQUAL ||
-                         current().type == T_EQUAL_EQUAL || current().type == T_NOT_EQUAL)) {
+                         current().type == T_EQUAL_EQUAL || current().type == T_NOT_EQUAL))
+    {
         int op_line = current().line;
-        TokenType op = current().type; advance();
+        TokenType op = current().type;
+        advance();
         auto right = parse_add_sub();
         auto bin = std::make_shared<BinaryOp>();
         bin->location = SourceLocation(op_line, 0);
-        bin->op = op; bin->left = node; bin->right = right;
+        bin->op = op;
+        bin->left = node;
+        bin->right = right;
         node = bin;
     }
     return node;
 }
 
-std::shared_ptr<AstNode> Parser::parse_add_sub() {
+std::shared_ptr<AstNode> Parser::parse_add_sub()
+{
     auto node = parse_mul_div();
-    while (!is_eof() && (current().type == T_PLUS || current().type == T_MINUS)) {
+    while (!is_eof() && (current().type == T_PLUS || current().type == T_MINUS))
+    {
         int op_line = current().line;
-        TokenType op = current().type; advance();
+        TokenType op = current().type;
+        advance();
         auto right = parse_mul_div();
         auto bin = std::make_shared<BinaryOp>();
         bin->location = SourceLocation(op_line, 0);
-        bin->op = op; bin->left = node; bin->right = right;
+        bin->op = op;
+        bin->left = node;
+        bin->right = right;
         node = bin;
     }
     return node;
 }
 
-std::shared_ptr<AstNode> Parser::parse_mul_div() {
+std::shared_ptr<AstNode> Parser::parse_mul_div()
+{
     auto node = parse_primary();
-    while (!is_eof() && (current().type == T_STAR || current().type == T_SLASH)) {
+    while (!is_eof() && (current().type == T_STAR || current().type == T_SLASH))
+    {
         int op_line = current().line;
-        TokenType op = current().type; advance();
+        TokenType op = current().type;
+        advance();
         auto right = parse_primary();
         auto bin = std::make_shared<BinaryOp>();
         bin->location = SourceLocation(op_line, 0);
-        bin->op = op; bin->left = node; bin->right = right;
+        bin->op = op;
+        bin->left = node;
+        bin->right = right;
         node = bin;
     }
     return node;
 }
 
-std::shared_ptr<BuiltinCallExpr> Parser::parse_builtin_call_expr() {
+std::shared_ptr<BuiltinCallExpr> Parser::parse_builtin_call_expr()
+{
     int call_line = current().line;
     std::string name = current().value;
     advance(); // builtin name
 
-    if (current().type != T_LPAREN) {
+    if (current().type != T_LPAREN)
+    {
         throw SyntaxError("Expected '(' after builtin '" + name + "', got: " + current().value,
-                         SourceLocation(current().line, 0));
+                          SourceLocation(current().line, 0));
     }
     advance(); // (
 
@@ -614,50 +754,58 @@ std::shared_ptr<BuiltinCallExpr> Parser::parse_builtin_call_expr() {
     call->location = SourceLocation(call_line, 0);
     call->name = name;
 
-    if (current().type != T_RPAREN) {
+    if (current().type != T_RPAREN)
+    {
         call->args.push_back(parse_expr());
-        while (!is_eof() && current().type == T_COMMA) {
+        while (!is_eof() && current().type == T_COMMA)
+        {
             advance(); // ,
             call->args.push_back(parse_expr());
         }
     }
 
-    if (is_eof() || current().type != T_RPAREN) {
+    if (is_eof() || current().type != T_RPAREN)
+    {
         throw SyntaxError("Expected ')' after builtin call arguments, got: " + current().value,
-                         SourceLocation(current().line, 0));
+                          SourceLocation(current().line, 0));
     }
     advance(); // )
 
     return call;
 }
 
-std::shared_ptr<BuiltinCallExpr> Parser::parse_namespaced_builtin_call_expr() {
+std::shared_ptr<BuiltinCallExpr> Parser::parse_namespaced_builtin_call_expr()
+{
     int call_line = current().line;
     std::string namespace_name = current().value;
     advance(); // namespace
 
-    if (current().type != T_COLON_COLON) {
+    if (current().type != T_COLON_COLON)
+    {
         throw SyntaxError("Expected '::' after namespace '" + namespace_name + "', got: " + current().value,
-                         SourceLocation(current().line, 0));
+                          SourceLocation(current().line, 0));
     }
     advance(); // ::
 
-    if (!is_namespaced_builtin_member(current())) {
+    if (!is_namespaced_builtin_member(current()))
+    {
         throw SyntaxError("Expected builtin name after '" + namespace_name + "::', got: " + current().value,
-                         SourceLocation(current().line, 0));
+                          SourceLocation(current().line, 0));
     }
 
     std::string builtin_name = namespace_name + "::" + current().value;
     advance(); // builtin name
 
-    if (!is_builtin_call_name(builtin_name)) {
+    if (!is_builtin_call_name(builtin_name))
+    {
         throw SyntaxError("Unknown builtin call: '" + builtin_name + "'",
-                         SourceLocation(call_line, 0));
+                          SourceLocation(call_line, 0));
     }
 
-    if (current().type != T_LPAREN) {
+    if (current().type != T_LPAREN)
+    {
         throw SyntaxError("Expected '(' after builtin '" + builtin_name + "', got: " + current().value,
-                         SourceLocation(current().line, 0));
+                          SourceLocation(current().line, 0));
     }
     advance(); // (
 
@@ -665,46 +813,57 @@ std::shared_ptr<BuiltinCallExpr> Parser::parse_namespaced_builtin_call_expr() {
     call->location = SourceLocation(call_line, 0);
     call->name = builtin_name;
 
-    if (current().type != T_RPAREN) {
+    if (current().type != T_RPAREN)
+    {
         call->args.push_back(parse_expr());
-        while (!is_eof() && current().type == T_COMMA) {
+        while (!is_eof() && current().type == T_COMMA)
+        {
             advance(); // ,
             call->args.push_back(parse_expr());
         }
     }
 
-    if (is_eof() || current().type != T_RPAREN) {
+    if (is_eof() || current().type != T_RPAREN)
+    {
         throw SyntaxError("Expected ')' after builtin call arguments, got: " + current().value,
-                         SourceLocation(current().line, 0));
+                          SourceLocation(current().line, 0));
     }
     advance(); // )
 
     return call;
 }
 
-std::shared_ptr<AstNode> Parser::parse_primary() {
-    if (is_eof()) return nullptr;
-    if (current().type == T_NUMBER) {
+std::shared_ptr<AstNode> Parser::parse_primary()
+{
+    if (is_eof())
+        return nullptr;
+    if (current().type == T_NUMBER)
+    {
         std::string num_str = current().value;
         int line = current().line;
         advance();
         auto lit = std::make_shared<Literal>();
         lit->location = SourceLocation(line, 0);
-        if (num_str.find('.') != std::string::npos) {
+        if (num_str.find('.') != std::string::npos)
+        {
             lit->value = Value(std::stod(num_str));
-        } else {
+        }
+        else
+        {
             lit->value = Value(std::stoll(num_str));
         }
         return lit;
     }
-    if (current().type == T_STRING_LITERAL) {
+    if (current().type == T_STRING_LITERAL)
+    {
         auto lit = std::make_shared<Literal>();
         lit->location = SourceLocation(current().line, 0);
         lit->value = Value(current().value);
         advance();
         return lit;
     }
-    if (current().type == T_TRUE || current().type == T_FALSE) {
+    if (current().type == T_TRUE || current().type == T_FALSE)
+    {
         auto lit = std::make_shared<Literal>();
         lit->location = SourceLocation(current().line, 0);
         lit->value = Value::Bool(current().type == T_TRUE);
@@ -712,14 +871,17 @@ std::shared_ptr<AstNode> Parser::parse_primary() {
         return lit;
     }
     if (current().type == T_IDENTIFIER && is_builtin_call_name(current().value) &&
-        pos + 1 < tokens.size() && tokens[pos + 1].type == T_LPAREN) {
+        pos + 1 < tokens.size() && tokens[pos + 1].type == T_LPAREN)
+    {
         return parse_builtin_call_expr();
     }
     if (is_namespaced_builtin_root(current()) &&
-        pos + 1 < tokens.size() && tokens[pos + 1].type == T_COLON_COLON) {
+        pos + 1 < tokens.size() && tokens[pos + 1].type == T_COLON_COLON)
+    {
         return parse_namespaced_builtin_call_expr();
     }
-    if (current().type == T_IDENTIFIER || current().type == T_INPUT) {
+    if (current().type == T_IDENTIFIER || current().type == T_INPUT)
+    {
         auto id = std::make_shared<Identifier>();
         id->location = SourceLocation(current().line, 0);
         id->name = current().value;
@@ -729,51 +891,64 @@ std::shared_ptr<AstNode> Parser::parse_primary() {
     return nullptr;
 }
 
-std::shared_ptr<PrintStmt> Parser::parse_print() {
+std::shared_ptr<PrintStmt> Parser::parse_print()
+{
     auto p = std::make_shared<PrintStmt>();
-    p->location = SourceLocation(current().line, 0);  // Сохраняем позицию
+    p->location = SourceLocation(current().line, 0); // Сохраняем позицию
     TokenType print_type = current().type;
     bool is_printg = (print_type == T_PRINTG);
-    if (DEBUG) std::cout << "[DEBUG] parse_print: starting at token: " << current().type << " (" << current().value << ")" << std::endl;
+    if (DEBUG)
+        std::cout << "[DEBUG] parse_print: starting at token: " << current().type << " (" << current().value << ")" << std::endl;
     advance(); // print, printg or println
     advance(); // (
 
     p->is_printg = is_printg;
 
-    while (!is_eof() && current().type != T_RPAREN) {
+    while (!is_eof() && current().type != T_RPAREN)
+    {
         // Парсим аргумент
-        if (DEBUG) std::cout << "[DEBUG] parse_print: parsing arg at token: " << current().type << " (" << current().value << ")" << std::endl;
+        if (DEBUG)
+            std::cout << "[DEBUG] parse_print: parsing arg at token: " << current().type << " (" << current().value << ")" << std::endl;
         auto arg = parse_expr();
-        if (!arg) {
-            if (DEBUG) std::cout << "[DEBUG] parse_print: failed to parse expr at token: " << current().type << " (" << current().value << ")" << std::endl;
+        if (!arg)
+        {
+            if (DEBUG)
+                std::cout << "[DEBUG] parse_print: failed to parse expr at token: " << current().type << " (" << current().value << ")" << std::endl;
             // Если не удалось распарсить выражение, но мы уже внутри print, попробуем пропустить до закрывающей скобки
-            while (!is_eof() && current().type != T_RPAREN) {
+            while (!is_eof() && current().type != T_RPAREN)
+            {
                 advance();
             }
             break;
         }
         p->args.push_back(arg);
         p->formats.emplace_back(); // Добавляем пустой формат по умолчанию
-        if (DEBUG) std::cout << "[DEBUG] parse_print: parsed arg, current token: " << current().type << " (" << current().value << ")" << std::endl;
+        if (DEBUG)
+            std::cout << "[DEBUG] parse_print: parsed arg, current token: " << current().type << " (" << current().value << ")" << std::endl;
 
         // Проверяем, есть ли после аргумента запятая
-        if (current().type == T_COMMA) {
+        if (current().type == T_COMMA)
+        {
             advance();
 
             // Проверяем, является ли следующий токен строкой формата (начинается с "{")
             // Это может быть формат для предыдущего аргумента
             if (current().type == T_STRING_LITERAL &&
                 current().value.size() >= 2 &&
-                current().value[0] == '{' && current().value.back() == '}') {
+                current().value[0] == '{' && current().value.back() == '}')
+            {
                 // Это формат для предыдущего аргумента
                 p->formats.back() = current().value;
                 advance();
 
                 // Если после формата есть еще запятая, значит есть еще аргументы
-                if (current().type == T_COMMA) {
+                if (current().type == T_COMMA)
+                {
                     advance();
                     // Продолжаем цикл для следующего аргумента
-                } else if (current().type == T_RPAREN) {
+                }
+                else if (current().type == T_RPAREN)
+                {
                     // Если после формата закрывающая скобка, выходим
                     break;
                 }
@@ -781,34 +956,44 @@ std::shared_ptr<PrintStmt> Parser::parse_print() {
             }
             // Если после запятой не формат, значит это следующий аргумент (продолжаем цикл)
             // Цикл продолжается автоматически
-        } else {
+        }
+        else
+        {
             // Если нет запятой, значит это последний аргумент
             break;
         }
     }
-    if (current().type != T_RPAREN) {
+    if (current().type != T_RPAREN)
+    {
         throw SyntaxError("Expected ')' after print arguments, got: " + current().value,
-                         SourceLocation(current().line, 0));
+                          SourceLocation(current().line, 0));
     }
     advance(); // )
-    if (DEBUG) std::cout << "[DEBUG] parse_print: successfully parsed " << p->args.size() << " args" << std::endl;
+    if (DEBUG)
+        std::cout << "[DEBUG] parse_print: successfully parsed " << p->args.size() << " args" << std::endl;
     return p;
 }
 
-std::shared_ptr<InputStmt> Parser::parse_input() {
+std::shared_ptr<InputStmt> Parser::parse_input()
+{
     advance(); // cout
     advance(); // (
 
     auto input = std::make_shared<InputStmt>();
 
     // Проверяем, что следующий токен - идентификатор (имя переменной) или input
-    if (current().type == T_INPUT) {
+    if (current().type == T_INPUT)
+    {
         input->var_name = "input";
         advance(); // input
-    } else if (current().type == T_IDENTIFIER) {
+    }
+    else if (current().type == T_IDENTIFIER)
+    {
         input->var_name = current().value;
         advance(); // имя переменной
-    } else {
+    }
+    else
+    {
         return nullptr;
     }
 
@@ -818,20 +1003,24 @@ std::shared_ptr<InputStmt> Parser::parse_input() {
     advance(); // "{int}", "{float}" или "{string}"
     advance(); // )
 
-    input->prompt = "";  // промпт пока не поддерживается в синтаксисе
+    input->prompt = ""; // промпт пока не поддерживается в синтаксисе
     return input;
 }
 
-std::shared_ptr<CallStmt> Parser::parse_call() {
+std::shared_ptr<CallStmt> Parser::parse_call()
+{
     int call_line = current().line;
     advance(); // call
     advance(); // (
 
     std::string name;
-    if (current().type == T_STRING_LITERAL) {
+    if (current().type == T_STRING_LITERAL)
+    {
         name = current().value;
         advance();
-    } else {
+    }
+    else
+    {
         name = current().value;
         advance();
     }
@@ -840,22 +1029,27 @@ std::shared_ptr<CallStmt> Parser::parse_call() {
     call->location = SourceLocation(call_line, 0);
     call->func_name = name;
 
-    if (current().type == T_COMMA) {
+    if (current().type == T_COMMA)
+    {
         advance();
-        while (!is_eof() && current().type != T_RPAREN) {
+        while (!is_eof() && current().type != T_RPAREN)
+        {
             call->args.push_back(parse_expr());
-            if (current().type == T_COMMA) advance();
+            if (current().type == T_COMMA)
+                advance();
         }
     }
-    if (is_eof() || current().type != T_RPAREN) {
+    if (is_eof() || current().type != T_RPAREN)
+    {
         throw SyntaxError("Expected ')' after function call arguments, got: " + current().value,
-                         SourceLocation(current().line, 0));
+                          SourceLocation(current().line, 0));
     }
     advance(); // )
     return call;
 }
 
-std::shared_ptr<CallStmt> Parser::parse_function_call() {
+std::shared_ptr<CallStmt> Parser::parse_function_call()
+{
     int call_line = current().line;
     std::string name = current().value;
     advance(); // identifier
@@ -866,9 +1060,11 @@ std::shared_ptr<CallStmt> Parser::parse_function_call() {
     call->func_name = name;
 
     // Парсим аргументы, если они есть
-    if (current().type != T_RPAREN) {
+    if (current().type != T_RPAREN)
+    {
         call->args.push_back(parse_expr());
-        while (!is_eof() && current().type == T_COMMA) {
+        while (!is_eof() && current().type == T_COMMA)
+        {
             advance(); // ,
             call->args.push_back(parse_expr());
         }
@@ -877,23 +1073,30 @@ std::shared_ptr<CallStmt> Parser::parse_function_call() {
     return call;
 }
 
-std::shared_ptr<ImportStmt> Parser::parse_import() {
+std::shared_ptr<ImportStmt> Parser::parse_import()
+{
     int import_line = current().line;
     advance(); // from
 
     std::string file_path;
-    if (current().type == T_STRING_LITERAL) {
+    if (current().type == T_STRING_LITERAL)
+    {
         file_path = current().value;
         advance();
-    } else if (current().type == T_IDENTIFIER) {
+    }
+    else if (current().type == T_IDENTIFIER)
+    {
         file_path = current().value;
         advance();
-    } else {
+    }
+    else
+    {
         throw SyntaxError("Expected import path after 'from'",
                           SourceLocation(import_line, 0));
     }
 
-    if (current().type != T_IMPORT) {
+    if (current().type != T_IMPORT)
+    {
         throw SyntaxError("Expected 'import' after import path '" + file_path + "'",
                           SourceLocation(current().line, 0));
     }
@@ -904,36 +1107,49 @@ std::shared_ptr<ImportStmt> Parser::parse_import() {
     import->file_path = file_path;
 
     // Парсим список функций для импорта (разделенных запятыми)
-    while (!is_eof()) {
+    while (!is_eof())
+    {
         std::string import_name;
-        if (current().type == T_STRING_LITERAL) {
+        if (current().type == T_STRING_LITERAL)
+        {
             import_name = current().value;
             advance();
-        } else if (current().type == T_IDENTIFIER) {
+        }
+        else if (current().type == T_IDENTIFIER)
+        {
             import_name = current().value;
             advance();
-        } else {
+        }
+        else
+        {
             break; // Неожиданный токен, прекращаем парсинг
         }
 
         import->import_names.push_back(import_name);
 
-        if (current().type == T_COMMA) {
+        if (current().type == T_COMMA)
+        {
             advance(); // ,
-        } else {
+        }
+        else
+        {
             break; // Больше нет функций для импорта
         }
     }
 
-    if (import->import_names.empty()) {
+    if (import->import_names.empty())
+    {
         throw SyntaxError("Expected at least one function name after 'import'",
                           SourceLocation(import_line, 0));
     }
 
-    if (DEBUG) {
+    if (DEBUG)
+    {
         std::cout << "[DEBUG] Import: ";
-        for (size_t i = 0; i < import->import_names.size(); ++i) {
-            if (i > 0) std::cout << ", ";
+        for (size_t i = 0; i < import->import_names.size(); ++i)
+        {
+            if (i > 0)
+                std::cout << ", ";
             std::cout << import->import_names[i];
         }
         std::cout << " from " << file_path << std::endl;
@@ -942,26 +1158,30 @@ std::shared_ptr<ImportStmt> Parser::parse_import() {
     return import;
 }
 
-std::shared_ptr<FileOp> Parser::parse_file_op() {
+std::shared_ptr<FileOp> Parser::parse_file_op()
+{
     int op_line = current().line;
-    TokenType operation = current().type;  // T_CREATE, T_WRITE, T_READ, T_CLOSE, T_DELETE
-    advance(); // operation
+    TokenType operation = current().type; // T_CREATE, T_WRITE, T_READ, T_CLOSE, T_DELETE
+    advance();                            // operation
 
-    if (current().type != T_COLON_COLON) {
+    if (current().type != T_COLON_COLON)
+    {
         throw SyntaxError("Expected '::' after file operation, got: " + current().value,
-                         SourceLocation(current().line, 0));
+                          SourceLocation(current().line, 0));
     }
     advance(); // ::
 
-    if (current().type != T_FILE) {
+    if (current().type != T_FILE)
+    {
         throw SyntaxError("Expected 'file' after '::', got: " + current().value,
-                         SourceLocation(current().line, 0));
+                          SourceLocation(current().line, 0));
     }
     advance(); // file
 
-    if (current().type != T_LPAREN) {
+    if (current().type != T_LPAREN)
+    {
         throw SyntaxError("Expected '(' after 'file', got: " + current().value,
-                         SourceLocation(current().line, 0));
+                          SourceLocation(current().line, 0));
     }
     advance(); // (
 
@@ -971,71 +1191,93 @@ std::shared_ptr<FileOp> Parser::parse_file_op() {
     file_op->data = nullptr;
 
     // Определяем режим на основе операции
-    switch (operation) {
-        case T_CREATE: file_op->mode = "c"; break;
-        case T_WRITE: file_op->mode = "w"; break;
-        case T_READ: file_op->mode = "r"; break;
-        case T_CLOSE: file_op->mode = "h"; break;
-        case T_DELETE: file_op->mode = "d"; break;
-        default: file_op->mode = "";
+    switch (operation)
+    {
+    case T_CREATE:
+        file_op->mode = "c";
+        break;
+    case T_WRITE:
+        file_op->mode = "w";
+        break;
+    case T_READ:
+        file_op->mode = "r";
+        break;
+    case T_CLOSE:
+        file_op->mode = "h";
+        break;
+    case T_DELETE:
+        file_op->mode = "d";
+        break;
+    default:
+        file_op->mode = "";
     }
 
     // Парсим путь к файлу (первый аргумент)
     file_op->file_path = parse_expr();
 
     // Для write может быть второй аргумент - данные для записи
-    if (operation == T_WRITE && current().type == T_COMMA) {
+    if (operation == T_WRITE && current().type == T_COMMA)
+    {
         advance(); // ,
         file_op->data = parse_expr();
     }
 
-    if (is_eof() || current().type != T_RPAREN) {
+    if (is_eof() || current().type != T_RPAREN)
+    {
         throw SyntaxError("Expected ')' after file operation arguments, got: " + current().value,
-                         SourceLocation(current().line, 0));
+                          SourceLocation(current().line, 0));
     }
     advance(); // )
 
     return file_op;
 }
 
-std::shared_ptr<NetOp> Parser::parse_net_op() {
+std::shared_ptr<NetOp> Parser::parse_net_op()
+{
     int op_line = current().line;
     std::string namespace_name = current().value;
     advance(); // net/web
 
-    if (current().type != T_COLON_COLON) {
+    if (current().type != T_COLON_COLON)
+    {
         throw SyntaxError("Expected '::' after '" + namespace_name + "', got: " + current().value,
-                         SourceLocation(current().line, 0));
+                          SourceLocation(current().line, 0));
     }
     advance(); // ::
 
-    if (current().type != T_IDENTIFIER) {
+    if (current().type != T_IDENTIFIER)
+    {
         throw SyntaxError("Expected network method or transport after '" + namespace_name + "::', got: " + current().value,
-                         SourceLocation(current().line, 0));
+                          SourceLocation(current().line, 0));
     }
     std::string first_part = current().value;
     advance();
 
     std::string transport;
     std::string method;
-    if (current().type == T_COLON_COLON) {
+    if (current().type == T_COLON_COLON)
+    {
         transport = first_part;
         advance(); // ::
 
-        if (current().type != T_IDENTIFIER) {
+        if (current().type != T_IDENTIFIER)
+        {
             throw SyntaxError("Expected network method after transport, got: " + current().value,
-                             SourceLocation(current().line, 0));
+                              SourceLocation(current().line, 0));
         }
         method = current().value;
         advance(); // get / post
-    } else {
+    }
+    else
+    {
         transport = "";
         method = first_part;
     }
 
-    if (current().type != T_LPAREN) {
+    if (current().type != T_LPAREN)
+    {
         throw SyntaxError("Expected '(' after network method, got: " + current().value,
-                         SourceLocation(current().line, 0));
+                          SourceLocation(current().line, 0));
     }
     advance(); // (
 
@@ -1048,81 +1290,100 @@ std::shared_ptr<NetOp> Parser::parse_net_op() {
     net_op->data = nullptr;
 
     net_op->url = parse_expr();
-    if (!net_op->url) {
+    if (!net_op->url)
+    {
         throw SyntaxError("Expected URL in network operation, got: " + current().value,
-                         SourceLocation(current().line, 0));
+                          SourceLocation(current().line, 0));
     }
 
-    if (method == "route") {
-        if (current().type == T_COMMA) {
+    if (method == "route")
+    {
+        if (current().type == T_COMMA)
+        {
             advance(); // ,
             net_op->path = parse_expr();
-            if (!net_op->path) {
+            if (!net_op->path)
+            {
                 throw SyntaxError("Expected path in " + namespace_name + "::route",
-                                 SourceLocation(current().line, 0));
+                                  SourceLocation(current().line, 0));
             }
-            if (current().type == T_COMMA) {
+            if (current().type == T_COMMA)
+            {
                 advance(); // ,
                 net_op->data = parse_expr();
-                if (!net_op->data) {
+                if (!net_op->data)
+                {
                     throw SyntaxError("Expected handler in " + namespace_name + "::route",
-                                     SourceLocation(current().line, 0));
+                                      SourceLocation(current().line, 0));
                 }
             }
         }
-    } else if (method == "serve" || method == "run") {
-        if (current().type != T_COMMA) {
+    }
+    else if (method == "serve" || method == "run")
+    {
+        if (current().type != T_COMMA)
+        {
             throw SyntaxError("Expected port argument in " + namespace_name + "::" + method,
-                             SourceLocation(current().line, 0));
+                              SourceLocation(current().line, 0));
         }
         advance(); // ,
         net_op->port = parse_expr();
-        if (!net_op->port) {
+        if (!net_op->port)
+        {
             throw SyntaxError("Expected port in " + namespace_name + "::" + method,
-                             SourceLocation(current().line, 0));
+                              SourceLocation(current().line, 0));
         }
-        if (current().type == T_COMMA) {
+        if (current().type == T_COMMA)
+        {
             advance(); // ,
             net_op->data = parse_expr();
-            if (!net_op->data) {
+            if (!net_op->data)
+            {
                 throw SyntaxError("Expected response body in " + namespace_name + "::" + method,
-                                 SourceLocation(current().line, 0));
+                                  SourceLocation(current().line, 0));
             }
         }
-    } else if ((method == "get" || method == "post") && current().type == T_COMMA) {
+    }
+    else if ((method == "get" || method == "post") && current().type == T_COMMA)
+    {
         advance(); // ,
         net_op->data = parse_expr();
     }
 
-    if (is_eof() || current().type != T_RPAREN) {
+    if (is_eof() || current().type != T_RPAREN)
+    {
         throw SyntaxError("Expected ')' after network operation arguments, got: " + current().value,
-                         SourceLocation(current().line, 0));
+                          SourceLocation(current().line, 0));
     }
     advance(); // )
 
     return net_op;
 }
 
-std::shared_ptr<IfStmt> Parser::parse_if() {
+std::shared_ptr<IfStmt> Parser::parse_if()
+{
     int if_line = current().line;
     advance(); // if
-    if (current().type != T_LPAREN) {
+    if (current().type != T_LPAREN)
+    {
         throw SyntaxError("Expected '(' after 'if', got: " + current().value,
-                         SourceLocation(current().line, 0));
+                          SourceLocation(current().line, 0));
     }
     advance(); // (
 
     auto condition = parse_expr();
 
-    if (current().type != T_RPAREN) {
+    if (current().type != T_RPAREN)
+    {
         throw SyntaxError("Expected ')' after if condition, got: " + current().value,
-                         SourceLocation(current().line, 0));
+                          SourceLocation(current().line, 0));
     }
     advance(); // )
 
-    if (current().type != T_LBRACE) {
+    if (current().type != T_LBRACE)
+    {
         throw SyntaxError("Expected '{' after if condition, got: " + current().value,
-                         SourceLocation(current().line, 0));
+                          SourceLocation(current().line, 0));
     }
     advance(); // {
 
@@ -1131,42 +1392,56 @@ std::shared_ptr<IfStmt> Parser::parse_if() {
     if_stmt->condition = condition;
 
     // Парсим тело if
-    while (!is_eof() && current().type != T_RBRACE) {
+    while (!is_eof() && current().type != T_RBRACE)
+    {
         size_t start_pos = pos;
         auto stmt = parse_statement();
-        if (stmt) {
+        if (stmt)
+        {
             if_stmt->then_body.push_back(stmt);
-        } else if (pos == start_pos) {
+        }
+        else if (pos == start_pos)
+        {
             advance(); // пропускаем неизвестные токены
         }
     }
 
-    if (is_eof()) {
+    if (is_eof())
+    {
         throw SyntaxError("Expected '}' to close if block", if_stmt->location);
     }
 
-    if (current().type == T_RBRACE) {
+    if (current().type == T_RBRACE)
+    {
         advance(); // }
     }
 
     // Проверяем наличие else
-    if (current().type == T_ELSE) {
+    if (current().type == T_ELSE)
+    {
         advance(); // else
-        if (current().type == T_LBRACE) {
+        if (current().type == T_LBRACE)
+        {
             advance(); // {
-            while (!is_eof() && current().type != T_RBRACE) {
+            while (!is_eof() && current().type != T_RBRACE)
+            {
                 size_t start_pos = pos;
                 auto stmt = parse_statement();
-                if (stmt) {
+                if (stmt)
+                {
                     if_stmt->else_body.push_back(stmt);
-                } else if (pos == start_pos) {
+                }
+                else if (pos == start_pos)
+                {
                     advance();
                 }
             }
-            if (is_eof()) {
+            if (is_eof())
+            {
                 throw SyntaxError("Expected '}' to close else block", if_stmt->location);
             }
-            if (current().type == T_RBRACE) {
+            if (current().type == T_RBRACE)
+            {
                 advance(); // }
             }
         }
@@ -1175,35 +1450,41 @@ std::shared_ptr<IfStmt> Parser::parse_if() {
     return if_stmt;
 }
 
-std::shared_ptr<WhileStmt> Parser::parse_while() {
+std::shared_ptr<WhileStmt> Parser::parse_while()
+{
     int while_line = current().line;
     advance(); // while
 
     std::shared_ptr<AstNode> condition;
     bool has_parentheses = false;
 
-    if (current().type == T_LPAREN) {
+    if (current().type == T_LPAREN)
+    {
         has_parentheses = true;
         advance(); // (
     }
 
     condition = parse_expr();
-    if (!condition) {
+    if (!condition)
+    {
         throw SyntaxError("Expected condition after 'while', got: " + current().value,
-                         SourceLocation(current().line, 0));
+                          SourceLocation(current().line, 0));
     }
 
-    if (has_parentheses) {
-        if (current().type != T_RPAREN) {
+    if (has_parentheses)
+    {
+        if (current().type != T_RPAREN)
+        {
             throw SyntaxError("Expected ')' after while condition, got: " + current().value,
-                             SourceLocation(current().line, 0));
+                              SourceLocation(current().line, 0));
         }
         advance(); // )
     }
 
-    if (current().type != T_LBRACE) {
+    if (current().type != T_LBRACE)
+    {
         throw SyntaxError("Expected '{' after while condition, got: " + current().value,
-                         SourceLocation(current().line, 0));
+                          SourceLocation(current().line, 0));
     }
     advance(); // {
 
@@ -1211,21 +1492,27 @@ std::shared_ptr<WhileStmt> Parser::parse_while() {
     while_stmt->location = SourceLocation(while_line, 0);
     while_stmt->condition = condition;
 
-    while (!is_eof() && current().type != T_RBRACE) {
+    while (!is_eof() && current().type != T_RBRACE)
+    {
         size_t start_pos = pos;
         auto stmt = parse_statement();
-        if (stmt) {
+        if (stmt)
+        {
             while_stmt->body.push_back(stmt);
-        } else if (pos == start_pos) {
+        }
+        else if (pos == start_pos)
+        {
             advance();
         }
     }
 
-    if (is_eof()) {
+    if (is_eof())
+    {
         throw SyntaxError("Expected '}' to close while block", while_stmt->location);
     }
 
-    if (current().type == T_RBRACE) {
+    if (current().type == T_RBRACE)
+    {
         advance(); // }
     }
 

@@ -2,20 +2,63 @@
 
 #include <string>
 
-enum TokenType {
-    T_PACKAGE, T_FUNCTION, T_CLASS, T_PRINT, T_PRINTG, T_PRINTLN, T_RETURN, T_CALL,
-    T_INT, T_FLOAT, T_STRING, T_BOOL_TYPE, T_BYTES, T_OBJECT, T_ARRAY, T_INPUT,
-    T_FROM, T_IMPORT,
-    T_IDENTIFIER, T_STRING_LITERAL, T_NUMBER,
-    T_LBRACE, T_RBRACE, T_LPAREN, T_RPAREN,
-    T_COMMA, T_PLUS, T_MINUS, T_STAR, T_SLASH, T_EQUAL, T_COUT,
-    T_GREATER, T_LESS, T_EQUAL_EQUAL, T_NOT_EQUAL, T_GREATER_EQUAL, T_LESS_EQUAL,
-    T_CREATE, T_WRITE, T_READ, T_CLOSE, T_DELETE, T_FILE, T_COLON_COLON,
-    T_IF, T_ELSE, T_WHILE, T_TRUE, T_FALSE,
+enum TokenType
+{
+    T_PACKAGE,
+    T_FUNCTION,
+    T_CLASS,
+    T_PRINT,
+    T_PRINTG,
+    T_PRINTLN,
+    T_RETURN,
+    T_CALL,
+    T_INT,
+    T_FLOAT,
+    T_STRING,
+    T_BOOL_TYPE,
+    T_BYTES,
+    T_OBJECT,
+    T_ARRAY,
+    T_INPUT,
+    T_FROM,
+    T_IMPORT,
+    T_IDENTIFIER,
+    T_STRING_LITERAL,
+    T_NUMBER,
+    T_LBRACE,
+    T_RBRACE,
+    T_LPAREN,
+    T_RPAREN,
+    T_COMMA,
+    T_PLUS,
+    T_MINUS,
+    T_STAR,
+    T_SLASH,
+    T_EQUAL,
+    T_COUT,
+    T_GREATER,
+    T_LESS,
+    T_EQUAL_EQUAL,
+    T_NOT_EQUAL,
+    T_GREATER_EQUAL,
+    T_LESS_EQUAL,
+    T_CREATE,
+    T_WRITE,
+    T_READ,
+    T_CLOSE,
+    T_DELETE,
+    T_FILE,
+    T_COLON_COLON,
+    T_IF,
+    T_ELSE,
+    T_WHILE,
+    T_TRUE,
+    T_FALSE,
     T_EOF
 };
 
-struct Token {
+struct Token
+{
     TokenType type = T_EOF;
     std::string value;
     int line = 0;
