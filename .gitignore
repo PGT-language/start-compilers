@@ -29,3 +29,4 @@ marcetplase/docker-compose.yml
 marcetplase/Dockerfile
 marcetplase/nginx/default.conf
 marcetplase/data/plugins.jsonl
+*pgt-2.0/
