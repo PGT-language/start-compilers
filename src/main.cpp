@@ -289,7 +289,7 @@ int main(int argc, char **argv)
 
     if (command == "help" || command == "--help" || command == "-h")
     {
-        std::cout << "Program Generate Time (PGT) Compiler v0.1\n";
+        std::cout << "Program Generate Time (PGT) Compiler v1.1\n";
         std::cout << "Commands:\n";
         std::cout << "  help                    — Show this help message\n";
         std::cout << "  version                 — Show compiler version\n";
@@ -318,7 +318,7 @@ int main(int argc, char **argv)
 
     if (command == "version" || command == "--version" || command == "-v")
     {
-        std::cout << "PGT Compiler v0.1\n";
+        std::cout << "PGT Compiler v1.1\n";
         std::cout << "Built on Aprel 21 2026\n";
         std::cout << "Author: pabla\n";
         return 0;
