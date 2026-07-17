@@ -3,7 +3,7 @@ import os
 
 source_files = [
     "src/main.cpp",
-    "src/Lexer.cpp",
+    "src/lexer/Lexer.cpp",
     "src/Parser.cpp",
     "src/Interpreter.cpp",
     "src/Utils.cpp",
