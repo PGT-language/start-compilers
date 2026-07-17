@@ -634,42 +634,38 @@ std::string static_login_source(const InitOptions &options) {
   return source.str();
 }
 
-
 std::string static_main_css_source(const InitOptions &options) {
   std::ostringstream source;
   source << "@import url('/static/css/modules/root.css');";
-    if (options.create_auth) {
-      source << "@import url('/static/css/modules/pages/register.css');";
-      source << "@import url('/static/css/modules/pages/login.css');";
-    }
-    return source.str();
-};         
+  if (options.create_auth) {
+    source << "@import url('/static/css/modules/pages/register.css');";
+    source << "@import url('/static/css/modules/pages/login.css');";
+  }
+  return source.str();
+};
 
-
-std::string static_css_source() {
+std::string static_root_css_source() {
   return ":root {\n"
          "    color-scheme: light;\n"
          "    font-family: Inter, Arial, sans-serif;\n"
-         "    background: #141414ff;\n"
-         "    color: #ffffffff;\n"
+         "    main-bg-color: #141414ff;\n"
+         "    main-text-color: #ffffffff;\n"
          "}\n"
          "\n"
          "* {\n"
+         "    padding: 0;\n"
+         "    margin: 0;\n"
          "    box-sizing: border-box;\n"
          "}\n"
          "\n"
          "body {\n"
-         "    margin: 0;\n"
-         "}\n"
-         "\n"
-         "main {\n"
-         "    min-height: 100vh;\n"
-         "    display: grid;\n"
-         "    place-items: center;\n"
-         "    padding: 32px;\n"
-         "}\n"
-         "\n"
-         ".hero {\n"
+         "    background-color: var(--main-bg-color);\n"
+         "    color: var(--main-text-color);\n"
+         "}\n";
+};
+
+std::string static_css_source() {
+  return ".hero {\n"
          "    width: min(680px, 100%);\n"
          "    padding: 32px;\n"
          "    background: #ffffff;\n"
@@ -1555,10 +1551,11 @@ bool create_backend_project(const InitOptions &options) {
         if (!write_file(project_dir / "templates" / "register.html",
                         static_register_source(options)))
           return false;
-        if (!write_file(project_dir / "static" / "css" / "pages" / "register.css",
+        if (!write_file(project_dir / "static" / "css" / "pages" /
+                            "register.css",
                         static_auth_css_source()))
           return false;
-        if (!write_file(project_dir / "static" / "css"/ "main.css",
+        if (!write_file(project_dir / "static" / "css" / "main.css",
                         static_main_css_source(options)))
           return false;
         if (!write_file(project_dir / "static" / "js" / "register.js",
