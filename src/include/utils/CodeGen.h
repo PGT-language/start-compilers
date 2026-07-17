@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Ast.h"
-#include "Utils.h"
+#include "include/token/Ast.h"
+#include "include/utils/Utils.h"
 #include <map>
 #include <memory>
 #include <sstream>

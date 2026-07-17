@@ -328,3 +328,6 @@ function(main) { {реализовано}
 - GET /status : возвращает {"status": "running", "uptime": "unknown"}
 - POST /api : принимает JSON, возвращает его обратно
 - POST /data : принимает данные, возвращает подтверждение
+
+
+

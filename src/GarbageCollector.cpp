@@ -1,5 +1,5 @@
-#include "GarbageCollector.h"
-#include "Utils.h"
+#include "include/utils/GarbageCollector.h"
+#include "include/utils/Utils.h"
 #include "runtime/gc.h"
 #include <iostream>
 
