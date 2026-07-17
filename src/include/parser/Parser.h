@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Ast.h"
-#include "Token.h"
+#include "../token/Ast.h"
+#include "../token/Token.h"
 #include <memory>
 #include <vector>
 

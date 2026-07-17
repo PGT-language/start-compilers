@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Token.h"
+#include "../token/Token.h"
 #include <algorithm>
 #include <cctype>
 #include <cstddef>

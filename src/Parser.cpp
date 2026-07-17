@@ -1,6 +1,6 @@
-#include "Parser.h"
-#include "Error.h"
-#include "Utils.h"
+#include "include/parser/Parser.h"
+#include "include/utils/Error.h"
+#include "include/utils/Utils.h"
 #include <iostream>
 #include <limits>
 #include <vector>

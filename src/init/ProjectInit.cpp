@@ -1151,7 +1151,7 @@ std::string init_source(const InitOptions &options) {
     source << "    " << options.log_level << "(\"starting backend\")\n";
   }
   if (options.use_database || options.create_auth) {
-    source << "    sql::open(\"instance/app.db\")\n";
+    source << "    sql::open(\"app.db\")\n";
     source << "    migrate()\n";
   }
   source << "    return 1\n"
@@ -1464,7 +1464,7 @@ std::string readme_source(const InitOptions &options) {
     source << "\n"
            << "## Database\n"
            << "\n"
-           << "The app opens `instance/app.db` during startup and runs `migrate()` "
+           << "The app opens `app.db` during startup and runs `migrate()` "
               "from `init/init.pgt`.\n";
   }
   if (options.create_auth) {

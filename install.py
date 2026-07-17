@@ -12,7 +12,7 @@ COMPILER_NAME = "pgt"
 CPP_STANDARD = "-std=c++17"
 SOURCE_FILES = (
     "src/main.cpp",
-    "src/Lexer.cpp",
+    "src/lexer/Lexer.cpp",
     "src/Parser.cpp",
     "src/Interpreter.cpp",
     "src/Utils.cpp",
