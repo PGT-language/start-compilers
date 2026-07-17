@@ -630,9 +630,21 @@ std::string static_login_source(const InitOptions &options) {
          << "    </main>\n"
          << "    <script src=\"/static/js/login.js\"></script>\n"
          << "</body>\n"
-         << "</html>\n";
+         << "</html>";
   return source.str();
 }
+
+
+std::string static_main_css_source(const InitOptions &options) {
+  std::ostringstream source;
+  source << "@import url('/static/css/modules/root.css');";
+    if (options.create_auth) {
+      source << "@import url('/static/css/modules/pages/register.css');";
+      source << "@import url('/static/css/modules/pages/login.css');";
+    }
+    return source.str();
+};         
+
 
 std::string static_css_source() {
   return ":root {\n"
@@ -724,7 +736,7 @@ std::string static_css_source() {
          "    margin-right: 16px;\n"
          "    color: #156d72;\n"
          "    font-weight: 700;\n"
-         "}\n";
+         "}";
 }
 
 std::string static_js_source(const InitOptions &options) {
@@ -1543,8 +1555,11 @@ bool create_backend_project(const InitOptions &options) {
         if (!write_file(project_dir / "templates" / "register.html",
                         static_register_source(options)))
           return false;
-        if (!write_file(project_dir / "static" / "css" / "register.css",
+        if (!write_file(project_dir / "static" / "css" / "pages" / "register.css",
                         static_auth_css_source()))
+          return false;
+        if (!write_file(project_dir / "static" / "css"/ "main.css",
+                        static_main_css_source(options)))
           return false;
         if (!write_file(project_dir / "static" / "js" / "register.js",
                         static_register_js_source()))
@@ -1552,7 +1567,7 @@ bool create_backend_project(const InitOptions &options) {
         if (!write_file(project_dir / "templates" / "login.html",
                         static_login_source(options)))
           return false;
-        if (!write_file(project_dir / "static" / "css" / "login.css",
+        if (!write_file(project_dir / "static" / "css" / "pages" / "login.css",
                         static_auth_css_source()))
           return false;
         if (!write_file(project_dir / "static" / "js" / "login.js",
