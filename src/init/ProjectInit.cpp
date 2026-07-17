@@ -1179,7 +1179,7 @@ std::string routes_source(const InitOptions &options) {
   }
   source << "\n";
   if (options.create_api_spec) {
-    source << "from \"sweiger\" import docs, openapi_yaml\n";
+    source << "from \"openapi\" import docs, openapi_yaml\n";
   }
   if (options.create_auth) {
     source << "from \"auth\" import register_page, login_page, register_css, "
