@@ -4,13 +4,13 @@ import os
 source_files = [
     "src/main.cpp",
     "src/lexer/Lexer.cpp",
-    "src/Parser.cpp",
-    "src/Interpreter.cpp",
-    "src/Utils.cpp",
-    "src/SemanticAnalyzer.cpp",
-    "src/GarbageCollector.cpp",
+    "src/compilers/Parser.cpp",
+    "src/compilers/Interpreter.cpp",
+    "src/compilers/SemanticAnalyzer.cpp",
+    "src/utils/Utils.cpp",
+    "src/code/GarbageCollector.cpp",
+    "src/init/ProjectInit.cpp",
     "src/gen/Generator.cpp",
-    "src/init/ProjectInit.cpp"
 ]
 
 output_executable = "pgt"

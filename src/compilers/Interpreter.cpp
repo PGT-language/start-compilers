@@ -1,6 +1,6 @@
-#include "include/interpreter/Interpreter.h"
-#include "include/utils/Error.h"
-#include "include/utils/Utils.h"
+#include "../include/interpreter/Interpreter.h"
+#include "../include/utils/Error.h"
+#include "../include/utils/Utils.h"
 #include <cctype>
 #include <cstring>
 #include <ctime>

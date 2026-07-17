@@ -1,6 +1,6 @@
-#include "include/utils/GarbageCollector.h"
-#include "include/utils/Utils.h"
-#include "runtime/gc.h"
+#include "../include/utils/GarbageCollector.h"
+#include "../include/utils/Utils.h"
+#include "../include/runtime/gc.h"
 #include <iostream>
 
 GarbageCollector *global_gc = nullptr;

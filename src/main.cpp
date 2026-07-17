@@ -6,9 +6,9 @@
 #include "include/token/Ast.h"
 #include "include/semantic/SemanticAnalyzer.h"
 #include "include/utils/Error.h"
-#include "PackageResolver.h"
-#include "include/utils/CodeGen.h"
-#include "init/ProjectInit.h"
+#include "include/package/PackageResolver.h"
+#include "include/gen/Generator.h"
+#include "include/init/ProjectInit.h"
 
 #include <iostream>
 #include <fstream>

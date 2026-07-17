@@ -1,4 +1,4 @@
-#include "include/semantic/SemanticAnalyzer.h"
+#include "../include/semantic/SemanticAnalyzer.h"
 #include <iostream>
 
 namespace {
