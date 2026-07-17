@@ -450,32 +450,32 @@ std::string auth_source() {
          "from \"models/init\" import save_user\n"
          "\n"
          "function(register_page) {\n"
-         "    return read::file(\"static/register.html\")\n"
+         "    return read::file(\"templates/register.html\")\n"
          "    return 1\n"
          "}\n"
          "\n"
          "function(login_page) {\n"
-         "    return read::file(\"static/login.html\")\n"
+         "    return read::file(\"templates/login.html\")\n"
          "    return 1\n"
          "}\n"
          "\n"
          "function(register_css) {\n"
-         "    return read::file(\"static/register.css\")\n"
+         "    return read::file(\"static/css/register.css\")\n"
          "    return 1\n"
          "}\n"
          "\n"
          "function(register_js) {\n"
-         "    return read::file(\"static/register.js\")\n"
+         "    return read::file(\"static/js/register.js\")\n"
          "    return 1\n"
          "}\n"
          "\n"
          "function(login_css) {\n"
-         "    return read::file(\"static/login.css\")\n"
+         "    return read::file(\"static/css/login.css\")\n"
          "    return 1\n"
          "}\n"
          "\n"
          "function(login_js) {\n"
-         "    return read::file(\"static/login.js\")\n"
+         "    return read::file(\"static/js/login.js\")\n"
          "    return 1\n"
          "}\n"
          "\n"
@@ -534,7 +534,7 @@ std::string static_index_source(const InitOptions &options) {
          << "    <meta name=\"viewport\" content=\"width=device-width, "
             "initial-scale=1\">\n"
          << "    <title>" << options.project_name << "</title>\n"
-         << "    <link rel=\"stylesheet\" href=\"/static/index.css\">\n"
+         << "    <link rel=\"stylesheet\" href=\"/static/css/index.css\">\n"
          << "</head>\n"
          << "<body>\n"
          << "    <main>\n"
@@ -558,7 +558,7 @@ std::string static_index_source(const InitOptions &options) {
   }
   source << "        </section>\n"
          << "    </main>\n"
-         << "    <script src=\"/static/index.js\"></script>\n"
+         << "    <script src=\"/static/js/index.js\"></script>\n"
          << "</body>\n"
          << "</html>";
   return source.str();
@@ -573,7 +573,7 @@ std::string static_register_source(const InitOptions &options) {
          << "    <meta name=\"viewport\" content=\"width=device-width, "
             "initial-scale=1\">\n"
          << "    <title>" << options.project_name << " Register</title>\n"
-         << "    <link rel=\"stylesheet\" href=\"/static/register.css\">\n"
+         << "    <link rel=\"stylesheet\" href=\"/static/css/register.css\">\n"
          << "</head>\n"
          << "<body>\n"
          << "    <main>\n"
@@ -594,7 +594,7 @@ std::string static_register_source(const InitOptions &options) {
          << "            <a href=\"/\">Back to index</a>\n"
          << "        </section>\n"
          << "    </main>\n"
-         << "    <script src=\"/static/register.js\"></script>\n"
+         << "    <script src=\"/static/js/register.js\"></script>\n"
          << "</body>\n"
          << "</html>";
   return source.str();
@@ -609,7 +609,7 @@ std::string static_login_source(const InitOptions &options) {
          << "    <meta name=\"viewport\" content=\"width=device-width, "
             "initial-scale=1\">\n"
          << "    <title>" << options.project_name << " Login</title>\n"
-         << "    <link rel=\"stylesheet\" href=\"/static/login.css\">\n"
+         << "    <link rel=\"stylesheet\" href=\"/static/css/login.css\">\n"
          << "</head>\n"
          << "<body>\n"
          << "    <main>\n"
@@ -628,7 +628,7 @@ std::string static_login_source(const InitOptions &options) {
          << "            <a href=\"/\">Back to index</a>\n"
          << "        </section>\n"
          << "    </main>\n"
-         << "    <script src=\"/static/login.js\"></script>\n"
+         << "    <script src=\"/static/js/login.js\"></script>\n"
          << "</body>\n"
          << "</html>\n";
   return source.str();
@@ -943,28 +943,52 @@ std::string openapi_html_source(const InitOptions &options) {
          << "            padding: 0;\n"
          << "            box-sizing: border-box;\n"
          << "        }\n"
+         << "        .swagger-ui .topbar .download-url-wrapper {\n"
+         << "            display: none !important;\n"
+         << "        }\n"
+         << "        .swagger-ui .topbar a {\n"
+         << "            min-width: 100% !important;\n"
+         << "            max-width: 100% !important;\n"
+         << "            width: 100% !important;\n"
+         << "            height: 100% !important;\n"
+         << "        }\n"
+         << "        .swagger-ui .topbar .dark-mode-toggle {\n"
+         << "            display: none !important;\n"
+         << "        }\n"
+         << "        html.dark-mode .swagger-ui .info a {\n"
+         << "            display: none !important;\n"
+         << "        }\n"
+         << "        .swagger-ui .info .title {\n"
+         << "            color: #fff !important;\n"
+         << "            font-size: 25px !important;\n"
+         << "        }\n"
          << "    </style>\n"
          << "</head>\n"
          << "<body>\n"
          << "    <div id=\"swagger-ui\"></div>\n"
-         << "    <script src=\"https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js\"></script>\n"
-         << "    <script src=\"https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js\"></script>\n"
+         << "    <script "
+            "src=\"https://unpkg.com/swagger-ui-dist@5/"
+            "swagger-ui-bundle.js\"></script>\n"
+         << "    <script "
+            "src=\"https://unpkg.com/swagger-ui-dist@5/"
+            "swagger-ui-standalone-preset.js\"></script>\n"
          << "    <script>\n"
-         << "        window.addEventListener('load', () => {\n"
+         << "        window.onload = function () {\n"
          << "            const ui = SwaggerUIBundle({\n"
-         << "                url: '/api/v1/openapi.yaml',\n"
+         << "                url: \"/api/v1/openapi.yaml\",\n"
          << "                dom_id: '#swagger-ui',\n"
          << "                deepLinking: true,\n"
          << "                presets: [\n"
          << "                    SwaggerUIBundle.presets.apis,\n"
          << "                    SwaggerUIStandalonePreset\n"
          << "                ],\n"
-         << "                plugins: [\n"
+         << "                plugins: ["
          << "                    SwaggerUIBundle.plugins.DownloadUrl\n"
          << "                ],\n"
-         << "                layout: StandaloneLayout\n"
+         << "                layout: \"StandaloneLayout\"\n"
          << "            });\n"
-         << "        });\n"
+         << "            window.ui = ui;\n"
+         << "        };\n"
          << "    </script>\n"
          << "</body>\n"
          << "</html>";
@@ -990,10 +1014,18 @@ std::string api_spec_source(const InitOptions &options) {
   source << "openapi: 3.0.3\n"
          << "info:\n"
          << "  title: " << options.project_name << " API\n"
-         << "  version: 0.1.0\n"
+         << "  version: 1.0.0\n"
+         << "  description: " << options.project_name << " API\n"
+         << "tags:\n"
+         << "    - name: System\n";
+  if (options.create_auth) {
+    source << "    - name: Auth\n";
+  }
+  source << "    - name: API\n"
          << "paths:\n"
          << "  /:\n"
          << "    get:\n"
+         << "      tags: [System]\n"
          << "      summary: Index route\n"
          << "      responses:\n"
          << "        \"200\":\n"
@@ -1001,11 +1033,13 @@ std::string api_spec_source(const InitOptions &options) {
   if (options.create_api) {
     source << "  /api:\n"
            << "    get:\n"
+           << "      tags: [API]\n"
            << "      summary: Default API status\n"
            << "      responses:\n"
            << "        \"200\":\n"
            << "          description: OK\n"
            << "    post:\n"
+           << "      tags: [API]\n"
            << "      summary: Save JSON payload\n"
            << "      requestBody:\n"
            << "        required: true\n"
@@ -1020,12 +1054,14 @@ std::string api_spec_source(const InitOptions &options) {
   if (options.create_api_spec) {
     source << "  /api/v1/docs:\n"
            << "    get:\n"
+           << "      tags: [API]\n"
            << "      summary: openapi UI\n"
            << "      responses:\n"
            << "        \"200\":\n"
            << "          description: openapi documentation\n"
            << "  /api/v1/openapi.yaml:\n"
            << "    get:\n"
+           << "      tags: [API]\n"
            << "      summary: OpenAPI YAML\n"
            << "      responses:\n"
            << "        \"200\":\n"
@@ -1034,17 +1070,45 @@ std::string api_spec_source(const InitOptions &options) {
   if (options.create_auth) {
     source << "  /auth/register:\n"
            << "    post:\n"
+           << "      tags: [Auth]\n"
            << "      summary: Register user\n"
            << "      responses:\n"
            << "        \"200\":\n"
            << "          description: Registered\n"
            << "  /auth/login:\n"
+           << "    tags: [Auth]\n"
            << "    post:\n"
            << "      summary: Login user and return JWT\n"
+           << "      requestBody:\n"
+           << "        required: true\n"
+           << "        content:\n"
+           << "          application/json:\n"
+           << "            schema:\n"
+           << "              type: object\n"
+           << "              required: [email, password]\n"
+           << "              properties:\n"
+           << "                email:\n"
+           << "                  type: string\n"
+           << "                  format: email\n"
+           << "                  example: user@example.com\n"
+           << "                password:\n"
+           << "                  type: string\n"
+           << "                  example: secret\n"
            << "      responses:\n"
            << "        \"200\":\n"
-           << "          description: JWT token\n"
+           << "          description: OK\n"
+           << "          content:\n"
+           << "            application/json:\n"
+           << "              schema:\n"
+           << "                type: object\n"
+           << "                properties:\n"
+           << "                  token:\n"
+           << "                    type: string\n"
+           << "                  expires_at:\n"
+           << "                    type: string\n"
+           << "                    format: date-time\n"
            << "  /auth/verify:\n"
+           << "    tags: [Auth]\n"
            << "    post:\n"
            << "      summary: Verify JWT token\n"
            << "      responses:\n"
@@ -1087,7 +1151,7 @@ std::string init_source(const InitOptions &options) {
     source << "    " << options.log_level << "(\"starting backend\")\n";
   }
   if (options.use_database || options.create_auth) {
-    source << "    sql::open(\"app.sqlite\")\n";
+    source << "    sql::open(\"instance/app.db\")\n";
     source << "    migrate()\n";
   }
   source << "    return 1\n"
@@ -1109,7 +1173,7 @@ std::string api_source(const InitOptions &options) {
 
   source << "function(index) {\n";
   if (options.create_static) {
-    source << "    return read::file(\"static/index.html\")\n";
+    source << "    return read::file(\"templates/index.html\")\n";
   } else {
     source << "    return \"" << options.project_name
            << " backend is running\"\n";
@@ -1134,12 +1198,12 @@ std::string api_source(const InitOptions &options) {
   if (options.create_static) {
     source << "\n"
            << "function(index_css) {\n"
-           << "    return read::file(\"static/index.css\")\n"
+           << "    return read::file(\"static/css/index.css\")\n"
            << "    return 1\n"
            << "}\n"
            << "\n"
            << "function(index_js) {\n"
-           << "    return read::file(\"static/index.js\")\n"
+           << "    return read::file(\"static/js/index.js\")\n"
            << "    return 1\n"
            << "}\n";
   }
@@ -1175,18 +1239,18 @@ std::string routes_source(const InitOptions &options) {
            << "    web::post(\"/api\", \"api\")\n";
   }
   if (options.create_static) {
-    source << "    web::get(\"/static/index.css\", \"index_css\")\n"
-           << "    web::get(\"/static/index.js\", \"index_js\")\n";
+    source << "    web::get(\"/static/css/index.css\", \"index_css\")\n"
+           << "    web::get(\"/static/js/index.js\", \"index_js\")\n";
   }
   if (options.create_api_spec) {
     source << "    web::get(\"/api/v1/docs\", \"docs\")\n"
            << "    web::get(\"/api/v1/openapi.yaml\", \"openapi_yaml\")\n";
   }
   if (options.create_auth) {
-    source << "    web::get(\"/static/register.css\", \"register_css\")\n"
-           << "    web::get(\"/static/register.js\", \"register_js\")\n"
-           << "    web::get(\"/static/login.css\", \"login_css\")\n"
-           << "    web::get(\"/static/login.js\", \"login_js\")\n"
+    source << "    web::get(\"/static/css/register.css\", \"register_css\")\n"
+           << "    web::get(\"/static/js/register.js\", \"register_js\")\n"
+           << "    web::get(\"/static/css/login.css\", \"login_css\")\n"
+           << "    web::get(\"/static/js/login.js\", \"login_js\")\n"
            << "    web::get(\"/auth/register\", \"register_page\")\n"
            << "    web::get(\"/auth/login\", \"login_page\")\n"
            << "    web::post(\"/auth/register\", \"register_user\")\n"
@@ -1233,7 +1297,7 @@ std::string dockerfile_source() {
          << "WORKDIR /app\n"
          << "COPY . .\n"
          << "\n"
-         << "EXPOSE 5000\n"
+         << "EXPOSE 11900\n"
          << "CMD [\"run\", \"main.pgt\"]\n";
   return source.str();
 }
@@ -1248,7 +1312,7 @@ std::string compose_source(bool with_nginx) {
          << "        PGT_IMAGE: " << DEFAULT_PGT_DOCKER_IMAGE << "\n";
   if (with_nginx) {
     source << "    expose:\n"
-           << "      - \"5000\"\n"
+           << "      - \"11900\"\n"
            << "  nginx:\n"
            << "    image: nginx:1.27-alpine\n"
            << "    ports:\n"
@@ -1259,13 +1323,13 @@ std::string compose_source(bool with_nginx) {
            << "      - app\n";
   } else {
     source << "    ports:\n"
-           << "      - \"5000:5000\"\n";
+           << "      - \"11900:11900\"\n";
   }
   return source.str();
 }
 
 std::string nginx_source(bool docker) {
-  std::string upstream = docker ? "app:5000" : "127.0.0.1:5000";
+  std::string upstream = docker ? "app:11900" : "127.0.0.1:11900";
   std::ostringstream source;
   source << "server {\n"
          << "    listen 80;\n"
@@ -1310,7 +1374,8 @@ std::string readme_source(const InitOptions &options) {
     source << "- `openapi/html/index.html` contains openapi UI served from "
               "`/api/v1/docs`.\n"
            << "- `openapi/openapi.pgt` contains openapi route handlers.\n"
-           << "- `openapi/openapi.yaml` contains the editable API specification served "
+           << "- `openapi/openapi.yaml` contains the editable API "
+              "specification served "
               "from `/api/v1/openapi.yaml`.\n";
   }
   if (options.create_logging) {
@@ -1383,7 +1448,8 @@ std::string readme_source(const InitOptions &options) {
     source << "\n"
            << "## API Spec\n"
            << "\n"
-           << "Open `/api/v1/docs` for openapi UI. Edit `openapi/openapi.yaml` when you "
+           << "Open `/api/v1/docs` for openapi UI. Edit `openapi/openapi.yaml` "
+              "when you "
               "add routes; the backend serves it at `/api/v1/openapi.yaml`.\n";
   }
   if (options.create_logging) {
@@ -1398,7 +1464,7 @@ std::string readme_source(const InitOptions &options) {
     source << "\n"
            << "## Database\n"
            << "\n"
-           << "The app opens `app.sqlite` during startup and runs `migrate()` "
+           << "The app opens `instance/app.db` during startup and runs `migrate()` "
               "from `init/init.pgt`.\n";
   }
   if (options.create_auth) {
@@ -1470,39 +1536,40 @@ bool create_backend_project(const InitOptions &options) {
     }
 
     if (options.create_static) {
-      if (!write_file(project_dir / "static" / "index.html",
+      if (!write_file(project_dir / "templates" / "index.html",
                       static_index_source(options)))
         return false;
       if (options.create_auth) {
-        if (!write_file(project_dir / "static" / "register.html",
+        if (!write_file(project_dir / "templates" / "register.html",
                         static_register_source(options)))
           return false;
-        if (!write_file(project_dir / "static" / "register.css",
+        if (!write_file(project_dir / "static" / "css" / "register.css",
                         static_auth_css_source()))
           return false;
-        if (!write_file(project_dir / "static" / "register.js",
+        if (!write_file(project_dir / "static" / "js" / "register.js",
                         static_register_js_source()))
           return false;
-        if (!write_file(project_dir / "static" / "login.html",
+        if (!write_file(project_dir / "templates" / "login.html",
                         static_login_source(options)))
           return false;
-        if (!write_file(project_dir / "static" / "login.css",
+        if (!write_file(project_dir / "static" / "css" / "login.css",
                         static_auth_css_source()))
           return false;
-        if (!write_file(project_dir / "static" / "login.js",
+        if (!write_file(project_dir / "static" / "js" / "login.js",
                         static_login_js_source()))
           return false;
       }
-      if (!write_file(project_dir / "static" / "index.css",
+      if (!write_file(project_dir / "static" / "css" / "index.css",
                       static_css_source()))
         return false;
-      if (!write_file(project_dir / "static" / "index.js",
+      if (!write_file(project_dir / "static" / "js" / "index.js",
                       static_js_source(options)))
         return false;
     }
 
     if (options.create_api_spec) {
-      if (!write_file(project_dir / "openapi" / "openapi.yaml", api_spec_source(options)))
+      if (!write_file(project_dir / "openapi" / "openapi.yaml",
+                      api_spec_source(options)))
         return false;
       if (!write_file(project_dir / "openapi" / "openapi.pgt",
                       openapi_package_source()))

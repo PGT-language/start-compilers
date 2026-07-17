@@ -930,7 +930,7 @@ Value Interpreter::find_first_row(const std::string &table,
                                   const SourceLocation &loc) const {
   if (!sqlite_db) {
     throw RuntimeError(
-        "Open SQLite database first with sql::open(\"app.sqlite\")", loc);
+        "Open SQLite database first with sql::open(\"instance/app.db\")", loc);
   }
 
   std::string query = "SELECT * FROM " +
@@ -977,7 +977,7 @@ void Interpreter::execute_sql_statement(const std::string &statement,
                                         const SourceLocation &loc) const {
   if (!sqlite_db) {
     throw RuntimeError(
-        "Open SQLite database first with sql::open(\"app.sqlite\")", loc);
+        "Open SQLite database first with sql::open(\"instance/app.db\")", loc);
   }
 
   std::string query = statement;
