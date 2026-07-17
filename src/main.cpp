@@ -350,7 +350,6 @@ int main(int argc, char **argv)
 
         std::string filename = argv[2];
 
-        // Проверка --debug
         if (argc == 4 && std::string(argv[3]) == "--debug")
         {
             DEBUG = true;
@@ -362,7 +361,6 @@ int main(int argc, char **argv)
             return 1;
         }
 
-        // Система загрузки мультифайлов
         std::set<std::string> loaded_files;
         std::map<std::string, std::vector<std::shared_ptr<AstNode>>> file_asts;
         std::map<std::string, std::string> file_packages;
@@ -371,13 +369,10 @@ int main(int argc, char **argv)
         std::vector<std::string> files_to_load = {filename};
         PackageResolver package_resolver(filename, argv[0]);
 
-        // Загружаем все файлы рекурсивно
         while (!files_to_load.empty())
         {
             std::string current_file = files_to_load.back();
             files_to_load.pop_back();
-
-            // Пропускаем уже загруженные файлы
             if (loaded_files.count(current_file))
             {
                 continue;
@@ -488,7 +483,6 @@ int main(int argc, char **argv)
             directory_package_sources[current_dir] = current_file;
             file_packages[current_file] = parsed_package_name;
 
-            // Проверяем обязательные элементы для главного файла
             if (current_file == filename)
             {
                 if (!parser.found_package_main())
@@ -514,10 +508,8 @@ int main(int argc, char **argv)
                 }
             }
 
-            // Сохраняем AST для этого файла
             file_asts[current_file] = program;
 
-            // Ищем импорты и добавляем их в очередь загрузки
             std::string base_dir = PackageResolver::directory_of(current_file);
             for (const auto &node : program)
             {
@@ -554,8 +546,7 @@ int main(int argc, char **argv)
             loaded_files.insert(current_file);
         }
 
-        // Проверяем, что все импортированные символы существуют в импортируемых файлах
-        std::map<std::string, std::set<std::string>> file_symbols; // файл -> функции и классы
+        std::map<std::string, std::set<std::string>> file_symbols;
         for (const auto &[file, ast] : file_asts)
         {
             for (const auto &node : ast)
@@ -571,7 +562,6 @@ int main(int argc, char **argv)
             }
         }
 
-        // Проверяем импорты
         for (const auto &[file, ast] : file_asts)
         {
             for (const auto &node : ast)
@@ -632,13 +622,11 @@ int main(int argc, char **argv)
             }
         }
 
-        // Объединяем все AST в один
         std::vector<std::shared_ptr<AstNode>> combined_program;
         for (const auto &[file, ast] : file_asts)
         {
             for (const auto &node : ast)
             {
-                // Пропускаем импорты, они уже обработаны
                 if (!std::dynamic_pointer_cast<ImportStmt>(node))
                 {
                     combined_program.push_back(node);
@@ -646,7 +634,6 @@ int main(int argc, char **argv)
             }
         }
 
-        // Проверяем наличие return 1 в каждой функции
         for (const auto &node : combined_program)
         {
             if (auto func = std::dynamic_pointer_cast<FunctionDef>(node))
@@ -660,7 +647,6 @@ int main(int argc, char **argv)
             }
         }
 
-        // Семантический анализ
         try
         {
             SemanticAnalyzer analyzer;
@@ -672,7 +658,6 @@ int main(int argc, char **argv)
             return 1;
         }
 
-        // Выполнение
         try
         {
             Interpreter interp;

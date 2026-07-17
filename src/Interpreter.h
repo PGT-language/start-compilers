@@ -2,109 +2,144 @@
 
 #include "Ast.h"
 #include "Utils.h"
+#include <fstream>
 #include <map>
 #include <memory>
-#include <vector>
-#include <fstream>
 #include <string>
+#include <vector>
 
 struct sqlite3;
 
-class Interpreter
-{
-    std::map<std::string, std::shared_ptr<FunctionDef>> functions;
-    std::map<std::string, std::shared_ptr<ClassDef>> orm_models;
-    std::map<std::string, Value> globals;                            // Глобальные переменные
-    std::vector<SourceLocation> call_stack;                          // Стек вызовов для traceback
-    std::map<std::string, std::unique_ptr<std::fstream>> open_files; // Открытые файлы
-    std::ofstream log_file;                                          // Файл для логов
-    std::string log_output = "console";                              // console или file
-    sqlite3 *sqlite_db = nullptr;                                    // Активная SQLite база
-    std::string sql_output_path;                                     // Путь к SQLite базе
+class Interpreter {
+  std::map<std::string, std::shared_ptr<FunctionDef>> functions;
+  std::map<std::string, std::shared_ptr<ClassDef>> orm_models;
+  std::map<std::string, Value> globals;
+  std::vector<SourceLocation> call_stack;
+  std::map<std::string, std::unique_ptr<std::fstream>> open_files;
+  std::ofstream log_file;
+  std::string log_output = "console";
+  sqlite3 *sqlite_db = nullptr;
+  std::string sql_output_path;
 
-    struct HttpRoute
-    {
-        std::string handler;
-        SourceLocation location;
-    };
+  struct HttpRoute {
+    std::string handler;
+    SourceLocation location;
+  };
 
-    struct HttpRequest
-    {
-        std::string method;
-        std::string path;
-        std::string body;
-    };
+  struct HttpRequest {
+    std::string method;
+    std::string path;
+    std::string body;
+  };
 
-    struct ParsedUrl
-    {
-        std::string scheme;
-        std::string host;
-        std::string port;
-        std::string path;
-    };
+  struct ParsedUrl {
+    std::string scheme;
+    std::string host;
+    std::string port;
+    std::string path;
+  };
 
-    std::map<std::string, HttpRoute> http_routes;
-    HttpRequest current_request;
+  std::map<std::string, HttpRoute> http_routes;
+  HttpRequest current_request;
 
-    bool is_truthy(const Value &value) const;
-    Value coerce_value(const Value &value, const std::string &type_name, const SourceLocation &loc) const;
-    void assign_value(const std::string &name, const Value &value, std::map<std::string, Value> &locals);
-    ParsedUrl parse_url(const std::string &url, const SourceLocation &loc) const;
-    std::string extract_http_body(const std::string &response) const;
-    std::string perform_http_request(const std::string &transport, const std::string &method, const std::string &url,
-                                     const std::string &body, const SourceLocation &loc) const;
-    void run_http_server(const std::string &host, long long port, const std::string &body, const SourceLocation &loc);
-    void register_http_route(const std::string &method, const std::string &path,
-                             const std::string &handler, const SourceLocation &loc);
-    std::string make_route_key(const std::string &method, const std::string &path) const;
-    std::string normalize_http_method(const std::string &method) const;
-    std::string read_response_body(const std::string &body, const SourceLocation &loc) const;
-    Value call_http_handler(const HttpRoute &route, const std::string &method,
-                            const std::string &path, const std::string &body);
-    std::string response_content_type(const Value &value) const;
-    std::string response_body_from_value(const Value &value) const;
-    Value parse_json(const std::string &json_str, const SourceLocation &loc) const;
-    std::string stringify_json(const Value &value) const;
-    Value read_file_path(const Value &arg, const SourceLocation &loc) const;
-    Value execute_json_builtin(const std::string &name, const std::vector<Value> &args, const SourceLocation &loc);
-    Value execute_auth_builtin(const std::string &name, const std::vector<Value> &args, const SourceLocation &loc);
-    Value execute_jwt_builtin(const std::string &name, const std::vector<Value> &args, const SourceLocation &loc);
-    Value execute_request_builtin(const std::string &name, const std::vector<Value> &args, const SourceLocation &loc);
-    Value execute_sql_builtin(const std::string &name, const std::vector<Value> &args, const SourceLocation &loc);
-    std::string escape_sql_identifier(const std::string &identifier, const SourceLocation &loc) const;
-    std::string sql_literal(const Value &value) const;
-    std::string orm_table_name(const std::string &model_name) const;
-    std::string orm_sql_type(const OrmField &field) const;
-    std::string create_table_sql(const ClassDef &model) const;
-    std::string model_table_or_name(const std::string &model_or_table) const;
-    std::string build_insert_sql(const std::string &table, const Value &data, const SourceLocation &loc) const;
-    Value find_first_row(const std::string &table, const std::string &field, const Value &value, const SourceLocation &loc) const;
-    void execute_sql_statement(const std::string &statement, const SourceLocation &loc) const;
-    std::string normalize_log_level(const std::string &level) const;
-    bool is_known_log_level(const std::string &level) const;
-    std::string log_level_from_builtin(const std::string &name) const;
-    bool is_log_builtin_name(const std::string &name) const;
-    Value set_log_output(const Value &arg, const SourceLocation &loc);
-    Value execute_log_builtin(const std::string &name, const std::vector<Value> &args, const SourceLocation &loc);
-    Value open_log_path(const Value &arg, const SourceLocation &loc);
-    void log_message(const std::string &message, const std::string &level = "INFO");
-    void execute_statement(const std::shared_ptr<AstNode> &stmt, std::map<std::string, Value> &locals);
-    void execute_block(const std::vector<std::shared_ptr<AstNode>> &body, std::map<std::string, Value> &locals);
-    Value execute_function(const std::string &name, const std::vector<Value> &call_args);
-    Value eval(const std::shared_ptr<AstNode> &node, const std::map<std::string, Value> &locals = {});
+  bool is_truthy(const Value &value) const;
+  Value coerce_value(const Value &value, const std::string &type_name,
+                     const SourceLocation &loc) const;
+  void assign_value(const std::string &name, const Value &value,
+                    std::map<std::string, Value> &locals);
+  ParsedUrl parse_url(const std::string &url, const SourceLocation &loc) const;
+  std::string extract_http_body(const std::string &response) const;
+  std::string perform_http_request(const std::string &transport,
+                                   const std::string &method,
+                                   const std::string &url,
+                                   const std::string &body,
+                                   const SourceLocation &loc) const;
+  void run_http_server(const std::string &host, long long port,
+                       const std::string &body, const SourceLocation &loc);
+  void register_http_route(const std::string &method, const std::string &path,
+                           const std::string &handler,
+                           const SourceLocation &loc);
+  std::string make_route_key(const std::string &method,
+                             const std::string &path) const;
+  std::string normalize_http_method(const std::string &method) const;
+  std::string read_response_body(const std::string &body,
+                                 const SourceLocation &loc) const;
+  Value call_http_handler(const HttpRoute &route, const std::string &method,
+                          const std::string &path, const std::string &body);
+  std::string response_content_type(const Value &value) const;
+  std::string response_body_from_value(const Value &value) const;
+  Value parse_json(const std::string &json_str,
+                   const SourceLocation &loc) const;
+  std::string stringify_json(const Value &value) const;
+  Value read_file_path(const Value &arg, const SourceLocation &loc) const;
+  Value execute_json_builtin(const std::string &name,
+                             const std::vector<Value> &args,
+                             const SourceLocation &loc);
+  Value execute_auth_builtin(const std::string &name,
+                             const std::vector<Value> &args,
+                             const SourceLocation &loc);
+  Value execute_jwt_builtin(const std::string &name,
+                            const std::vector<Value> &args,
+                            const SourceLocation &loc);
+  Value execute_request_builtin(const std::string &name,
+                                const std::vector<Value> &args,
+                                const SourceLocation &loc);
+  Value execute_sql_builtin(const std::string &name,
+                            const std::vector<Value> &args,
+                            const SourceLocation &loc);
+  std::string escape_sql_identifier(const std::string &identifier,
+                                    const SourceLocation &loc) const;
+  std::string sql_literal(const Value &value) const;
+  std::string orm_table_name(const std::string &model_name) const;
+  std::string orm_sql_type(const OrmField &field) const;
+  std::string create_table_sql(const ClassDef &model) const;
+  std::string model_table_or_name(const std::string &model_or_table) const;
+  std::string build_insert_sql(const std::string &table, const Value &data,
+                               const SourceLocation &loc) const;
+  Value find_first_row(const std::string &table, const std::string &field,
+                       const Value &value, const SourceLocation &loc) const;
+  void execute_sql_statement(const std::string &statement,
+                             const SourceLocation &loc) const;
+  std::string normalize_log_level(const std::string &level) const;
+  bool is_known_log_level(const std::string &level) const;
+  std::string log_level_from_builtin(const std::string &name) const;
+  bool is_log_builtin_name(const std::string &name) const;
+  Value set_log_output(const Value &arg, const SourceLocation &loc);
+  Value execute_log_builtin(const std::string &name,
+                            const std::vector<Value> &args,
+                            const SourceLocation &loc);
+  Value open_log_path(const Value &arg, const SourceLocation &loc);
+  void log_message(const std::string &message,
+                   const std::string &level = "INFO");
+  void execute_statement(const std::shared_ptr<AstNode> &stmt,
+                         std::map<std::string, Value> &locals);
+  void execute_block(const std::vector<std::shared_ptr<AstNode>> &body,
+                     std::map<std::string, Value> &locals);
+  Value execute_function(const std::string &name,
+                         const std::vector<Value> &call_args);
+  Value eval(const std::shared_ptr<AstNode> &node,
+             const std::map<std::string, Value> &locals = {});
 
 private:
-    Value parse_json_value(const std::string &json_str, size_t &pos, const SourceLocation &loc) const;
-    Value parse_json_object(const std::string &json_str, size_t &pos, const SourceLocation &loc) const;
-    Value parse_json_array(const std::string &json_str, size_t &pos, const SourceLocation &loc) const;
-    Value parse_json_string(const std::string &json_str, size_t &pos, const SourceLocation &loc) const;
-    std::string parse_json_string_value(const std::string &json_str, size_t &pos, const SourceLocation &loc) const;
-    Value parse_json_bool(const std::string &json_str, size_t &pos, const SourceLocation &loc) const;
-    Value parse_json_null(const std::string &json_str, size_t &pos, const SourceLocation &loc) const;
-    Value parse_json_number(const std::string &json_str, size_t &pos, const SourceLocation &loc) const;
-    void skip_whitespace(const std::string &json_str, size_t &pos) const;
+  Value parse_json_value(const std::string &json_str, size_t &pos,
+                         const SourceLocation &loc) const;
+  Value parse_json_object(const std::string &json_str, size_t &pos,
+                          const SourceLocation &loc) const;
+  Value parse_json_array(const std::string &json_str, size_t &pos,
+                         const SourceLocation &loc) const;
+  Value parse_json_string(const std::string &json_str, size_t &pos,
+                          const SourceLocation &loc) const;
+  std::string parse_json_string_value(const std::string &json_str, size_t &pos,
+                                      const SourceLocation &loc) const;
+  Value parse_json_bool(const std::string &json_str, size_t &pos,
+                        const SourceLocation &loc) const;
+  Value parse_json_null(const std::string &json_str, size_t &pos,
+                        const SourceLocation &loc) const;
+  Value parse_json_number(const std::string &json_str, size_t &pos,
+                          const SourceLocation &loc) const;
+  void skip_whitespace(const std::string &json_str, size_t &pos) const;
 
 public:
-    ~Interpreter();
-    void run(const std::vector<std::shared_ptr<AstNode>> &program);
+  ~Interpreter();
+  void run(const std::vector<std::shared_ptr<AstNode>> &program);
 };

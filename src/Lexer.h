@@ -4,17 +4,16 @@
 #include <string>
 #include <vector>
 
-class Lexer
-{
-    std::string source;
-    size_t pos = 0;
-    int line = 1;
-    int column = 1;
+class Lexer {
+  std::string source;
+  size_t pos = 0;
+  int line = 1;
+  int column = 1;
 
-    char peek() const;
-    char get();
+  char peek() const;
+  char get();
 
 public:
-    explicit Lexer(std::string src);
-    Token next_token();
+  explicit Lexer(std::string src);
+  Token next_token();
 };

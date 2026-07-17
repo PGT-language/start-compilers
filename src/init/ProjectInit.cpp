@@ -551,7 +551,7 @@ std::string static_index_source(const InitOptions &options) {
            << "            <pre id=\"response\"></pre>\n";
   }
   if (options.create_api_spec) {
-    source << "            <a href=\"/api/v1/docs\">Open Swagger docs</a>\n";
+    source << "            <a href=\"/api/v1/docs\">Open openapi docs</a>\n";
   }
   if (options.create_auth) {
     source << "            <a href=\"/auth/login\">Open auth</a>\n";
@@ -926,7 +926,7 @@ std::string static_login_js_source() {
          "}\n";
 }
 
-std::string swagger_html_source(const InitOptions &options) {
+std::string openapi_html_source(const InitOptions &options) {
   std::ostringstream source;
   source << "<!doctype html>\n"
          << "<html lang=\"en\">\n"
@@ -934,9 +934,35 @@ std::string swagger_html_source(const InitOptions &options) {
          << "    <meta charset=\"utf-8\">\n"
          << "    <meta name=\"viewport\" content=\"width=device-width, "
             "initial-scale=1\">\n"
-         << "    <title>" << options.project_name << " Swagger</title>\n"
+         << "    <title>" << options.project_name << " openapi</title>\n"
          << "    <link rel=\"stylesheet\" "
             "href=\"https://unpkg.com/swagger-ui-dist@5/swagger-ui.css\">\n"
+         << "    <style>\n"
+         << "        * {\n"
+         << "            margin: 0;\n"
+         << "            padding: 0;\n"
+         << "            box-sizing: border-box;\n"
+         << "        }\n"
+         << "        .swagger-ui .topbar .download-url-wrapper {\n"
+         << "            display: none !important;\n"
+         << "        }\n"
+         << "        .swagger-ui .topbar a {\n"
+         << "            min-width: 100% !important;\n"
+         << "            max-width: 100% !important;\n"
+         << "            width: 100% !important;\n"
+         << "            height: 100% !important;\n"
+         << "        }\n"
+         << "        .swagger-ui .topbar .dark-mode-toggle {\n"
+         << "            display: none !important;\n"
+         << "        }\n"
+         << "        html.dark-mode .swagger-ui .info a {\n"
+         << "            display: none !important;\n"
+         << "        }\n"
+         << "        .swagger-ui .info .title {\n"
+         << "            color: #fff !important;\n"
+         << "            font-size: 25px !important;\n"
+         << "        }\n"
+         << "    </style>\n"
          << "</head>\n"
          << "<body>\n"
          << "    <div id=\"swagger-ui\"></div>\n"
@@ -945,27 +971,35 @@ std::string swagger_html_source(const InitOptions &options) {
             "swagger-ui-bundle.js\"></script>\n"
          << "    <script>\n"
          << "        window.addEventListener('load', () => {\n"
-         << "            SwaggerUIBundle({\n"
+         << "            const ui = SwaggerUIBundle({\n"
          << "                url: '/api/v1/openapi.yaml',\n"
-         << "                dom_id: '#swagger-ui'\n"
+         << "                dom_id: '#swagger-ui',\n"
+         << "                deepLinking: true,\n"
+         << "                presets: [\n"
+         << "                    SwaggerUIBundle.presets.apis,\n"
+         << "                    SwaggerUIStandalonePreset\n"
+         << "                ],\n"
+         << "                plugins: [\n"
+         << "                    SwaggerUIStandalonePreset\n"
+         << "                ],\n"
          << "            });\n"
          << "        });\n"
          << "    </script>\n"
          << "</body>\n"
-         << "</html>\n";
+         << "</html>";
   return source.str();
 }
 
-std::string swagger_package_source() {
-  return "package sweiger\n"
+std::string openapi_package_source() {
+  return "package openapi\n"
          "\n"
          "function(docs) {\n"
-         "    return read::file(\"sweiger/index.html\")\n"
+         "    return read::file(\"openapi/html/index.html\")\n"
          "    return 1\n"
          "}\n"
          "\n"
          "function(openapi_yaml) {\n"
-         "    return read::file(\"api.yaml\")\n"
+         "    return read::file(\"openapi/openapi.yaml\")\n"
          "    return 1\n"
          "}\n";
 }
@@ -1005,10 +1039,10 @@ std::string api_spec_source(const InitOptions &options) {
   if (options.create_api_spec) {
     source << "  /api/v1/docs:\n"
            << "    get:\n"
-           << "      summary: Swagger UI\n"
+           << "      summary: openapi UI\n"
            << "      responses:\n"
            << "        \"200\":\n"
-           << "          description: Swagger documentation\n"
+           << "          description: openapi documentation\n"
            << "  /api/v1/openapi.yaml:\n"
            << "    get:\n"
            << "      summary: OpenAPI YAML\n"
@@ -1292,10 +1326,10 @@ std::string readme_source(const InitOptions &options) {
               "`static/login.js` contain the login page.\n";
   }
   if (options.create_api_spec) {
-    source << "- `sweiger/index.html` contains Swagger UI served from "
+    source << "- `openapi/html/index.html` contains openapi UI served from "
               "`/api/v1/docs`.\n"
-           << "- `sweiger/sweiger.pgt` contains Swagger route handlers.\n"
-           << "- `api.yaml` contains the editable API specification served "
+           << "- `openapi/openapi.pgt` contains openapi route handlers.\n"
+           << "- `openapi/openapi.yaml` contains the editable API specification served "
               "from `/api/v1/openapi.yaml`.\n";
   }
   if (options.create_logging) {
@@ -1368,7 +1402,7 @@ std::string readme_source(const InitOptions &options) {
     source << "\n"
            << "## API Spec\n"
            << "\n"
-           << "Open `/api/v1/docs` for Swagger UI. Edit `api.yaml` when you "
+           << "Open `/api/v1/docs` for openapi UI. Edit `openapi/openapi.yaml` when you "
               "add routes; the backend serves it at `/api/v1/openapi.yaml`.\n";
   }
   if (options.create_logging) {
@@ -1487,13 +1521,13 @@ bool create_backend_project(const InitOptions &options) {
     }
 
     if (options.create_api_spec) {
-      if (!write_file(project_dir / "api.yaml", api_spec_source(options)))
+      if (!write_file(project_dir / "openapi" / "openapi.yaml", api_spec_source(options)))
         return false;
-      if (!write_file(project_dir / "sweiger" / "sweiger.pgt",
-                      swagger_package_source()))
+      if (!write_file(project_dir / "openapi" / "openapi.pgt",
+                      openapi_package_source()))
         return false;
-      if (!write_file(project_dir / "sweiger" / "index.html",
-                      swagger_html_source(options)))
+      if (!write_file(project_dir / "openapi" / "html" / "index.html",
+                      openapi_html_source(options)))
         return false;
     }
 
@@ -1595,7 +1629,7 @@ InitOptions collect_options(int argc, char **argv) {
     options.create_static = true;
   }
   options.create_api_spec =
-      prompt_yes_no("Create api.yaml and Swagger /api/v1/docs", true);
+      prompt_yes_no("Create openapi.yaml and openapi /api/v1/docs", true);
   options.create_docker =
       prompt_yes_no("Create Dockerfile and docker-compose.yml", false);
   options.create_nginx = prompt_yes_no("Create nginx config", false);
