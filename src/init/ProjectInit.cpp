@@ -460,7 +460,7 @@ std::string auth_source() {
          "}\n"
          "\n"
          "function(register_css) {\n"
-         "    return read::file(\"static/css/register.css\")\n"
+         "    return read::file(\"static/css/modules/pages/register.css\")\n"
          "    return 1\n"
          "}\n"
          "\n"
@@ -470,7 +470,7 @@ std::string auth_source() {
          "}\n"
          "\n"
          "function(login_css) {\n"
-         "    return read::file(\"static/css/login.css\")\n"
+         "    return read::file(\"static/css/modules/pages/login.css\")\n"
          "    return 1\n"
          "}\n"
          "\n"
@@ -534,7 +534,7 @@ std::string static_index_source(const InitOptions &options) {
          << "    <meta name=\"viewport\" content=\"width=device-width, "
             "initial-scale=1\">\n"
          << "    <title>" << options.project_name << "</title>\n"
-         << "    <link rel=\"stylesheet\" href=\"/static/css/index.css\">\n"
+         << "    <link rel=\"stylesheet\" href=\"/static/css/main.css\">\n"
          << "</head>\n"
          << "<body>\n"
          << "    <main>\n"
@@ -573,7 +573,7 @@ std::string static_register_source(const InitOptions &options) {
          << "    <meta name=\"viewport\" content=\"width=device-width, "
             "initial-scale=1\">\n"
          << "    <title>" << options.project_name << " Register</title>\n"
-         << "    <link rel=\"stylesheet\" href=\"/static/css/register.css\">\n"
+         << "    <link rel=\"stylesheet\" href=\"/static/css/main.css\">\n"
          << "</head>\n"
          << "<body>\n"
          << "    <main>\n"
@@ -609,7 +609,7 @@ std::string static_login_source(const InitOptions &options) {
          << "    <meta name=\"viewport\" content=\"width=device-width, "
             "initial-scale=1\">\n"
          << "    <title>" << options.project_name << " Login</title>\n"
-         << "    <link rel=\"stylesheet\" href=\"/static/css/login.css\">\n"
+         << "    <link rel=\"stylesheet\" href=\"/static/css/main.css\">\n"
          << "</head>\n"
          << "<body>\n"
          << "    <main>\n"
@@ -636,10 +636,11 @@ std::string static_login_source(const InitOptions &options) {
 
 std::string static_main_css_source(const InitOptions &options) {
   std::ostringstream source;
-  source << "@import url('/static/css/modules/root.css');";
+  source << "@import url('/static/css/modules/root.css');\n";
+  source << "@import url('/static/css/modules/pages/index.css');\n";
   if (options.create_auth) {
-    source << "@import url('/static/css/modules/pages/register.css');";
-    source << "@import url('/static/css/modules/pages/login.css');";
+    source << "@import url('/static/css/modules/pages/register.css');\n";
+    source << "@import url('/static/css/modules/pages/login.css');\n";
   }
   return source.str();
 };
@@ -648,8 +649,8 @@ std::string static_root_css_source() {
   return ":root {\n"
          "    color-scheme: light;\n"
          "    font-family: Inter, Arial, sans-serif;\n"
-         "    main-bg-color: #141414ff;\n"
-         "    main-text-color: #ffffffff;\n"
+         "    --main-bg-color: #141414ff;\n"
+         "    --main-text-color: #ffffffff;\n"
          "}\n"
          "\n"
          "* {\n"
@@ -765,24 +766,8 @@ std::string static_js_source(const InitOptions &options) {
 }
 
 std::string static_auth_css_source() {
-  return ":root {\n"
-         "    color-scheme: light;\n"
-         "    font-family: Inter, Arial, sans-serif;\n"
-         "    background: #f5f7fb;\n"
-         "    color: #18202f;\n"
-         "}\n"
-         "\n"
-         "* {\n"
-         "    box-sizing: border-box;\n"
-         "}\n"
-         "\n"
-         "body {\n"
-         "    margin: 0;\n"
-         "}\n"
-         "\n"
-         "main {\n"
+  return "main {\n"
          "    min-height: 100vh;\n"
-         "    display: grid;\n"
          "    place-items: center;\n"
          "    padding: 32px;\n"
          "}\n"
@@ -790,7 +775,7 @@ std::string static_auth_css_source() {
          ".hero {\n"
          "    width: min(920px, 100%);\n"
          "    padding: 32px;\n"
-         "    background: #ffffff;\n"
+         "    background: var(--main-bg-color);\n"
          "    border: 1px solid #dce3ee;\n"
          "    border-radius: 8px;\n"
          "    box-shadow: 0 18px 45px rgba(24, 32, 47, 0.08);\n"
@@ -1206,7 +1191,15 @@ std::string api_source(const InitOptions &options) {
   if (options.create_static) {
     source << "\n"
            << "function(index_css) {\n"
-           << "    return read::file(\"static/css/index.css\")\n"
+           << "    return read::file(\"static/css/modules/pages/index.css\")\n"
+           << "    return 1\n"
+           << "}\n"
+           << "function(root_css) {\n"
+           << "    return read::file(\"static/css/modules/root.css\")\n"
+           << "    return 1\n"
+           << "}\n"
+           << "function(main_css) {\n"
+           << "    return read::file(\"static/css/main.css\")\n"
            << "    return 1\n"
            << "}\n"
            << "\n"
@@ -1228,7 +1221,7 @@ std::string routes_source(const InitOptions &options) {
     source << ", api";
   }
   if (options.create_static) {
-    source << ", index_css, index_js";
+    source << ", index_css, root_css, main_css, index_js";
   }
   source << "\n";
   if (options.create_api_spec) {
@@ -1247,7 +1240,9 @@ std::string routes_source(const InitOptions &options) {
            << "    web::post(\"/api\", \"api\")\n";
   }
   if (options.create_static) {
-    source << "    web::get(\"/static/css/index.css\", \"index_css\")\n"
+    source << "    web::get(\"/static/css/modules/pages/index.css\", \"index_css\")\n"
+           << "    web::get(\"/static/css/modules/root.css\", \"root_css\")\n"
+           << "    web::get(\"/static/css/main.css\", \"main_css\")\n"
            << "    web::get(\"/static/js/index.js\", \"index_js\")\n";
   }
   if (options.create_api_spec) {
@@ -1255,9 +1250,9 @@ std::string routes_source(const InitOptions &options) {
            << "    web::get(\"/api/v1/openapi.yaml\", \"openapi_yaml\")\n";
   }
   if (options.create_auth) {
-    source << "    web::get(\"/static/css/register.css\", \"register_css\")\n"
+    source << "    web::get(\"/static/css/modules/pages/register.css\", \"register_css\")\n"
            << "    web::get(\"/static/js/register.js\", \"register_js\")\n"
-           << "    web::get(\"/static/css/login.css\", \"login_css\")\n"
+           << "    web::get(\"/static/css/modules/pages/login.css\", \"login_css\")\n"
            << "    web::get(\"/static/js/login.js\", \"login_js\")\n"
            << "    web::get(\"/auth/register\", \"register_page\")\n"
            << "    web::get(\"/auth/login\", \"login_page\")\n"
@@ -1551,8 +1546,7 @@ bool create_backend_project(const InitOptions &options) {
         if (!write_file(project_dir / "templates" / "register.html",
                         static_register_source(options)))
           return false;
-        if (!write_file(project_dir / "static" / "css" / "pages" /
-                            "register.css",
+        if (!write_file(project_dir / "static" / "css" / "modules" / "pages" / "register.css",
                         static_auth_css_source()))
           return false;
         if (!write_file(project_dir / "static" / "css" / "main.css",
@@ -1564,14 +1558,17 @@ bool create_backend_project(const InitOptions &options) {
         if (!write_file(project_dir / "templates" / "login.html",
                         static_login_source(options)))
           return false;
-        if (!write_file(project_dir / "static" / "css" / "pages" / "login.css",
+        if (!write_file(project_dir / "static" / "css" / "modules" / "pages" / "login.css",
                         static_auth_css_source()))
           return false;
         if (!write_file(project_dir / "static" / "js" / "login.js",
                         static_login_js_source()))
           return false;
       }
-      if (!write_file(project_dir / "static" / "css" / "index.css",
+      if (!write_file(project_dir / "static" / "css" / "modules" / "root.css",
+                      static_root_css_source()))
+        return false;
+      if (!write_file(project_dir / "static" / "css" / "modules" / "pages" / "index.css",
                       static_css_source()))
         return false;
       if (!write_file(project_dir / "static" / "js" / "index.js",
