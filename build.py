@@ -1,51 +1,44 @@
 import subprocess
 import os
+import shutil
+import sys
+from pathlib import Path
 
-source_files = [
-    "src/main.cpp",
-    "src/lexer/Lexer.cpp",
-    "src/compilers/Parser.cpp",
-    "src/compilers/Interpreter.cpp",
-    "src/compilers/SemanticAnalyzer.cpp",
-    "src/utils/Utils.cpp",
-    "src/code/GarbageCollector.cpp",
-    "src/init/ProjectInit.cpp",
-    "src/gen/Generator.cpp",
-]
+BUILD_DIR = Path(__file__).resolve().parent / "build"
+COMPILE_DIR = Path(__file__).resolve().parent / "compile"
+EXECUTABLE = "pgt"
 
-output_executable = "pgt"
-object_files = []
-link_libraries = ["-lssl", "-lcrypto", "-lsqlite3"]
 
-try:
-    # Compile source files into object files
-    for source_file in source_files:
-        object_file = source_file.replace(".cpp", ".o")
-        compile_command = ["g++", "-std=c++17", "-I.", "-c", source_file, "-o", object_file]
-        subprocess.run(compile_command, check=True)
-        object_files.append(object_file)
+def run(cmd: list[str], cwd: Path) -> None:
+    print(f"\n▶ {' '.join(str(c) for c in cmd)}")
+    result = subprocess.run(cmd, cwd=cwd)
+    if result.returncode != 0:
+        print(f"\Command finished with code {result.returncode}")
+        sys.exit(result.returncode)
 
-    # Link object files into an executable
-    link_command = ["g++", "-std=c++17", "-o", output_executable] + object_files + link_libraries
-    subprocess.run(link_command, check=True)
-    print(f"Compilation successful. Executable '{output_executable}' created.")
 
-    # Copy the executable to the compile/ directory
-    compile_dir = "compile/"
-    if not os.path.exists(compile_dir):
-        os.makedirs(compile_dir)
+def main() -> None:
+    BUILD_DIR.mkdir(exist_ok=True)
 
-    subprocess.run(["cp", output_executable, compile_dir], check=True)
-    print(f"Executable moved to '{compile_dir}'.")
+    root = Path(__file__).resolve().parent
 
-except subprocess.CalledProcessError as e:
-    print(f"Compilation failed: {e}")
-except FileNotFoundError:
-    print("Error: 'g++' compiler not found. Please install it and make sure it's in your PATH.")
-finally:
-    # Clean up object files
-    for object_file in object_files:
-        if os.path.exists(object_file):
-            os.remove(object_file)
-    if os.path.exists(output_executable):
-        os.remove(output_executable)
+    print("Configuring with CMake...")
+    run(["cmake", str(root)], cwd=BUILD_DIR)
+
+    print("Building...")
+    cpu_count = os.cpu_count() or 1
+    run(["make", f"-j{cpu_count}"], cwd=BUILD_DIR)
+
+    binary = BUILD_DIR / EXECUTABLE
+    if not binary.exists():
+        print(f"Executable file not found: {binary}")
+        sys.exit(1)
+
+    COMPILE_DIR.mkdir(exist_ok=True)
+    dest = COMPILE_DIR / EXECUTABLE
+    shutil.copy2(binary, dest)
+    print(f"\n Executable file copied to: {dest}")
+
+
+if __name__ == "__main__":
+    main()
