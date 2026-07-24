@@ -3,10 +3,12 @@
 #include <iostream>
 
 char Lexer::peek() const { return pos < source.size() ? source[pos] : 0; }
-char Lexer::peek_next() const {
+char Lexer::peek_next() const
+{
   return pos + 1 < source.size() ? source[pos + 1] : 0;
 }
-char Lexer::get() {
+char Lexer::get()
+{
   if (pos >= source.size())
     return 0;
   column++;
@@ -15,14 +17,18 @@ char Lexer::get() {
 
 Lexer::Lexer(std::string src) : source(std::move(src)) {}
 
-Token Lexer::next_token() {
-  while (true) {
+Token Lexer::next_token()
+{
+  while (true)
+  {
     char c = peek();
     if (c == 0)
       return {T_EOF, "", line, column};
-    if (std::isspace(c)) {
+    if (std::isspace(c))
+    {
       get();
-      if (c == '\n') {
+      if (c == '\n')
+      {
         line++;
         column = 1;
       }
@@ -32,60 +38,75 @@ Token Lexer::next_token() {
     int token_line = line;
     int token_column = column;
 
-    if (c == '{') {
+    if (c == '{')
+    {
       get();
       return {T_LBRACE, "{", token_line, token_column};
     }
-    if (c == '}') {
+    if (c == '}')
+    {
       get();
       return {T_RBRACE, "}", token_line, token_column};
     }
-    if (c == '(') {
+    if (c == '(')
+    {
       get();
       return {T_LPAREN, "(", token_line, token_column};
     }
-    if (c == ')') {
+    if (c == ')')
+    {
       get();
       return {T_RPAREN, ")", token_line, token_column};
     }
-    if (c == ',') {
+    if (c == ',')
+    {
       get();
       return {T_COMMA, ",", token_line, token_column};
     }
-    if (c == '+') {
+    if (c == '+')
+    {
       get();
       return {T_PLUS, "+", token_line, token_column};
     }
-    if (c == '-') {
+    if (c == '-')
+    {
       get();
       return {T_MINUS, "-", token_line, token_column};
     }
-    if (c == '*') {
+    if (c == '*')
+    {
       get();
       return {T_STAR, "*", token_line, token_column};
     }
-    if (c == '/') {
-      if (peek_next() == '/') {
+    if (c == '/')
+    {
+      if (peek_next() == '/')
+      {
         std::string comment = "//";
         get();
         get();
-        while (peek() != 0 && peek() != '\n' && peek() != '\r') {
+        while (peek() != 0 && peek() != '\n' && peek() != '\r')
+        {
           comment += get();
         }
         return {T_LINE_COMMENT, comment, token_line, token_column};
       }
-      if (peek_next() == '*') {
+      if (peek_next() == '*')
+      {
         std::string comment = "/*";
         get();
         get();
-        while (peek() != 0) {
+        while (peek() != 0)
+        {
           char ch = get();
           comment += ch;
-          if (ch == '\n' || ch == '\r') {
+          if (ch == '\n')
+          {
             line++;
             column = 1;
           }
-          if (ch == '*' && peek() == '/') {
+          if (ch == '*' && peek() == '/')
+          {
             comment += get();
             break;
           }
@@ -95,42 +116,52 @@ Token Lexer::next_token() {
       get();
       return {T_SLASH, "/", token_line, token_column};
     }
-    if (c == '=') {
+    if (c == '=')
+    {
       get();
-      if (peek() == '=') {
+      if (peek() == '=')
+      {
         get();
         return {T_EQUAL_EQUAL, "==", token_line, token_column};
       }
       return {T_EQUAL, "=", token_line, token_column};
     }
-    if (c == '>') {
+    if (c == '>')
+    {
       get();
-      if (peek() == '=') {
+      if (peek() == '=')
+      {
         get();
         return {T_GREATER_EQUAL, ">=", token_line, token_column};
       }
       return {T_GREATER, ">", token_line, token_column};
     }
-    if (c == '<') {
+    if (c == '<')
+    {
       get();
-      if (peek() == '=') {
+      if (peek() == '=')
+      {
         get();
         return {T_LESS_EQUAL, "<=", token_line, token_column};
       }
       return {T_LESS, "<", token_line, token_column};
     }
-    if (c == '!') {
+    if (c == '!')
+    {
       get();
-      if (peek() == '=') {
+      if (peek() == '=')
+      {
         get();
         return {T_NOT_EQUAL, "!=", token_line, token_column};
       }
       pos--;
       column--;
     }
-    if (c == ':') {
+    if (c == ':')
+    {
       get();
-      if (peek() == ':') {
+      if (peek() == ':')
+      {
         get();
         return {T_COLON_COLON, "::", token_line, token_column};
       }
@@ -138,18 +169,22 @@ Token Lexer::next_token() {
       column--;
     }
 
-    if (c == '"') {
+    if (c == '"')
+    {
       get();
       std::string str;
       bool is_first_char = true;
 
-      if (peek() == '\n' || peek() == '\r') {
+      if (peek() == '\n' || peek() == '\r')
+      {
         char newline = get();
-        if (newline == '\n' || newline == '\r') {
+        if (newline == '\n' || newline == '\r')
+        {
           line++;
           column = 1;
         }
-        while (peek() == ' ' || peek() == '\t') {
+        while (peek() == ' ' || peek() == '\t')
+        {
           get();
         }
         is_first_char = false;
@@ -157,54 +192,78 @@ Token Lexer::next_token() {
 
       size_t iterations = 0;
       size_t last_pos = pos;
-      while (peek() != 0) {
+      while (peek() != 0)
+      {
         iterations++;
-        if (iterations > 100000) {
+        if (iterations > 100000)
+        {
           std::cerr << "Error: Infinite loop in string lexer at line " << line
                     << std::endl;
           break;
         }
-        if (pos == last_pos && iterations > 1000) {
+        if (pos == last_pos && iterations > 1000)
+        {
           std::cerr << "Error: Lexer stuck at position " << pos << " in string"
                     << std::endl;
           break;
         }
         last_pos = pos;
 
-        if (peek() == '\\') {
+        if (peek() == '\\')
+        {
           get();
           char escaped = get();
-          if (escaped == 0) {
+          if (escaped == 0)
+          {
             break;
           }
-          if (escaped == 'n') {
+          if (escaped == 'n')
+          {
             str += '\n';
-          } else if (escaped == 't') {
+          }
+          else if (escaped == 't')
+          {
             str += '\t';
-          } else if (escaped == 'r') {
+          }
+          else if (escaped == 'r')
+          {
             str += '\r';
-          } else if (escaped == '"') {
+          }
+          else if (escaped == '"')
+          {
             str += '"';
-          } else if (escaped == '\\') {
+          }
+          else if (escaped == '\\')
+          {
             str += '\\';
-          } else {
+          }
+          else
+          {
             str += escaped;
           }
           continue;
         }
 
-        if (peek() == '"') {
+        if (peek() == '"')
+        {
           get();
           break;
-        } else {
+        }
+        else
+        {
           char ch = get();
-          if (ch == '\n') {
+          if (ch == '\n')
+          {
             line++;
             column = 1;
             str += '\n';
-          } else if (ch == ' ' || ch == '\t') {
+          }
+          else if (ch == ' ' || ch == '\t')
+          {
             str += ch;
-          } else {
+          }
+          else
+          {
             str += ch;
           }
           is_first_char = false;
@@ -213,7 +272,8 @@ Token Lexer::next_token() {
       return {T_STRING_LITERAL, str, token_line, token_column};
     }
 
-    if (std::isdigit(c) || (c == '-' && std::isdigit(peek() + 1)) || c == '.') {
+    if (std::isdigit(c) || (c == '-' && std::isdigit(peek() + 1)) || c == '.')
+    {
       std::string num;
       if (c == '-' || c == '.')
         num += get();
@@ -222,7 +282,8 @@ Token Lexer::next_token() {
       return {T_NUMBER, num, token_line, token_column};
     }
 
-    if (std::isalpha(c) || c == '_') {
+    if (std::isalpha(c) || c == '_')
+    {
       std::string id;
       while (std::isalnum(peek()) || peek() == '_' || peek() == '.')
         id += get();
