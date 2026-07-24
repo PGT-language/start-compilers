@@ -5,6 +5,8 @@
 enum TokenType {
   T_PACKAGE,
   T_FUNCTION,
+  // токен для коментарей он вот такое //
+  T_LINE_COMMENT,
   T_CLASS,
   T_PRINT,
   T_PRINTG,

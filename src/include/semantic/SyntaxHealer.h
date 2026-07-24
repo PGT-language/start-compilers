@@ -117,6 +117,7 @@ private:
       return ",";
     case T_EQUAL:
       return "=";
+    case T_PLUS:      
     default:
       return "";
     }
