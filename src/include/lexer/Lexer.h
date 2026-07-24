@@ -11,6 +11,7 @@ class Lexer {
   int column = 1;
 
   char peek() const;
+  char peek_next() const;
   char get();
 
 public:

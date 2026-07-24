@@ -3,6 +3,9 @@
 #include <iostream>
 
 char Lexer::peek() const { return pos < source.size() ? source[pos] : 0; }
+char Lexer::peek_next() const {
+  return pos + 1 < source.size() ? source[pos + 1] : 0;
+}
 char Lexer::get() {
   if (pos >= source.size())
     return 0;
@@ -62,6 +65,33 @@ Token Lexer::next_token() {
       return {T_STAR, "*", token_line, token_column};
     }
     if (c == '/') {
+      if (peek_next() == '/') {
+        std::string comment = "//";
+        get();
+        get();
+        while (peek() != 0 && peek() != '\n' && peek() != '\r') {
+          comment += get();
+        }
+        return {T_LINE_COMMENT, comment, token_line, token_column};
+      }
+      if (peek_next() == '*') {
+        std::string comment = "/*";
+        get();
+        get();
+        while (peek() != 0) {
+          char ch = get();
+          comment += ch;
+          if (ch == '\n' || ch == '\r') {
+            line++;
+            column = 1;
+          }
+          if (ch == '*' && peek() == '/') {
+            comment += get();
+            break;
+          }
+        }
+        return {T_BLOCK_COMMENT, comment, token_line, token_column};
+      }
       get();
       return {T_SLASH, "/", token_line, token_column};
     }

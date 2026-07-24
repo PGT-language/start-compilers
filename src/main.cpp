@@ -251,6 +251,10 @@ namespace
         do
         {
             t = lexer.next_token();
+            if (t.type == T_LINE_COMMENT || t.type == T_BLOCK_COMMENT)
+            {
+                continue;
+            }
             tokens.push_back(t);
             token_count++;
             if (token_count > 10000)

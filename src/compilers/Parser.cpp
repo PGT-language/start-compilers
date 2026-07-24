@@ -102,10 +102,21 @@ bool is_namespaced_builtin_member(const Token &token) {
          token.type == T_OBJECT || token.type == T_READ ||
          token.type == T_WRITE;
 }
+
+bool is_comment_token(TokenType type) {
+  return type == T_LINE_COMMENT || type == T_BLOCK_COMMENT;
+}
 } // namespace
 
 void Parser::load_tokens(std::vector<Token> t) {
-  tokens = std::move(t);
+  tokens.clear();
+  tokens.reserve(t.size() + 1);
+  for (const auto &token : t) {
+    if (is_comment_token(token.type)) {
+      continue;
+    }
+    tokens.push_back(token);
+  }
   pos = 0;
   if (tokens.empty() || tokens.back().type != T_EOF)
     tokens.push_back({T_EOF});

@@ -24,7 +24,8 @@ public:
 
   static RepairResult repair_source(const std::string &source,
                                     const std::vector<Token> &tokens) {
-    std::vector<TextEdit> edits = plan_edits(source, tokens);
+    std::vector<Token> filtered_tokens = strip_comment_tokens(tokens);
+    std::vector<TextEdit> edits = plan_edits(source, filtered_tokens);
     RepairResult result;
     result.source = source;
     result.changed = !edits.empty();
@@ -42,7 +43,8 @@ public:
   }
 
   static std::vector<Token> heal(const std::vector<Token> &tokens) {
-    std::vector<HealingToken> normalized = normalize(tokens, nullptr);
+    std::vector<Token> filtered_tokens = strip_comment_tokens(tokens);
+    std::vector<HealingToken> normalized = normalize(filtered_tokens, nullptr);
     return balance(normalized, "", nullptr);
   }
 
@@ -64,6 +66,22 @@ private:
     size_t offset = 0;
     std::string message;
   };
+
+  static bool is_comment_token(TokenType type) {
+    return type == T_LINE_COMMENT || type == T_BLOCK_COMMENT;
+  }
+
+  static std::vector<Token>
+  strip_comment_tokens(const std::vector<Token> &tokens) {
+    std::vector<Token> filtered;
+    filtered.reserve(tokens.size());
+    for (const auto &token : tokens) {
+      if (!is_comment_token(token.type)) {
+        filtered.push_back(token);
+      }
+    }
+    return filtered;
+  }
 
   static bool is_eof(TokenType type) { return type == T_EOF; }
 
