@@ -187,7 +187,8 @@ class PackageResolver {
       if (module.size() >= 2 && module.front() == '"' && module.back() == '"') {
         module = module.substr(1, module.size() - 2);
       }
-      if (version.size() >= 2 && version.front() == '"' && version.back() == '"') {
+      if (version.size() >= 2 && version.front() == '"' &&
+          version.back() == '"') {
         version = version.substr(1, version.size() - 2);
       }
       if (!module.empty()) {

@@ -447,7 +447,9 @@ std::string auth_user_model_source() {
 std::string auth_source(const InitOptions &options) {
   return "package auth\n"
          "\n"
-         "#use \"" + options.project_name + "/models/init\"\n"
+         "#use \"" +
+         options.project_name +
+         "/models/init\"\n"
          "\n"
          "function(register_page) {\n"
          "    return read::file(\"templates/register.html\")\n"
@@ -1118,8 +1120,7 @@ std::string init_source(const InitOptions &options) {
 
   bool has_imports = false;
   if (options.create_logging) {
-    source << "#use \"" << options.project_name
-           << "/components/logging\"\n";
+    source << "#use \"" << options.project_name << "/components/logging\"\n";
     has_imports = true;
   }
   if (options.use_database) {
@@ -1230,7 +1231,8 @@ std::string routes_source(const InitOptions &options) {
            << "    web::post(\"/api\", \"api\")\n";
   }
   if (options.create_static) {
-    source << "    web::get(\"/static/css/modules/pages/index.css\", \"index_css\")\n"
+    source << "    web::get(\"/static/css/modules/pages/index.css\", "
+              "\"index_css\")\n"
            << "    web::get(\"/static/css/modules/root.css\", \"root_css\")\n"
            << "    web::get(\"/static/css/main.css\", \"main_css\")\n"
            << "    web::get(\"/static/js/index.js\", \"index_js\")\n";
@@ -1240,9 +1242,11 @@ std::string routes_source(const InitOptions &options) {
            << "    web::get(\"/api/v1/openapi.yaml\", \"openapi_yaml\")\n";
   }
   if (options.create_auth) {
-    source << "    web::get(\"/static/css/modules/pages/register.css\", \"register_css\")\n"
+    source << "    web::get(\"/static/css/modules/pages/register.css\", "
+              "\"register_css\")\n"
            << "    web::get(\"/static/js/register.js\", \"register_js\")\n"
-           << "    web::get(\"/static/css/modules/pages/login.css\", \"login_css\")\n"
+           << "    web::get(\"/static/css/modules/pages/login.css\", "
+              "\"login_css\")\n"
            << "    web::get(\"/static/js/login.js\", \"login_js\")\n"
            << "    web::get(\"/auth/register\", \"register_page\")\n"
            << "    web::get(\"/auth/login\", \"login_page\")\n"
@@ -1538,7 +1542,8 @@ bool create_backend_project(const InitOptions &options) {
         if (!write_file(project_dir / "templates" / "register.html",
                         static_register_source(options)))
           return false;
-        if (!write_file(project_dir / "static" / "css" / "modules" / "pages" / "register.css",
+        if (!write_file(project_dir / "static" / "css" / "modules" / "pages" /
+                            "register.css",
                         static_auth_css_source()))
           return false;
         if (!write_file(project_dir / "static" / "css" / "main.css",
@@ -1550,7 +1555,8 @@ bool create_backend_project(const InitOptions &options) {
         if (!write_file(project_dir / "templates" / "login.html",
                         static_login_source(options)))
           return false;
-        if (!write_file(project_dir / "static" / "css" / "modules" / "pages" / "login.css",
+        if (!write_file(project_dir / "static" / "css" / "modules" / "pages" /
+                            "login.css",
                         static_auth_css_source()))
           return false;
         if (!write_file(project_dir / "static" / "js" / "login.js",
@@ -1560,7 +1566,8 @@ bool create_backend_project(const InitOptions &options) {
       if (!write_file(project_dir / "static" / "css" / "modules" / "root.css",
                       static_root_css_source()))
         return false;
-      if (!write_file(project_dir / "static" / "css" / "modules" / "pages" / "index.css",
+      if (!write_file(project_dir / "static" / "css" / "modules" / "pages" /
+                          "index.css",
                       static_css_source()))
         return false;
       if (!write_file(project_dir / "static" / "js" / "index.js",

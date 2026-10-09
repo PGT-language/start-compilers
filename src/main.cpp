@@ -1,689 +1,614 @@
-#include "include/lexer/Lexer.h"
-#include "include/parser/Parser.h"
-#include "include/semantic/SyntaxHealer.h"
-#include "include/interpreter/Interpreter.h"
-#include "include/utils/Utils.h"
-#include "include/token/Ast.h"
-#include "include/semantic/SemanticAnalyzer.h"
-#include "include/utils/Error.h"
-#include "include/package/PackageResolver.h"
 #include "include/gen/Generator.h"
 #include "include/init/ProjectInit.h"
+#include "include/interpreter/Interpreter.h"
+#include "include/lexer/Lexer.h"
+#include "include/package/PackageResolver.h"
+#include "include/parser/Parser.h"
+#include "include/semantic/SemanticAnalyzer.h"
+#include "include/semantic/SyntaxHealer.h"
+#include "include/token/Ast.h"
+#include "include/utils/Error.h"
+#include "include/utils/Utils.h"
 
-#include <iostream>
-#include <fstream>
-#include <set>
-#include <map>
 #include <cctype>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <map>
+#include <set>
 #include <sstream>
 #include <string>
 #include <vector>
 
-namespace
-{
-    std::string trim_mod_text(const std::string &value)
-    {
-        size_t start = 0;
-        while (start < value.size() && std::isspace(static_cast<unsigned char>(value[start])))
-        {
-            start++;
-        }
-        size_t end = value.size();
-        while (end > start && std::isspace(static_cast<unsigned char>(value[end - 1])))
-        {
-            end--;
-        }
-        return value.substr(start, end - start);
-    }
-
-    std::vector<std::string> split_mod_words(const std::string &value)
-    {
-        std::vector<std::string> words;
-        std::string current;
-        for (char ch : value)
-        {
-            if (std::isspace(static_cast<unsigned char>(ch)))
-            {
-                if (!current.empty())
-                {
-                    words.push_back(current);
-                    current.clear();
-                }
-            }
-            else
-            {
-                current += ch;
-            }
-        }
-        if (!current.empty())
-        {
-            words.push_back(current);
-        }
-        return words;
-    }
-
-    std::string module_cache_name(const std::string &module_path)
-    {
-        std::string name;
-        for (char raw_ch : module_path)
-        {
-            unsigned char ch = static_cast<unsigned char>(raw_ch);
-            if (std::isalnum(ch) || raw_ch == '_' || raw_ch == '-' || raw_ch == '.')
-            {
-                name += raw_ch;
-            }
-            else
-            {
-                name += '_';
-            }
-        }
-        return name.empty() ? "module" : name;
-    }
-
-    std::string shell_quote(const std::string &value)
-    {
-        std::string quoted = "'";
-        for (char ch : value)
-        {
-            if (ch == '\'')
-            {
-                quoted += "'\\''";
-            }
-            else
-            {
-                quoted += ch;
-            }
-        }
-        quoted += "'";
-        return quoted;
-    }
-
-    std::string clone_url_for_module(const std::string &module_path)
-    {
-        if (module_path.find("://") != std::string::npos || module_path.find(':') != std::string::npos)
-        {
-            return module_path;
-        }
-        return "https://" + module_path;
-    }
-
-    struct PgtRequirement
-    {
-        std::string path;
-        std::string version;
-    };
-
-    std::vector<PgtRequirement> read_pgt_requirements()
-    {
-        std::vector<PgtRequirement> requirements;
-        std::ifstream file("pgt.mod");
-        if (!file)
-        {
-            return requirements;
-        }
-
-        bool in_dependencies_block = false;
-        std::string line;
-        while (std::getline(file, line))
-        {
-            std::string cleaned = trim_mod_text(line);
-            size_t comment = cleaned.find("//");
-            if (comment != std::string::npos)
-            {
-                cleaned = trim_mod_text(cleaned.substr(0, comment));
-            }
-            if (cleaned.empty() || cleaned.rfind("//", 0) == 0)
-            {
-                continue;
-            }
-            if (cleaned == "dependencies {")
-            {
-                in_dependencies_block = true;
-                continue;
-            }
-            if (in_dependencies_block && cleaned == "}")
-            {
-                in_dependencies_block = false;
-                continue;
-            }
-            if (!in_dependencies_block)
-            {
-                continue;
-            }
-
-            size_t equals = cleaned.find('=');
-            if (equals == std::string::npos)
-            {
-                continue;
-            }
-
-            std::string module = trim_mod_text(cleaned.substr(0, equals));
-            std::string version = trim_mod_text(cleaned.substr(equals + 1));
-            if (module.size() >= 2 && module.front() == '"' && module.back() == '"')
-            {
-                module = module.substr(1, module.size() - 2);
-            }
-            if (version.size() >= 2 && version.front() == '"' && version.back() == '"')
-            {
-                version = version.substr(1, version.size() - 2);
-            }
-            if (!module.empty())
-            {
-                requirements.push_back({module, version});
-            }
-        }
-        return requirements;
-    }
-
-    int run_mod_command(int argc, char **argv)
-    {
-        if (argc < 3)
-        {
-            std::cerr << "Usage: pgt mod <init|download> ...\n";
-            return 1;
-        }
-
-        std::string subcommand = argv[2];
-        if (subcommand == "init")
-        {
-            if (argc < 4)
-            {
-                std::cerr << "Usage: pgt mod init <module-name>\n";
-                return 1;
-            }
-            if (std::filesystem::exists("pgt.mod"))
-            {
-                std::cerr << "pgt.mod already exists\n";
-                return 1;
-            }
-            std::ofstream file("pgt.mod");
-            if (!file.is_open())
-            {
-                std::cerr << "Error: Cannot create pgt.mod\n";
-                return 1;
-            }
-            file << "module " << argv[3] << "\n"
-                 << "version 0.1\n"
-                 << "\n"
-                 << "dependencies {\n"
-                 << "}\n";
-            file.close();
-            std::cout << "Created pgt.mod\n";
-            return 0;
-        }
-
-        if (subcommand == "download")
-        {
-            std::vector<PgtRequirement> requirements = read_pgt_requirements();
-            if (requirements.empty())
-            {
-                std::cerr << "No requirements found in pgt.mod\n";
-                return 1;
-            }
-            std::filesystem::create_directories(std::filesystem::path(".pgt") / "pkg");
-            for (const auto &requirement : requirements)
-            {
-                std::filesystem::path target = std::filesystem::path(".pgt") / "pkg" / module_cache_name(requirement.path);
-                if (std::filesystem::exists(target))
-                {
-                    std::cout << "Already downloaded: " << requirement.path << "\n";
-                    continue;
-                }
-
-                std::ostringstream command;
-                command << "git clone " << shell_quote(clone_url_for_module(requirement.path)) << " "
-                        << shell_quote(target.string());
-                if (std::system(command.str().c_str()) != 0)
-                {
-                    std::cerr << "Error: Failed to download " << requirement.path << "\n";
-                    return 1;
-                }
-                if (!requirement.version.empty())
-                {
-                    std::ostringstream checkout;
-                    checkout << "git -C " << shell_quote(target.string()) << " checkout " << shell_quote(requirement.version);
-                    if (std::system(checkout.str().c_str()) != 0)
-                    {
-                        std::cerr << "Error: Failed to checkout " << requirement.version << " in " << requirement.path << "\n";
-                        return 1;
-                    }
-                }
-            }
-            return 0;
-        }
-
-        std::cerr << "Unknown mod command: " << subcommand << "\n";
-        std::cerr << "Usage: pgt mod <init|download> ...\n";
-        return 1;
-    }
-
-    bool tokenize_source(const std::string &source, std::vector<Token> &tokens)
-    {
-        tokens.clear();
-        Lexer lexer(source);
-        Token t;
-        size_t token_count = 0;
-        do
-        {
-            t = lexer.next_token();
-            if (t.type == T_LINE_COMMENT || t.type == T_BLOCK_COMMENT)
-            {
-                continue;
-            }
-            tokens.push_back(t);
-            token_count++;
-            if (token_count > 10000)
-            {
-                std::cerr << "Error: Too many tokens, possible infinite loop in lexer" << std::endl;
-                return false;
-            }
-        } while (t.type != T_EOF);
-
-        return true;
-    }
+namespace {
+std::string trim_mod_text(const std::string &value) {
+  size_t start = 0;
+  while (start < value.size() &&
+         std::isspace(static_cast<unsigned char>(value[start]))) {
+    start++;
+  }
+  size_t end = value.size();
+  while (end > start &&
+         std::isspace(static_cast<unsigned char>(value[end - 1]))) {
+    end--;
+  }
+  return value.substr(start, end - start);
 }
 
-int main(int argc, char **argv)
-{
-    if (argc < 2)
-    {
-        std::cout << "Program Generate Time (PGT) Compiler v0.1\n";
-        std::cout << "Usage:\n";
-        std::cout << "  pgt help                — Show this help\n";
-        std::cout << "  pgt version             — Show version\n";
-        std::cout << "  pgt run <file.pgt>      — Run PGT program\n";
-        std::cout << "  pgt run <file.pgt> --debug — Run with debug output\n";
-        std::cout << "  pgt init [template] [name] — Initialize a project from template\n";
-        std::cout << "  pgt mod init <module>    — Create pgt.mod\n";
-        std::cout << "  pgt mod download         — Download pgt.mod libraries\n";
-        std::cout << "  pgt generate component <name> — Generate a PGT component\n";
-        std::cout << "  pgt generate file <path> [package] — Generate a PGT file\n";
-        std::cout << "  pgt generate model <name> [field:type ...] — Generate an ORM model\n";
-        std::cout << "  pgt generate class <name> [field:type ...] — Alias for model\n";
-        std::cout << "  pgt generate swagger [title] — Generate Swagger UI in sweiger/\n";
-        return 0;
+std::vector<std::string> split_mod_words(const std::string &value) {
+  std::vector<std::string> words;
+  std::string current;
+  for (char ch : value) {
+    if (std::isspace(static_cast<unsigned char>(ch))) {
+      if (!current.empty()) {
+        words.push_back(current);
+        current.clear();
+      }
+    } else {
+      current += ch;
+    }
+  }
+  if (!current.empty()) {
+    words.push_back(current);
+  }
+  return words;
+}
+
+std::string module_cache_name(const std::string &module_path) {
+  std::string name;
+  for (char raw_ch : module_path) {
+    unsigned char ch = static_cast<unsigned char>(raw_ch);
+    if (std::isalnum(ch) || raw_ch == '_' || raw_ch == '-' || raw_ch == '.') {
+      name += raw_ch;
+    } else {
+      name += '_';
+    }
+  }
+  return name.empty() ? "module" : name;
+}
+
+std::string shell_quote(const std::string &value) {
+  std::string quoted = "'";
+  for (char ch : value) {
+    if (ch == '\'') {
+      quoted += "'\\''";
+    } else {
+      quoted += ch;
+    }
+  }
+  quoted += "'";
+  return quoted;
+}
+
+std::string clone_url_for_module(const std::string &module_path) {
+  if (module_path.find("://") != std::string::npos ||
+      module_path.find(':') != std::string::npos) {
+    return module_path;
+  }
+  return "https://" + module_path;
+}
+
+struct PgtRequirement {
+  std::string path;
+  std::string version;
+};
+
+std::vector<PgtRequirement> read_pgt_requirements() {
+  std::vector<PgtRequirement> requirements;
+  std::ifstream file("pgt.mod");
+  if (!file) {
+    return requirements;
+  }
+
+  bool in_dependencies_block = false;
+  std::string line;
+  while (std::getline(file, line)) {
+    std::string cleaned = trim_mod_text(line);
+    size_t comment = cleaned.find("//");
+    if (comment != std::string::npos) {
+      cleaned = trim_mod_text(cleaned.substr(0, comment));
+    }
+    if (cleaned.empty() || cleaned.rfind("//", 0) == 0) {
+      continue;
+    }
+    if (cleaned == "dependencies {") {
+      in_dependencies_block = true;
+      continue;
+    }
+    if (in_dependencies_block && cleaned == "}") {
+      in_dependencies_block = false;
+      continue;
+    }
+    if (!in_dependencies_block) {
+      continue;
     }
 
-    std::string command = argv[1];
-
-    if (command == "help" || command == "--help" || command == "-h")
-    {
-        std::cout << "Program Generate Time (PGT) Compiler v1.1\n";
-        std::cout << "Commands:\n";
-        std::cout << "  help                    — Show this help message\n";
-        std::cout << "  version                 — Show compiler version\n";
-        std::cout << "  run <file.pgt>          — Execute .pgt file\n";
-        std::cout << "  run <file.pgt> --debug  — Execute with debug info\n\n";
-        std::cout << "  init [template] [name]  — Initialize a project from template\n";
-        std::cout << "  init backend test       — Create backend project named test\n\n";
-        std::cout << "  mod init <module>       — Create pgt.mod\n";
-        std::cout << "  mod download            — Download libraries from pgt.mod into .pgt/pkg\n\n";
-        std::cout << "  generate component <name> — Generate a PGT component\n";
-        std::cout << "  generate file <path> [package] — Generate a PGT file\n";
-        std::cout << "  generate model <name> [field:type ...] — Generate an ORM model\n";
-        std::cout << "  generate class <name> [field:type ...] — Alias for model\n";
-        std::cout << "  generate swagger [title] — Generate Swagger UI in sweiger/\n";
-        std::cout << "  history                 — Show history of commands\n";
-        std::cout << "Example:\n";
-        std::cout << "  ./pgt run test.pgt\n";
-        std::cout << "  ./pgt init backend test\n";
-        std::cout << "  ./pgt mod init github.com/me/app\n";
-        std::cout << "  ./pgt mod download\n";
-        std::cout << "  ./pgt generate component logging\n";
-        std::cout << "  ./pgt generate model user name:string email:string\n";
-        std::cout << "  ./pgt generate swagger MyApi\n";
-        return 0;
+    size_t equals = cleaned.find('=');
+    if (equals == std::string::npos) {
+      continue;
     }
 
-    if (command == "version" || command == "--version" || command == "-v")
-    {
-        std::cout << "PGT Compiler v1.1\n";
-        std::cout << "Built on Aprel 21 2026\n";
-        std::cout << "Author: pabla\n";
-        return 0;
+    std::string module = trim_mod_text(cleaned.substr(0, equals));
+    std::string version = trim_mod_text(cleaned.substr(equals + 1));
+    if (module.size() >= 2 && module.front() == '"' && module.back() == '"') {
+      module = module.substr(1, module.size() - 2);
     }
-
-    if (command == "generate" || command == "g")
-    {
-        return run_generator_command(argc, argv);
+    if (version.size() >= 2 && version.front() == '"' &&
+        version.back() == '"') {
+      version = version.substr(1, version.size() - 2);
     }
-
-    if (command == "init")
-    {
-        return run_project_init_command(argc, argv);
+    if (!module.empty()) {
+      requirements.push_back({module, version});
     }
+  }
+  return requirements;
+}
 
-    if (command == "mod")
-    {
-        return run_mod_command(argc, argv);
-    }
-
-    if (command == "run")
-    {
-        if (argc < 3)
-        {
-            std::cerr << "Error: No input file specified.\n";
-            std::cerr << "Usage: pgt run <file.pgt> [--debug]\n";
-            return 1;
-        }
-
-        std::string filename = argv[2];
-
-        if (argc == 4 && std::string(argv[3]) == "--debug")
-        {
-            DEBUG = true;
-        }
-        else if (argc > 3)
-        {
-            std::cerr << "Unknown argument: " << argv[3] << "\n";
-            std::cerr << "Use 'pgt help' for usage.\n";
-            return 1;
-        }
-
-        std::set<std::string> loaded_files;
-        std::map<std::string, std::vector<std::shared_ptr<AstNode>>> file_asts;
-        std::map<std::string, std::string> file_packages;
-        std::map<std::string, std::string> directory_packages;
-        std::map<std::string, std::string> directory_package_sources;
-        std::vector<std::string> files_to_load = {filename};
-        PackageResolver package_resolver(filename, argv[0]);
-        if (!package_resolver.has_module_manifest())
-        {
-            std::cerr << "Error: Missing pgt.mod in the main file directory\n";
-            return 1;
-        }
-        if (package_resolver.project_module_name().empty())
-        {
-            std::cerr << "Error: pgt.mod must declare a module name\n";
-            return 1;
-        }
-        if (package_resolver.project_module_version().empty())
-        {
-            std::cerr << "Error: pgt.mod must declare a version\n";
-            return 1;
-        }
-
-        while (!files_to_load.empty())
-        {
-            std::string current_file = files_to_load.back();
-            files_to_load.pop_back();
-            if (loaded_files.count(current_file))
-            {
-                continue;
-            }
-
-            std::ifstream f(current_file);
-            if (!f)
-            {
-                std::cerr << "Error: Cannot open file '" << current_file << "'\n";
-                return 1;
-            }
-
-            std::string source((std::istreambuf_iterator<char>(f)), {});
-            f.close();
-
-            if (DEBUG)
-                std::cout << "[DEBUG] Loading file: " << current_file << std::endl;
-            if (DEBUG)
-                std::cout << "[DEBUG] File size: " << source.size() << " bytes" << std::endl;
-
-            std::vector<Token> tokens;
-            if (!tokenize_source(source, tokens))
-            {
-                return 1;
-            }
-
-            for (int repair_pass = 0; repair_pass < 5; ++repair_pass)
-            {
-                SyntaxHealer::RepairResult repair = SyntaxHealer::repair_source(source, tokens);
-                if (!repair.changed)
-                {
-                    break;
-                }
-
-                for (const auto &diagnostic : repair.diagnostics)
-                {
-                    std::cerr << "Syntax repair: " << current_file << ":"
-                              << diagnostic.line << ":" << diagnostic.column
-                              << ": " << diagnostic.message << "\n";
-                }
-
-                std::ofstream repaired_file(current_file);
-                if (!repaired_file)
-                {
-                    std::cerr << "Error: Cannot write repaired file '" << current_file << "'\n";
-                    return 1;
-                }
-                repaired_file << repair.source;
-                repaired_file.close();
-
-                source = repair.source;
-                if (!tokenize_source(source, tokens))
-                {
-                    return 1;
-                }
-            }
-
-            if (DEBUG)
-                std::cout << "[DEBUG] Tokenized " << tokens.size() << " tokens" << std::endl;
-
-            Parser parser;
-            parser.load_tokens(tokens);
-            if (DEBUG)
-                std::cout << "[DEBUG] Starting parse_program..." << std::endl;
-            std::vector<std::shared_ptr<AstNode>> program;
-            try
-            {
-                program = parser.parse_program();
-            }
-            catch (const CompilerError &e)
-            {
-                std::cerr << e.get_traceback();
-                return 1;
-            }
-            if (DEBUG)
-                std::cout << "[DEBUG] Parsed " << program.size() << " nodes" << std::endl;
-
-            if (!parser.found_package_decl())
-            {
-                SemanticError err("Missing package declaration: expected 'package <name>' at the top of the file.",
-                                  SourceLocation(1, 0, current_file));
-                std::cerr << err.get_traceback();
-                return 1;
-            }
-
-            std::string parsed_package_name = parser.parsed_package_name();
-            try
-            {
-                package_resolver.validate_package_directory(current_file, parsed_package_name);
-            }
-            catch (const CompilerError &e)
-            {
-                std::cerr << e.get_traceback();
-                return 1;
-            }
-
-            std::string current_dir = PackageResolver::directory_of(current_file);
-            if (directory_packages.count(current_dir) && directory_packages[current_dir] != parsed_package_name)
-            {
-                SemanticError err("Directory contains mixed packages: '" + directory_packages[current_dir] +
-                                      "' and '" + parsed_package_name + "'. Move package '" +
-                                      parsed_package_name + "' into its own directory.",
-                                  SourceLocation(1, 0, current_file));
-                std::cerr << err.get_traceback();
-                return 1;
-            }
-            directory_packages[current_dir] = parsed_package_name;
-            directory_package_sources[current_dir] = current_file;
-            file_packages[current_file] = parsed_package_name;
-
-            if (current_file == filename)
-            {
-                if (!parser.found_package_main())
-                {
-                    SemanticError err("Main file must declare 'package main'.",
-                                      SourceLocation(1, 0, current_file));
-                    std::cerr << err.get_traceback();
-                    return 1;
-                }
-                try
-                {
-                    package_resolver.validate_main_package_root(filename);
-                }
-                catch (const CompilerError &e)
-                {
-                    std::cerr << e.get_traceback();
-                    return 1;
-                }
-                if (!parser.found_return_zero())
-                {
-                    std::cerr << "Error: Missing 'return 0' at the end of main file\n";
-                    return 1;
-                }
-            }
-
-            file_asts[current_file] = program;
-
-            std::string base_dir = PackageResolver::directory_of(current_file);
-            for (const auto &node : program)
-            {
-                if (auto use = std::dynamic_pointer_cast<UseStmt>(node))
-                {
-                    ResolvedImport resolved_import = package_resolver.resolve_import_path(base_dir, use->module_path);
-                    if (!resolved_import.found)
-                    {
-                        SemanticError err("Module '" + use->module_path + "' was not found. Expected path '" +
-                                              resolved_import.path + "'.",
-                                          SourceLocation(use->location.line, use->location.column, current_file));
-                        std::cerr << err.get_traceback();
-                        return 1;
-                    }
-                    if (DEBUG)
-                    {
-                        std::cout << "[DEBUG] Found module: " << use->module_path
-                                  << " -> resolved to " << resolved_import.path << std::endl;
-                    }
-                    for (const auto &import_file : resolved_import.files)
-                    {
-                        files_to_load.push_back(import_file);
-                    }
-                }
-            }
-
-            loaded_files.insert(current_file);
-        }
-
-        for (const auto &[file, ast] : file_asts)
-        {
-            for (const auto &node : ast)
-            {
-                if (auto use = std::dynamic_pointer_cast<UseStmt>(node))
-                {
-                    ResolvedImport resolved_import = package_resolver.resolve_import_path(PackageResolver::directory_of(file),
-                                                                                          use->module_path);
-                    if (!resolved_import.found || resolved_import.files.empty())
-                    {
-                        std::cerr << "Error: Cannot find used module: " << resolved_import.path << "\n";
-                        return 1;
-                    }
-                    const std::string &current_package = file_packages[file];
-                    for (const auto &import_file : resolved_import.files)
-                    {
-                        if (!file_asts.count(import_file))
-                        {
-                            std::cerr << "Error: Cannot find imported file: " << import_file << "\n";
-                            return 1;
-                        }
-
-                        const std::string &imported_package = file_packages[import_file];
-                        if (imported_package == "main")
-                        {
-                            SemanticError err("Package 'main' cannot be used. Move shared code into a separate package.",
-                                              SourceLocation(use->location.line, use->location.column, file));
-                            std::cerr << err.get_traceback();
-                            return 1;
-                        }
-                        if (PackageResolver::directory_of(file) == PackageResolver::directory_of(import_file) &&
-                            current_package != imported_package)
-                        {
-                            SemanticError err("Directory cannot contain mixed packages: '" + current_package +
-                                                  "' and '" + imported_package +
-                                                  "'. Move package '" + imported_package + "' into its own directory.",
-                                              SourceLocation(use->location.line, use->location.column, file));
-                            std::cerr << err.get_traceback();
-                            return 1;
-                        }
-                    }
-                }
-            }
-        }
-
-        std::vector<std::shared_ptr<AstNode>> combined_program;
-        for (const auto &[file, ast] : file_asts)
-        {
-            for (const auto &node : ast)
-            {
-                if (!std::dynamic_pointer_cast<UseStmt>(node))
-                {
-                    combined_program.push_back(node);
-                }
-            }
-        }
-
-        for (const auto &node : combined_program)
-        {
-            if (auto func = std::dynamic_pointer_cast<FunctionDef>(node))
-            {
-                if (!func->has_return_one)
-                {
-                    SemanticError err("Function '" + func->name + "' must contain 'return 1'", func->location);
-                    std::cerr << err.get_traceback();
-                    return 1;
-                }
-            }
-        }
-
-        try
-        {
-            SemanticAnalyzer analyzer;
-            analyzer.analyze(combined_program);
-        }
-        catch (const CompilerError &e)
-        {
-            std::cerr << e.get_traceback();
-            return 1;
-        }
-
-        try
-        {
-            Interpreter interp;
-            interp.run(combined_program);
-        }
-        catch (const CompilerError &e)
-        {
-            std::cerr << e.get_traceback();
-            return 1;
-        }
-
-        return 0;
-    }
-
-    if (command == "history")
-    {
-        std::cout << "Hello, my name is Pabla\n";
-        std::cout << "I'm a programmer and a developer\n";
-        std::cout << "I'm a student of the 11th grade of the school\n";
-        std::cout << "I'm from Ukraine, Lutsk\n";
-        std::cout << "I'm 17 years old\n";
-        std::cout << "now i'm living Sweden, Malmö\n";
-        std::cout << "I'm studying at the Malmö University\n";
-        std::cout << "I'm learning programming and developing languages\n";
-        return 0;
-    }
-
-    std::cerr << "Unknown command: " << command << "\n";
-    std::cerr << "Use 'pgt help' for available commands.\n";
+int run_mod_command(int argc, char **argv) {
+  if (argc < 3) {
+    std::cerr << "Usage: pgt mod <init|download> ...\n";
     return 1;
+  }
+
+  std::string subcommand = argv[2];
+  if (subcommand == "init") {
+    if (argc < 4) {
+      std::cerr << "Usage: pgt mod init <module-name>\n";
+      return 1;
+    }
+    if (std::filesystem::exists("pgt.mod")) {
+      std::cerr << "pgt.mod already exists\n";
+      return 1;
+    }
+    std::ofstream file("pgt.mod");
+    if (!file.is_open()) {
+      std::cerr << "Error: Cannot create pgt.mod\n";
+      return 1;
+    }
+    file << "module " << argv[3] << "\n"
+         << "version 0.1\n"
+         << "\n"
+         << "dependencies {\n"
+         << "}\n";
+    file.close();
+    std::cout << "Created pgt.mod\n";
+    return 0;
+  }
+
+  if (subcommand == "download") {
+    std::vector<PgtRequirement> requirements = read_pgt_requirements();
+    if (requirements.empty()) {
+      std::cerr << "No requirements found in pgt.mod\n";
+      return 1;
+    }
+    std::filesystem::create_directories(std::filesystem::path(".pgt") / "pkg");
+    for (const auto &requirement : requirements) {
+      std::filesystem::path target = std::filesystem::path(".pgt") / "pkg" /
+                                     module_cache_name(requirement.path);
+      if (std::filesystem::exists(target)) {
+        std::cout << "Already downloaded: " << requirement.path << "\n";
+        continue;
+      }
+
+      std::ostringstream command;
+      command << "git clone "
+              << shell_quote(clone_url_for_module(requirement.path)) << " "
+              << shell_quote(target.string());
+      if (std::system(command.str().c_str()) != 0) {
+        std::cerr << "Error: Failed to download " << requirement.path << "\n";
+        return 1;
+      }
+      if (!requirement.version.empty()) {
+        std::ostringstream checkout;
+        checkout << "git -C " << shell_quote(target.string()) << " checkout "
+                 << shell_quote(requirement.version);
+        if (std::system(checkout.str().c_str()) != 0) {
+          std::cerr << "Error: Failed to checkout " << requirement.version
+                    << " in " << requirement.path << "\n";
+          return 1;
+        }
+      }
+    }
+    return 0;
+  }
+
+  std::cerr << "Unknown mod command: " << subcommand << "\n";
+  std::cerr << "Usage: pgt mod <init|download> ...\n";
+  return 1;
+}
+
+bool tokenize_source(const std::string &source, std::vector<Token> &tokens) {
+  tokens.clear();
+  Lexer lexer(source);
+  Token t;
+  size_t token_count = 0;
+  do {
+    t = lexer.next_token();
+    if (t.type == T_LINE_COMMENT || t.type == T_BLOCK_COMMENT) {
+      continue;
+    }
+    tokens.push_back(t);
+    token_count++;
+    if (token_count > 10000) {
+      std::cerr << "Error: Too many tokens, possible infinite loop in lexer"
+                << std::endl;
+      return false;
+    }
+  } while (t.type != T_EOF);
+
+  return true;
+}
+} // namespace
+
+int main(int argc, char **argv) {
+  if (argc < 2) {
+    std::cout << "Program Generate Time (PGT) Compiler v0.1\n";
+    std::cout << "Usage:\n";
+    std::cout << "  pgt help                — Show this help\n";
+    std::cout << "  pgt version             — Show version\n";
+    std::cout << "  pgt run <file.pgt>      — Run PGT program\n";
+    std::cout << "  pgt run <file.pgt> --debug — Run with debug output\n";
+    std::cout << "  pgt init [template] [name] — Initialize a project from "
+                 "template\n";
+    std::cout << "  pgt mod init <module>    — Create pgt.mod\n";
+    std::cout << "  pgt mod download         — Download pgt.mod libraries\n";
+    std::cout << "  pgt generate component <name> — Generate a PGT component\n";
+    std::cout << "  pgt generate file <path> [package] — Generate a PGT file\n";
+    std::cout << "  pgt generate model <name> [field:type ...] — Generate an "
+                 "ORM model\n";
+    std::cout
+        << "  pgt generate class <name> [field:type ...] — Alias for model\n";
+    std::cout
+        << "  pgt generate swagger [title] — Generate Swagger UI in sweiger/\n";
+    return 0;
+  }
+
+  std::string command = argv[1];
+
+  if (command == "help" || command == "--help" || command == "-h") {
+    std::cout << "Program Generate Time (PGT) Compiler v1.1\n";
+    std::cout << "Commands:\n";
+    std::cout << "  help                    — Show this help message\n";
+    std::cout << "  version                 — Show compiler version\n";
+    std::cout << "  run <file.pgt>          — Execute .pgt file\n";
+    std::cout << "  run <file.pgt> --debug  — Execute with debug info\n\n";
+    std::cout
+        << "  init [template] [name]  — Initialize a project from template\n";
+    std::cout
+        << "  init backend test       — Create backend project named test\n\n";
+    std::cout << "  mod init <module>       — Create pgt.mod\n";
+    std::cout << "  mod download            — Download libraries from pgt.mod "
+                 "into .pgt/pkg\n\n";
+    std::cout << "  generate component <name> — Generate a PGT component\n";
+    std::cout << "  generate file <path> [package] — Generate a PGT file\n";
+    std::cout
+        << "  generate model <name> [field:type ...] — Generate an ORM model\n";
+    std::cout << "  generate class <name> [field:type ...] — Alias for model\n";
+    std::cout
+        << "  generate swagger [title] — Generate Swagger UI in sweiger/\n";
+    std::cout << "  history                 — Show history of commands\n";
+    std::cout << "Example:\n";
+    std::cout << "  ./pgt run test.pgt\n";
+    std::cout << "  ./pgt init backend test\n";
+    std::cout << "  ./pgt mod init github.com/me/app\n";
+    std::cout << "  ./pgt mod download\n";
+    std::cout << "  ./pgt generate component logging\n";
+    std::cout << "  ./pgt generate model user name:string email:string\n";
+    std::cout << "  ./pgt generate swagger MyApi\n";
+    return 0;
+  }
+
+  if (command == "version" || command == "--version" || command == "-v") {
+    std::cout << "PGT Compiler v1.1\n";
+    std::cout << "Built on Aprel 21 2026\n";
+    std::cout << "Author: pabla\n";
+    return 0;
+  }
+
+  if (command == "generate" || command == "g") {
+    return run_generator_command(argc, argv);
+  }
+
+  if (command == "init") {
+    return run_project_init_command(argc, argv);
+  }
+
+  if (command == "mod") {
+    return run_mod_command(argc, argv);
+  }
+
+  if (command == "run") {
+    if (argc < 3) {
+      std::cerr << "Error: No input file specified.\n";
+      std::cerr << "Usage: pgt run <file.pgt> [--debug]\n";
+      return 1;
+    }
+
+    std::string filename = argv[2];
+
+    if (argc == 4 && std::string(argv[3]) == "--debug") {
+      DEBUG = true;
+    } else if (argc > 3) {
+      std::cerr << "Unknown argument: " << argv[3] << "\n";
+      std::cerr << "Use 'pgt help' for usage.\n";
+      return 1;
+    }
+
+    std::set<std::string> loaded_files;
+    std::map<std::string, std::vector<std::shared_ptr<AstNode>>> file_asts;
+    std::map<std::string, std::string> file_packages;
+    std::map<std::string, std::string> directory_packages;
+    std::map<std::string, std::string> directory_package_sources;
+    std::vector<std::string> files_to_load = {filename};
+    PackageResolver package_resolver(filename, argv[0]);
+    if (!package_resolver.has_module_manifest()) {
+      std::cerr << "Error: Missing pgt.mod in the main file directory\n";
+      return 1;
+    }
+    if (package_resolver.project_module_name().empty()) {
+      std::cerr << "Error: pgt.mod must declare a module name\n";
+      return 1;
+    }
+    if (package_resolver.project_module_version().empty()) {
+      std::cerr << "Error: pgt.mod must declare a version\n";
+      return 1;
+    }
+
+    while (!files_to_load.empty()) {
+      std::string current_file = files_to_load.back();
+      files_to_load.pop_back();
+      if (loaded_files.count(current_file)) {
+        continue;
+      }
+
+      std::ifstream f(current_file);
+      if (!f) {
+        std::cerr << "Error: Cannot open file '" << current_file << "'\n";
+        return 1;
+      }
+
+      std::string source((std::istreambuf_iterator<char>(f)), {});
+      f.close();
+
+      if (DEBUG)
+        std::cout << "[DEBUG] Loading file: " << current_file << std::endl;
+      if (DEBUG)
+        std::cout << "[DEBUG] File size: " << source.size() << " bytes"
+                  << std::endl;
+
+      std::vector<Token> tokens;
+      if (!tokenize_source(source, tokens)) {
+        return 1;
+      }
+
+      for (int repair_pass = 0; repair_pass < 5; ++repair_pass) {
+        SyntaxHealer::RepairResult repair =
+            SyntaxHealer::repair_source(source, tokens);
+        if (!repair.changed) {
+          break;
+        }
+
+        for (const auto &diagnostic : repair.diagnostics) {
+          std::cerr << "Syntax repair: " << current_file << ":"
+                    << diagnostic.line << ":" << diagnostic.column << ": "
+                    << diagnostic.message << "\n";
+        }
+
+        std::ofstream repaired_file(current_file);
+        if (!repaired_file) {
+          std::cerr << "Error: Cannot write repaired file '" << current_file
+                    << "'\n";
+          return 1;
+        }
+        repaired_file << repair.source;
+        repaired_file.close();
+
+        source = repair.source;
+        if (!tokenize_source(source, tokens)) {
+          return 1;
+        }
+      }
+
+      if (DEBUG)
+        std::cout << "[DEBUG] Tokenized " << tokens.size() << " tokens"
+                  << std::endl;
+
+      Parser parser;
+      parser.load_tokens(tokens);
+      if (DEBUG)
+        std::cout << "[DEBUG] Starting parse_program..." << std::endl;
+      std::vector<std::shared_ptr<AstNode>> program;
+      try {
+        program = parser.parse_program();
+      } catch (const CompilerError &e) {
+        std::cerr << e.get_traceback();
+        return 1;
+      }
+      if (DEBUG)
+        std::cout << "[DEBUG] Parsed " << program.size() << " nodes"
+                  << std::endl;
+
+      if (!parser.found_package_decl()) {
+        SemanticError err("Missing package declaration: expected 'package "
+                          "<name>' at the top of the file.",
+                          SourceLocation(1, 0, current_file));
+        std::cerr << err.get_traceback();
+        return 1;
+      }
+
+      std::string parsed_package_name = parser.parsed_package_name();
+      try {
+        package_resolver.validate_package_directory(current_file,
+                                                    parsed_package_name);
+      } catch (const CompilerError &e) {
+        std::cerr << e.get_traceback();
+        return 1;
+      }
+
+      std::string current_dir = PackageResolver::directory_of(current_file);
+      if (directory_packages.count(current_dir) &&
+          directory_packages[current_dir] != parsed_package_name) {
+        SemanticError err("Directory contains mixed packages: '" +
+                              directory_packages[current_dir] + "' and '" +
+                              parsed_package_name + "'. Move package '" +
+                              parsed_package_name + "' into its own directory.",
+                          SourceLocation(1, 0, current_file));
+        std::cerr << err.get_traceback();
+        return 1;
+      }
+      directory_packages[current_dir] = parsed_package_name;
+      directory_package_sources[current_dir] = current_file;
+      file_packages[current_file] = parsed_package_name;
+
+      if (current_file == filename) {
+        if (!parser.found_package_main()) {
+          SemanticError err("Main file must declare 'package main'.",
+                            SourceLocation(1, 0, current_file));
+          std::cerr << err.get_traceback();
+          return 1;
+        }
+        try {
+          package_resolver.validate_main_package_root(filename);
+        } catch (const CompilerError &e) {
+          std::cerr << e.get_traceback();
+          return 1;
+        }
+        if (!parser.found_return_zero()) {
+          std::cerr << "Error: Missing 'return 0' at the end of main file\n";
+          return 1;
+        }
+      }
+
+      file_asts[current_file] = program;
+
+      std::string base_dir = PackageResolver::directory_of(current_file);
+      for (const auto &node : program) {
+        if (auto use = std::dynamic_pointer_cast<UseStmt>(node)) {
+          ResolvedImport resolved_import =
+              package_resolver.resolve_import_path(base_dir, use->module_path);
+          if (!resolved_import.found) {
+            SemanticError err("Module '" + use->module_path +
+                                  "' was not found. Expected path '" +
+                                  resolved_import.path + "'.",
+                              SourceLocation(use->location.line,
+                                             use->location.column,
+                                             current_file));
+            std::cerr << err.get_traceback();
+            return 1;
+          }
+          if (DEBUG) {
+            std::cout << "[DEBUG] Found module: " << use->module_path
+                      << " -> resolved to " << resolved_import.path
+                      << std::endl;
+          }
+          for (const auto &import_file : resolved_import.files) {
+            files_to_load.push_back(import_file);
+          }
+        }
+      }
+
+      loaded_files.insert(current_file);
+    }
+
+    for (const auto &[file, ast] : file_asts) {
+      for (const auto &node : ast) {
+        if (auto use = std::dynamic_pointer_cast<UseStmt>(node)) {
+          ResolvedImport resolved_import = package_resolver.resolve_import_path(
+              PackageResolver::directory_of(file), use->module_path);
+          if (!resolved_import.found || resolved_import.files.empty()) {
+            std::cerr << "Error: Cannot find used module: "
+                      << resolved_import.path << "\n";
+            return 1;
+          }
+          const std::string &current_package = file_packages[file];
+          for (const auto &import_file : resolved_import.files) {
+            if (!file_asts.count(import_file)) {
+              std::cerr << "Error: Cannot find imported file: " << import_file
+                        << "\n";
+              return 1;
+            }
+
+            const std::string &imported_package = file_packages[import_file];
+            if (imported_package == "main") {
+              SemanticError err("Package 'main' cannot be used. Move shared "
+                                "code into a separate package.",
+                                SourceLocation(use->location.line,
+                                               use->location.column, file));
+              std::cerr << err.get_traceback();
+              return 1;
+            }
+            if (PackageResolver::directory_of(file) ==
+                    PackageResolver::directory_of(import_file) &&
+                current_package != imported_package) {
+              SemanticError err("Directory cannot contain mixed packages: '" +
+                                    current_package + "' and '" +
+                                    imported_package + "'. Move package '" +
+                                    imported_package +
+                                    "' into its own directory.",
+                                SourceLocation(use->location.line,
+                                               use->location.column, file));
+              std::cerr << err.get_traceback();
+              return 1;
+            }
+          }
+        }
+      }
+    }
+
+    std::vector<std::shared_ptr<AstNode>> combined_program;
+    for (const auto &[file, ast] : file_asts) {
+      for (const auto &node : ast) {
+        if (!std::dynamic_pointer_cast<UseStmt>(node)) {
+          combined_program.push_back(node);
+        }
+      }
+    }
+
+    for (const auto &node : combined_program) {
+      if (auto func = std::dynamic_pointer_cast<FunctionDef>(node)) {
+        if (!func->has_return_one) {
+          SemanticError err("Function '" + func->name +
+                                "' must contain 'return 1'",
+                            func->location);
+          std::cerr << err.get_traceback();
+          return 1;
+        }
+      }
+    }
+
+    try {
+      SemanticAnalyzer analyzer;
+      analyzer.analyze(combined_program);
+    } catch (const CompilerError &e) {
+      std::cerr << e.get_traceback();
+      return 1;
+    }
+
+    try {
+      Interpreter interp;
+      interp.run(combined_program);
+    } catch (const CompilerError &e) {
+      std::cerr << e.get_traceback();
+      return 1;
+    }
+
+    return 0;
+  }
+
+  if (command == "history") {
+    std::cout << "Hello, my name is Pabla\n";
+    std::cout << "I'm a programmer and a developer\n";
+    std::cout << "I'm a student of the 11th grade of the school\n";
+    std::cout << "I'm from Ukraine, Lutsk\n";
+    std::cout << "I'm 17 years old\n";
+    std::cout << "now i'm living Sweden, Malmö\n";
+    std::cout << "I'm studying at the Malmö University\n";
+    std::cout << "I'm learning programming and developing languages\n";
+    return 0;
+  }
+
+  std::cerr << "Unknown command: " << command << "\n";
+  std::cerr << "Use 'pgt help' for available commands.\n";
+  return 1;
 }

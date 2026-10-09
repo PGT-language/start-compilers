@@ -1,8 +1,8 @@
 #pragma once
 
 #include "../utils/Error.h"
-#include "Token.h"
 #include "../utils/Utils.h"
+#include "Token.h"
 #include <memory>
 #include <string>
 #include <vector>

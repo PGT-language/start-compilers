@@ -135,7 +135,7 @@ private:
       return ",";
     case T_EQUAL:
       return "=";
-    case T_PLUS:      
+    case T_PLUS:
     default:
       return "";
     }
@@ -808,9 +808,8 @@ private:
   }
 
   static std::vector<std::string> statement_words() {
-    return {"package", "#use", "function", "class",
-            "return",  "if",    "else",   "while",    "call",
-            "cout",    "print", "printg", "println"};
+    return {"package", "#use", "function", "class", "return", "if",     "else",
+            "while",   "call", "cout",     "print", "printg", "println"};
   }
 
   static std::vector<std::string> plain_builtin_words() {
