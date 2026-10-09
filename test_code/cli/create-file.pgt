@@ -1,0 +1,10 @@
+package cli
+
+function(create_file) {
+    create::file("test.txt")
+    write::file("test.txt", "test content")
+
+    println("Файл создан.")
+    return 1
+}
+return 0

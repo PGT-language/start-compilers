@@ -1,0 +1,16 @@
+package test
+
+function(main) {
+    println("Приветствую в тесте!")
+    println("Выберите действие:")
+    println("1. Выйти")
+    cout(input, "{int}")
+
+    if (input == 1) {
+        println("Выход из программы...")
+    } else {
+        println("Неверный выбор, попробуйте снова.")
+    }
+    return 1
+}
+return 0

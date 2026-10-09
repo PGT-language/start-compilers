@@ -1,0 +1,11 @@
+package runtime
+
+from "models/init" import migrate
+
+function(setup) {
+    log::console()
+    log::info("starting marketplace")
+    sql::open("marketplace.sqlite")
+    migrate()
+    return 1
+}

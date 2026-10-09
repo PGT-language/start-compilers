@@ -1,0 +1,346 @@
+package api
+
+from "models/init" import save
+
+function(marketplace_page) {
+    return read::file("static/index.html")
+    return 1
+}
+
+function(marketplace_css) {
+    return read::file("static/index.css")
+    return 1
+}
+
+function(marketplace_js) {
+    return read::file("static/index.js")
+    return 1
+}
+
+function(health) {
+    return json::object("status", "ok", "service", "marketplace")
+    return 1
+}
+
+function(plugins_feed) {
+    return ""
+    return 1
+}
+
+function(plugin_slot, id + int) {
+    plugin + object = orm::find("Plugin", "id", id)
+    if (json::stringify(plugin) == "{}") {
+        return ""
+    }
+    if (json::stringify(json::get(plugin, "manifest_json")) == "null") {
+        return ""
+    }
+    manifest_json + string = json::get(plugin, "manifest_json")
+    return manifest_json
+    return 1
+}
+
+function(plugin_1) {
+    plugin + object = orm::find("Plugin", "id", 1)
+    if (json::stringify(plugin) == "{}") {
+        return ""
+    }
+    if (json::stringify(json::get(plugin, "manifest_json")) == "null") {
+        return ""
+    }
+    manifest_json + string = json::get(plugin, "manifest_json")
+    return manifest_json
+    return 1
+}
+
+function(plugin_2) {
+    return ""
+    return 1
+}
+
+function(plugin_3) {
+    return ""
+    return 1
+}
+
+function(plugin_4) {
+    return ""
+    return 1
+}
+
+function(plugin_5) {
+    return ""
+    return 1
+}
+
+function(plugin_6) {
+    return ""
+    return 1
+}
+
+function(plugin_7) {
+    return ""
+    return 1
+}
+
+function(plugin_8) {
+    return ""
+    return 1
+}
+
+function(plugin_9) {
+    return ""
+    return 1
+}
+
+function(plugin_10) {
+    return ""
+    return 1
+}
+
+function(plugin_11) {
+    return ""
+    return 1
+}
+
+function(plugin_12) {
+    return ""
+    return 1
+}
+
+function(plugin_13) {
+    return ""
+    return 1
+}
+
+function(plugin_14) {
+    return ""
+    return 1
+}
+
+function(plugin_15) {
+    return ""
+    return 1
+}
+
+function(plugin_16) {
+    return ""
+    return 1
+}
+
+function(plugin_17) {
+    return ""
+    return 1
+}
+
+function(plugin_18) {
+    return ""
+    return 1
+}
+
+function(plugin_19) {
+    return ""
+    return 1
+}
+
+function(plugin_20) {
+    return ""
+    return 1
+}
+
+function(plugin_21) {
+    return ""
+    return 1
+}
+
+function(plugin_22) {
+    return ""
+    return 1
+}
+
+function(plugin_23) {
+    return ""
+    return 1
+}
+
+function(plugin_24) {
+    return ""
+    return 1
+}
+
+function(plugin_25) {
+    return ""
+    return 1
+}
+
+function(plugin_26) {
+    return ""
+    return 1
+}
+
+function(plugin_27) {
+    return ""
+    return 1
+}
+
+function(plugin_28) {
+    return ""
+    return 1
+}
+
+function(plugin_29) {
+    return ""
+    return 1
+}
+
+function(plugin_30) {
+    return ""
+    return 1
+}
+
+function(plugin_31) {
+    return ""
+    return 1
+}
+
+function(plugin_32) {
+    return ""
+    return 1
+}
+
+function(plugin_33) {
+    return ""
+    return 1
+}
+
+function(plugin_34) {
+    return ""
+    return 1
+}
+
+function(plugin_35) {
+    return ""
+    return 1
+}
+
+function(plugin_36) {
+    return ""
+    return 1
+}
+
+function(plugin_37) {
+    return ""
+    return 1
+}
+
+function(plugin_38) {
+    return ""
+    return 1
+}
+
+function(plugin_39) {
+    return ""
+    return 1
+}
+
+function(plugin_40) {
+    return ""
+    return 1
+}
+
+function(plugin_41) {
+    return ""
+    return 1
+}
+
+function(plugin_42) {
+    return ""
+    return 1
+}
+
+function(plugin_43) {
+    return ""
+    return 1
+}
+
+function(plugin_44) {
+    return ""
+    return 1
+}
+
+function(plugin_45) {
+    return ""
+    return 1
+}
+
+function(plugin_46) {
+    return ""
+    return 1
+}
+
+function(plugin_47) {
+    return ""
+    return 1
+}
+
+function(plugin_48) {
+    return ""
+    return 1
+}
+
+function(plugin_49) {
+    return ""
+    return 1
+}
+
+function(plugin_50) {
+    return ""
+    return 1
+}
+
+function(publish_plugin) {
+    body + string = request::body()
+    if (body == "") {
+        return json::object("error", "empty request body")
+    }
+    payload + object = json::parse(body)
+    if (json::stringify(json::get(payload, "token")) == "null") {
+        return json::object("error", "auth required")
+    }
+    if (json::stringify(json::get(payload, "plugin_json")) == "null") {
+        return json::object("error", "plugin json is required")
+    }
+    if (json::stringify(json::get(payload, "owner_email")) == "null") {
+        return json::object("error", "owner email is required")
+    }
+    token + string = json::get(payload, "token")
+    plugin_text + string = json::get(payload, "plugin_json")
+    owner_email + string = json::get(payload, "owner_email")
+    if (token == "") {
+        return json::object("error", "auth required")
+    }
+    if (plugin_text == "") {
+        return json::object("error", "plugin json is required")
+    }
+    if (owner_email == "") {
+        return json::object("error", "owner email is required")
+    }
+    if (jwt::verify(token, "marketplace-dev-secret-change-me")) {
+        owner + object = orm::find("User", "email", owner_email)
+        if (json::stringify(owner) == "{}") {
+            return json::object("error", "auth required")
+        }
+        plugin + object = json::parse(plugin_text)
+        save(json::object(
+            "owner_email", owner_email,
+            "name", json::get(plugin, "name"),
+            "slug", json::get(plugin, "slug"),
+            "version", json::get(plugin, "version"),
+            "manifest_json", plugin_text,
+            "created_at", json::get(plugin, "submitted_at")
+        ))
+        return json::object("status", "uploaded")
+    }
+    return json::object("error", "auth required")
+    return 1
+}

@@ -1,0 +1,11 @@
+package plugin
+
+class Plugin(db.Model) {
+    id = db.Column(db.Integer, primary_key=True)
+    owner_email = db.Column(db.String(160))
+    name = db.Column(db.String(160))
+    slug = db.Column(db.String(160))
+    version = db.Column(db.String(80))
+    manifest_json = db.Column(db.Text)
+    created_at = db.Column(db.String(80))
+}

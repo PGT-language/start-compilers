@@ -1,0 +1,43 @@
+package cli
+
+function(calculator) {
+    println("=== Простой калькулятор ===")
+    println("Введите два числа для вычислений")
+    
+    println("Первое число: ")
+    cout(input, "{int}")
+    a + int = input
+    
+    println("Второе число: ")
+    cout(input, "{int}")
+    b + int = input
+    
+    sum + int = a + b
+    diff + int = a - b
+    prod + int = a * b
+    quot + int = a / b
+    
+    println("--- Результаты ---")
+    println(a, "{int}")
+    println(" + ")
+    println(b, "{int}")
+    println(" = ", sum, "{int}")
+    
+    println(a, "{int}")
+    println(" - ")
+    println(b, "{int}")
+    println(" = ", diff, "{int}")
+    
+    println(a, "{int}")
+    println(" * ")
+    println(b, "{int}")
+    println(" = ", prod, "{int}")
+    
+    println(a, "{int}")
+    println(" / ")
+    println(b, "{int}")
+    println(" = ", quot, "{int}")
+    
+    return 1
+}
+return 0

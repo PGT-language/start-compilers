@@ -1,0 +1,8 @@
+package main
+
+function(main) {
+    body + bytes = "Hello from local server"
+    net::serve("127.0.0.1", 8083, body)
+    return 1
+}
+return 0

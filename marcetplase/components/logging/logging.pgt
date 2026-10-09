@@ -1,0 +1,46 @@
+package logging
+
+function(to_console) {
+    log::console()
+    return 1
+}
+
+function(to_file, path + string) {
+    log::file(path)
+    return 1
+}
+
+function(debug, message + string) {
+    log::debug(message)
+    return 1
+}
+
+function(trace, message + string) {
+    log::trace(message)
+    return 1
+}
+
+function(info, message + string) {
+    log::info(message)
+    return 1
+}
+
+function(notice, message + string) {
+    log::notice(message)
+    return 1
+}
+
+function(warn, message + string) {
+    log::warn(message)
+    return 1
+}
+
+function(error, message + string) {
+    log::error(message)
+    return 1
+}
+
+function(critical, message + string) {
+    log::critical(message)
+    return 1
+}

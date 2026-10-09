@@ -1,0 +1,24 @@
+package cli
+
+function(fetch_url) {
+    println("Введите URL для получения данных:")
+    cout(url, "{string}")
+
+    println("Получение данных по URL...")
+
+    protocols + string = protocol(url) 
+    
+
+    if (protocols == "http") {
+        net::get(url)
+    } else {
+        if (protocols == "https") {
+            net::https::get(url)
+        } else {
+            println("Неподдерживаемый протокол.")
+        }
+    }
+
+    return 1
+}
+return 0

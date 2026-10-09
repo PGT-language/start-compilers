@@ -1,0 +1,8 @@
+package cli
+
+function(delete_file) {
+    delete::file("test.txt")
+    println("Файл удалён.")
+    return 1
+}
+return 0

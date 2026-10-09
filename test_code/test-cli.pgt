@@ -1,0 +1,65 @@
+package main
+
+from "cli/create-file" import create_file
+from "cli/delete-file" import delete_file
+from "cli/read-file" import read_file
+from "cli/calculator" import calculator
+from "cli/fetch-url" import fetch_url
+
+function(main) {
+    running + int = 1
+    file_created + int = 0
+
+    while running {
+        println("Приветствую в CLI тесте!")
+        println("Выберите действие:")
+        println("1. Создать файл")
+        println("2. Выйти")
+        println("3. Прочитать файл")
+        println("4. Удалить файл")
+        println("5. Получить данные по URL")
+        println("6. Калькулятор")
+        cout(input, "{int}")
+
+        if (input == 1) {
+            println("Creating file...")
+            call(create_file)
+            file_created + int = 1
+        } else {
+            if (input == 2) {
+                println("Выход из программы...")
+                running + int = 0
+            } else {
+                if (input == 3) {
+                    if (file_created == 1) {
+                        call(read_file)
+                    } else {
+                        println("Сначала создайте файл.")
+                    }
+                } else {
+                    if (input == 4) {
+                        if (file_created == 1) {
+                            call(delete_file)
+                            file_created + int = 0
+                        } else {
+                            println("Удалять пока нечего.")
+                        }
+                    } else {
+                        if (input == 5) {
+                            call(fetch_url)
+                        } else {
+                            if (input == 6) {
+                                call(calculator)
+                        } else {
+                                println("Неверный выбор, попробуйте снова.")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    return 1
+}
+return 0

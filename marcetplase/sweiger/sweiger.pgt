@@ -1,0 +1,11 @@
+package sweiger
+
+function(docs) {
+    return read::file("sweiger/index.html")
+    return 1
+}
+
+function(openapi_yaml) {
+    return read::file("api.yaml")
+    return 1
+}

@@ -1,0 +1,20 @@
+package init
+
+from "../user" import User
+from "../plugin" import Plugin
+
+function(migrate) {
+    orm::migrate("User")
+    orm::migrate("Plugin")
+    return 1
+}
+
+function(save, data + object) {
+    orm::save("Plugin", data)
+    return 1
+}
+
+function(save_user, data + object) {
+    orm::save("User", data)
+    return 1
+}

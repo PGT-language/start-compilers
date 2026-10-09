@@ -1,0 +1,176 @@
+package auth
+
+from "models/init" import save_user
+
+jwt_secret + string = "marketplace-dev-secret-change-me"
+
+function(register_page) {
+    return read::file("static/register.html")
+    return 1
+}
+
+function(login_page) {
+    return read::file("static/login.html")
+    return 1
+}
+
+function(dashboard_page) {
+    return read::file("static/dashboard.html")
+    return 1
+}
+
+function(register_css) {
+    return read::file("static/register.css")
+    return 1
+}
+
+function(login_css) {
+    return read::file("static/login.css")
+    return 1
+}
+
+function(register_js) {
+    return read::file("static/register.js")
+    return 1
+}
+
+function(login_js) {
+    return read::file("static/login.js")
+    return 1
+}
+
+function(dashboard_js) {
+    return read::file("static/dashboard.js")
+    return 1
+}
+
+function(register_user) {
+    body + string = request::body()
+    if (body == "") {
+        return json::object("error", "empty request body")
+    }
+    payload + object = json::parse(body)
+    if (json::stringify(json::get(payload, "name")) == "null") {
+        return json::object("error", "name is required")
+    }
+    if (json::stringify(json::get(payload, "email")) == "null") {
+        return json::object("error", "email is required")
+    }
+    if (json::stringify(json::get(payload, "password")) == "null") {
+        return json::object("error", "password is required")
+    }
+    name + string = json::get(payload, "name")
+    email + string = json::get(payload, "email")
+    password + string = json::get(payload, "password")
+    if (name == "") {
+        return json::object("error", "name is required")
+    }
+    if (email == "") {
+        return json::object("error", "email is required")
+    }
+    if (password == "") {
+        return json::object("error", "password is required")
+    }
+    existing + object = orm::find("User", "email", email)
+    if (json::stringify(existing) != "{}") {
+        return json::object("error", "email already registered")
+    }
+    password_hash + string = auth::hash_password(password)
+    save_user(json::object("name", name, "email", email, "password", password_hash, "is_active", true))
+    created + object = orm::find("User", "email", email)
+    if (json::stringify(created) == "{}") {
+        return json::object("error", "account was not saved")
+    }
+    token + string = jwt::sign(json::object("sub", email, "email", email), jwt_secret)
+    return json::object("status", "registered", "token", token, "user", json::object("id", json::get(created, "id"), "name", json::get(created, "name"), "email", email))
+    return 1
+}
+
+function(login_user) {
+    body + string = request::body()
+    if (body == "") {
+        return json::object("error", "empty request body")
+    }
+    payload + object = json::parse(body)
+    if (json::stringify(json::get(payload, "email")) == "null") {
+        return json::object("error", "email is required")
+    }
+    if (json::stringify(json::get(payload, "password")) == "null") {
+        return json::object("error", "password is required")
+    }
+    email + string = json::get(payload, "email")
+    password + string = json::get(payload, "password")
+    if (email == "") {
+        return json::object("error", "email is required")
+    }
+    if (password == "") {
+        return json::object("error", "password is required")
+    }
+    user + object = orm::find("User", "email", email)
+    if (json::stringify(user) != "{}") {
+        if (json::stringify(json::get(user, "password")) == "null") {
+            return json::object("error", "invalid credentials")
+        }
+        password_hash + string = json::get(user, "password")
+        if (auth::verify_password(password, password_hash)) {
+            token + string = jwt::sign(json::object("sub", email, "email", email), jwt_secret)
+            return json::object("status", "logged_in", "token", token, "user", json::object("id", json::get(user, "id"), "name", json::get(user, "name"), "email", email))
+        }
+        if (password_hash == password) {
+            token_plain + string = jwt::sign(json::object("sub", email, "email", email), jwt_secret)
+            return json::object("status", "logged_in", "token", token_plain, "user", json::object("id", json::get(user, "id"), "name", json::get(user, "name"), "email", email))
+        }
+    }
+    if (json::stringify(json::get(payload, "email_lookup")) != "null") {
+        email_lookup + string = json::get(payload, "email_lookup")
+        if (email_lookup != "") {
+            lookup_user + object = orm::find("User", "email", email_lookup)
+            if (json::stringify(lookup_user) != "{}") {
+                if (json::stringify(json::get(lookup_user, "password")) == "null") {
+                    return json::object("error", "invalid credentials")
+                }
+                lookup_hash + string = json::get(lookup_user, "password")
+                if (auth::verify_password(password, lookup_hash)) {
+                    lookup_token + string = jwt::sign(json::object("sub", email_lookup, "email", email_lookup), jwt_secret)
+                    return json::object("status", "logged_in", "token", lookup_token, "user", json::object("id", json::get(lookup_user, "id"), "name", json::get(lookup_user, "name"), "email", email_lookup))
+                }
+                if (lookup_hash == password) {
+                    lookup_plain_token + string = jwt::sign(json::object("sub", email_lookup, "email", email_lookup), jwt_secret)
+                    return json::object("status", "logged_in", "token", lookup_plain_token, "user", json::object("id", json::get(lookup_user, "id"), "name", json::get(lookup_user, "name"), "email", email_lookup))
+                }
+            }
+        }
+    }
+    return json::object("error", "invalid credentials")
+    return 1
+}
+
+function(verify_token) {
+    body + string = request::body()
+    if (body == "") {
+        return json::object("valid", false)
+    }
+    payload + object = json::parse(body)
+    if (json::stringify(json::get(payload, "token")) == "null") {
+        return json::object("valid", false)
+    }
+    if (json::stringify(json::get(payload, "email")) == "null") {
+        return json::object("valid", false)
+    }
+    token + string = json::get(payload, "token")
+    email + string = json::get(payload, "email")
+    if (token == "") {
+        return json::object("valid", false)
+    }
+    if (email == "") {
+        return json::object("valid", false)
+    }
+    if (jwt::verify(token, jwt_secret)) {
+        user + object = orm::find("User", "email", email)
+        if (json::stringify(user) != "{}") {
+            return json::object("valid", true, "user", json::object("id", json::get(user, "id"), "name", json::get(user, "name"), "email", email))
+        }
+    }
+    return json::object("valid", false)
+    return 1
+}
