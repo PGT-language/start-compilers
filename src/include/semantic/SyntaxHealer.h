@@ -237,7 +237,7 @@ private:
   static bool starts_statement_at(const std::vector<HealingToken> &tokens,
                                   size_t index) {
     const Token &token = tokens[index].token;
-    if (token.type == T_PACKAGE || token.type == T_FROM ||
+    if (token.type == T_PACKAGE || token.type == T_USE ||
         token.type == T_CLASS || token.type == T_FUNCTION ||
         token.type == T_RETURN || token.type == T_IF || token.type == T_ELSE ||
         token.type == T_WHILE || token.type == T_CALL || token.type == T_COUT ||
@@ -293,7 +293,7 @@ private:
       return true;
     }
     if (current.type != T_FUNCTION && current.type != T_CLASS &&
-        current.type != T_FROM && current.type != T_PACKAGE) {
+        current.type != T_USE && current.type != T_PACKAGE) {
       return false;
     }
     if (previous.line <= 0 || current.line <= previous.line)
@@ -808,7 +808,7 @@ private:
   }
 
   static std::vector<std::string> statement_words() {
-    return {"package", "from",  "import", "function", "class",
+    return {"package", "#use", "function", "class",
             "return",  "if",    "else",   "while",    "call",
             "cout",    "print", "printg", "println"};
   }
@@ -835,17 +835,6 @@ private:
     for (size_t i = 0; i < tokens.size(); ++i) {
       if (is_eof(tokens[i].type))
         break;
-
-      if (tokens[i].type == T_IMPORT) {
-        int import_line = tokens[i].line;
-        for (size_t j = i + 1;
-             j < tokens.size() && tokens[j].line == import_line; ++j) {
-          if (tokens[j].type == T_IDENTIFIER) {
-            add_unique_word(words, tokens[j].value);
-          }
-        }
-        continue;
-      }
 
       if (tokens[i].type != T_FUNCTION) {
         continue;
@@ -1174,12 +1163,7 @@ private:
     bool statement_start = is_statement_start(tokens, index);
     TokenType next_type =
         index + 1 < tokens.size() ? tokens[index + 1].type : T_EOF;
-    TokenType previous_type = index > 0 ? tokens[index - 1].type : T_EOF;
-
-    if (candidate == "import") {
-      return previous_type == T_STRING_LITERAL || previous_type == T_IDENTIFIER;
-    }
-    if (candidate == "package" || candidate == "from" ||
+    if (candidate == "package" || candidate == "#use" ||
         candidate == "return" || candidate == "else") {
       return statement_start;
     }

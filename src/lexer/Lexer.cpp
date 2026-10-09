@@ -116,6 +116,20 @@ Token Lexer::next_token()
       get();
       return {T_SLASH, "/", token_line, token_column};
     }
+    if (c == '#')
+    {
+      get();
+      std::string directive;
+      while (std::isalpha(static_cast<unsigned char>(peek())))
+      {
+        directive += get();
+      }
+      if (directive == "use")
+      {
+        return {T_USE, "#use", token_line, token_column};
+      }
+      continue;
+    }
     if (c == '=')
     {
       get();
@@ -173,8 +187,6 @@ Token Lexer::next_token()
     {
       get();
       std::string str;
-      bool is_first_char = true;
-
       if (peek() == '\n' || peek() == '\r')
       {
         char newline = get();
@@ -187,7 +199,6 @@ Token Lexer::next_token()
         {
           get();
         }
-        is_first_char = false;
       }
 
       size_t iterations = 0;
@@ -266,7 +277,6 @@ Token Lexer::next_token()
           {
             str += ch;
           }
-          is_first_char = false;
         }
       }
       return {T_STRING_LITERAL, str, token_line, token_column};
@@ -322,10 +332,6 @@ Token Lexer::next_token()
         return {T_OBJECT, id, token_line, token_column};
       if (id == "array")
         return {T_ARRAY, id, token_line, token_column};
-      if (id == "from")
-        return {T_FROM, id, token_line, token_column};
-      if (id == "import")
-        return {T_IMPORT, id, token_line, token_column};
       if (id == "if")
         return {T_IF, id, token_line, token_column};
       if (id == "else")

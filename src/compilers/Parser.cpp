@@ -119,7 +119,7 @@ void Parser::load_tokens(std::vector<Token> t) {
   }
   pos = 0;
   if (tokens.empty() || tokens.back().type != T_EOF)
-    tokens.push_back({T_EOF});
+    tokens.push_back({T_EOF, "", 0, 0});
 }
 
 bool Parser::is_eof() const {
@@ -192,10 +192,10 @@ std::vector<std::shared_ptr<AstNode>> Parser::parse_program() {
       has_package_decl = true;
       package_name = current().value;
       advance();
-    } else if (current().type == T_FROM) {
-      auto import = parse_import();
-      if (import)
-        nodes.push_back(import);
+    } else if (current().type == T_USE) {
+      auto use = parse_use();
+      if (use)
+        nodes.push_back(use);
     } else if (current().type == T_CLASS) {
       auto klass = parse_class();
       if (klass)
@@ -918,69 +918,25 @@ std::shared_ptr<CallStmt> Parser::parse_function_call() {
   return call;
 }
 
-std::shared_ptr<ImportStmt> Parser::parse_import() {
-  int import_line = current().line;
+std::shared_ptr<UseStmt> Parser::parse_use() {
+  int use_line = current().line;
   advance();
 
-  std::string file_path;
-  if (current().type == T_STRING_LITERAL) {
-    file_path = current().value;
-    advance();
-  } else if (current().type == T_IDENTIFIER) {
-    file_path = current().value;
-    advance();
-  } else {
-    throw SyntaxError("Expected import path after 'from'",
-                      SourceLocation(import_line, 0));
+  if (current().type != T_STRING_LITERAL) {
+    throw SyntaxError("Expected module path after '#use'",
+                      SourceLocation(use_line, 0));
   }
 
-  if (current().type != T_IMPORT) {
-    throw SyntaxError("Expected 'import' after import path '" + file_path + "'",
-                      SourceLocation(current().line, 0));
-  }
+  auto use = std::make_shared<UseStmt>();
+  use->location = SourceLocation(use_line, 0);
+  use->module_path = current().value;
   advance();
-
-  auto import = std::make_shared<ImportStmt>();
-  import->location = SourceLocation(import_line, 0);
-  import->file_path = file_path;
-
-  while (!is_eof()) {
-    std::string import_name;
-    if (current().type == T_STRING_LITERAL) {
-      import_name = current().value;
-      advance();
-    } else if (current().type == T_IDENTIFIER) {
-      import_name = current().value;
-      advance();
-    } else {
-      break;
-    }
-
-    import->import_names.push_back(import_name);
-
-    if (current().type == T_COMMA) {
-      advance();
-    } else {
-      break;
-    }
-  }
-
-  if (import->import_names.empty()) {
-    throw SyntaxError("Expected at least one function name after 'import'",
-                      SourceLocation(import_line, 0));
-  }
 
   if (DEBUG) {
-    std::cout << "[DEBUG] Import: ";
-    for (size_t i = 0; i < import->import_names.size(); ++i) {
-      if (i > 0)
-        std::cout << ", ";
-      std::cout << import->import_names[i];
-    }
-    std::cout << " from " << file_path << std::endl;
+    std::cout << "[DEBUG] Use: " << use->module_path << std::endl;
   }
 
-  return import;
+  return use;
 }
 
 std::shared_ptr<FileOp> Parser::parse_file_op() {

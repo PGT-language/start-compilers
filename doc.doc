@@ -12,11 +12,21 @@ package cli // библиотечный пакет, лучше держать в
 // test-cli.pgt -> package main
 // cli/create-file.pgt -> package cli
 
-from // путь к файлу import // импортируем что то из файла {реализовано}
+pgt.mod // обязателен в корне проекта рядом с главным main.pgt
 
-from "models/user" import User // импорт ORM class/model без функций {реализовано}
+module test-module-core // имя проекта
+version 0.1 // версия проекта
 
-from "../user" import User // импорт соседней ORM модели из models/init -> models/user {реализовано}
+dependencies {
+    "github.com/user/library" = "1.0.0"
+}
+
+// Подключение выполняется только через module/path:
+#use "test-module-core/cli"
+
+#use // подключить модуль по пути module/path {реализовано}
+
+#use "test-module-core/test_module" // подключить весь пакет модуля {реализовано}
 
 function(что то) // как в js/java/ts {реализовано}
 
@@ -243,7 +253,7 @@ pgt init backend test // создать backend проект test, template/name
 
 pgt init backend создаёт модульную структуру:
 - main.pgt // минимальный вход: setup(), register(), web::run(...) {реализовано}
-- pgt.mod // модуль проекта и список библиотек require {реализовано}
+- pgt.mod // модуль проекта, версия и список dependencies {реализовано}
 - runtime/runtime.pgt // startup: logging, sql::open, migrate из models/init {реализовано}
 - routes/routes.pgt // регистрация web::route/web::get/web::post {реализовано}
 - api/api.pgt // index/api handlers и сохранение POST JSON через ORM, если model включён {реализовано}
@@ -260,20 +270,21 @@ pgt init backend создаёт модульную структуру:
 - database/<name>/<name>.pgt // raw SQL слой, если database sql включён {реализовано}
 - Dockerfile // использует PGT runtime image через ARG PGT_IMAGE {реализовано}
 
-from "models/init" import migrate, save // подключение DB init слоя из сгенерированного backend проекта {реализовано}
+#use "test-module-core/models/init" // подключение DB init слоя модуля {реализовано}
 
 pgt mod init github.com/me/app // создать pgt.mod {реализовано}
 
 pgt.mod:
 module github.com/me/app
+version 0.1
 
-require (
-    github.com/user/library v1.0.0
-)
+dependencies {
+    "github.com/user/library" = "1.0.0"
+}
 
 pgt mod download // скачать библиотеки из pgt.mod в .pgt/pkg через git clone {реализовано}
 
-from "github.com/user/library/package" import helper // импорт функций из скачанной PGT библиотеки {реализовано}
+#use "github.com/user/library/package" // подключить пакет библиотеки {реализовано}
 
 web::get("/api/v1/docs", "docs") // маршрут для выдачи Swagger UI {реализовано}
 web::get("/api/v1/openapi.yaml", "openapi_yaml") // маршрут для выдачи api.yaml {реализовано}
@@ -300,10 +311,10 @@ pgt generate class user name:string email:string // alias для генерат�
 
 pgt generate swagger MyApi // генератор sweiger/index.html, sweiger/sweiger.pgt и дефолтного api.yaml, если его ещё нет {реализовано}
 
-from "components/logging" import to_file, to_console, debug, info, warn, error, critical // подключение logging-компонента {реализовано}
+#use "test-module-core/components/logging" // подключение logging-компонента {реализовано}
 
 Пример сохранения формы через ORM:
-from "models/test" import migrate, save {реализовано}
+#use "test-module-core/models/test" {реализовано}
 
 function(api) { {реализовано}
     if (request::method() == "POST") {
@@ -328,6 +339,3 @@ function(main) { {реализовано}
 - GET /status : возвращает {"status": "running", "uptime": "unknown"}
 - POST /api : принимает JSON, возвращает его обратно
 - POST /data : принимает данные, возвращает подтверждение
-
-
-

@@ -124,38 +124,54 @@ namespace
             return requirements;
         }
 
-        bool in_require_block = false;
+        bool in_dependencies_block = false;
         std::string line;
         while (std::getline(file, line))
         {
             std::string cleaned = trim_mod_text(line);
+            size_t comment = cleaned.find("//");
+            if (comment != std::string::npos)
+            {
+                cleaned = trim_mod_text(cleaned.substr(0, comment));
+            }
             if (cleaned.empty() || cleaned.rfind("//", 0) == 0)
             {
                 continue;
             }
-            if (cleaned == "require (")
+            if (cleaned == "dependencies {")
             {
-                in_require_block = true;
+                in_dependencies_block = true;
                 continue;
             }
-            if (in_require_block && cleaned == ")")
+            if (in_dependencies_block && cleaned == "}")
             {
-                in_require_block = false;
+                in_dependencies_block = false;
                 continue;
             }
-            if (cleaned.rfind("require ", 0) == 0)
-            {
-                cleaned = trim_mod_text(cleaned.substr(8));
-            }
-            else if (!in_require_block)
+            if (!in_dependencies_block)
             {
                 continue;
             }
 
-            std::vector<std::string> words = split_mod_words(cleaned);
-            if (!words.empty())
+            size_t equals = cleaned.find('=');
+            if (equals == std::string::npos)
             {
-                requirements.push_back({words[0], words.size() > 1 ? words[1] : ""});
+                continue;
+            }
+
+            std::string module = trim_mod_text(cleaned.substr(0, equals));
+            std::string version = trim_mod_text(cleaned.substr(equals + 1));
+            if (module.size() >= 2 && module.front() == '"' && module.back() == '"')
+            {
+                module = module.substr(1, module.size() - 2);
+            }
+            if (version.size() >= 2 && version.front() == '"' && version.back() == '"')
+            {
+                version = version.substr(1, version.size() - 2);
+            }
+            if (!module.empty())
+            {
+                requirements.push_back({module, version});
             }
         }
         return requirements;
@@ -189,9 +205,10 @@ namespace
                 return 1;
             }
             file << "module " << argv[3] << "\n"
+                 << "version 0.1\n"
                  << "\n"
-                 << "require (\n"
-                 << ")\n";
+                 << "dependencies {\n"
+                 << "}\n";
             file.close();
             std::cout << "Created pgt.mod\n";
             return 0;
@@ -372,6 +389,21 @@ int main(int argc, char **argv)
         std::map<std::string, std::string> directory_package_sources;
         std::vector<std::string> files_to_load = {filename};
         PackageResolver package_resolver(filename, argv[0]);
+        if (!package_resolver.has_module_manifest())
+        {
+            std::cerr << "Error: Missing pgt.mod in the main file directory\n";
+            return 1;
+        }
+        if (package_resolver.project_module_name().empty())
+        {
+            std::cerr << "Error: pgt.mod must declare a module name\n";
+            return 1;
+        }
+        if (package_resolver.project_module_version().empty())
+        {
+            std::cerr << "Error: pgt.mod must declare a version\n";
+            return 1;
+        }
 
         while (!files_to_load.empty())
         {
@@ -517,27 +549,20 @@ int main(int argc, char **argv)
             std::string base_dir = PackageResolver::directory_of(current_file);
             for (const auto &node : program)
             {
-                if (auto import = std::dynamic_pointer_cast<ImportStmt>(node))
+                if (auto use = std::dynamic_pointer_cast<UseStmt>(node))
                 {
-                    ResolvedImport resolved_import = package_resolver.resolve_import_path(base_dir, import->file_path);
+                    ResolvedImport resolved_import = package_resolver.resolve_import_path(base_dir, use->module_path);
                     if (!resolved_import.found)
                     {
-                        SemanticError err("Import '" + import->file_path + "' was not found. Expected file '" +
+                        SemanticError err("Module '" + use->module_path + "' was not found. Expected path '" +
                                               resolved_import.path + "'.",
-                                          SourceLocation(import->location.line, import->location.column, current_file));
+                                          SourceLocation(use->location.line, use->location.column, current_file));
                         std::cerr << err.get_traceback();
                         return 1;
                     }
                     if (DEBUG)
                     {
-                        std::cout << "[DEBUG] Found import: ";
-                        for (size_t i = 0; i < import->import_names.size(); ++i)
-                        {
-                            if (i > 0)
-                                std::cout << ", ";
-                            std::cout << import->import_names[i];
-                        }
-                        std::cout << " from " << import->file_path
+                        std::cout << "[DEBUG] Found module: " << use->module_path
                                   << " -> resolved to " << resolved_import.path << std::endl;
                     }
                     for (const auto &import_file : resolved_import.files)
@@ -550,37 +575,20 @@ int main(int argc, char **argv)
             loaded_files.insert(current_file);
         }
 
-        std::map<std::string, std::set<std::string>> file_symbols;
         for (const auto &[file, ast] : file_asts)
         {
             for (const auto &node : ast)
             {
-                if (auto func = std::dynamic_pointer_cast<FunctionDef>(node))
-                {
-                    file_symbols[file].insert(func->name);
-                }
-                else if (auto klass = std::dynamic_pointer_cast<ClassDef>(node))
-                {
-                    file_symbols[file].insert(klass->name);
-                }
-            }
-        }
-
-        for (const auto &[file, ast] : file_asts)
-        {
-            for (const auto &node : ast)
-            {
-                if (auto import = std::dynamic_pointer_cast<ImportStmt>(node))
+                if (auto use = std::dynamic_pointer_cast<UseStmt>(node))
                 {
                     ResolvedImport resolved_import = package_resolver.resolve_import_path(PackageResolver::directory_of(file),
-                                                                                          import->file_path);
+                                                                                          use->module_path);
                     if (!resolved_import.found || resolved_import.files.empty())
                     {
-                        std::cerr << "Error: Cannot find imported file: " << resolved_import.path << "\n";
+                        std::cerr << "Error: Cannot find used module: " << resolved_import.path << "\n";
                         return 1;
                     }
                     const std::string &current_package = file_packages[file];
-                    std::set<std::string> available_symbols;
                     for (const auto &import_file : resolved_import.files)
                     {
                         if (!file_asts.count(import_file))
@@ -592,8 +600,8 @@ int main(int argc, char **argv)
                         const std::string &imported_package = file_packages[import_file];
                         if (imported_package == "main")
                         {
-                            SemanticError err("Package 'main' cannot be imported. Move shared code into a separate package.",
-                                              SourceLocation(import->location.line, import->location.column, file));
+                            SemanticError err("Package 'main' cannot be used. Move shared code into a separate package.",
+                                              SourceLocation(use->location.line, use->location.column, file));
                             std::cerr << err.get_traceback();
                             return 1;
                         }
@@ -603,21 +611,7 @@ int main(int argc, char **argv)
                             SemanticError err("Directory cannot contain mixed packages: '" + current_package +
                                                   "' and '" + imported_package +
                                                   "'. Move package '" + imported_package + "' into its own directory.",
-                                              SourceLocation(import->location.line, import->location.column, file));
-                            std::cerr << err.get_traceback();
-                            return 1;
-                        }
-                        if (file_symbols.count(import_file))
-                        {
-                            available_symbols.insert(file_symbols[import_file].begin(), file_symbols[import_file].end());
-                        }
-                    }
-                    for (const auto &symbol_name : import->import_names)
-                    {
-                        if (!available_symbols.count(symbol_name))
-                        {
-                            SemanticError err("Symbol '" + symbol_name + "' not found in import '" + import->file_path + "'",
-                                              SourceLocation(import->location.line, import->location.column, file));
+                                              SourceLocation(use->location.line, use->location.column, file));
                             std::cerr << err.get_traceback();
                             return 1;
                         }
@@ -631,7 +625,7 @@ int main(int argc, char **argv)
         {
             for (const auto &node : ast)
             {
-                if (!std::dynamic_pointer_cast<ImportStmt>(node))
+                if (!std::dynamic_pointer_cast<UseStmt>(node))
                 {
                     combined_program.push_back(node);
                 }

@@ -155,34 +155,86 @@ class PackageResolver {
       return requirements;
     }
 
-    bool in_require_block = false;
+    bool in_dependencies_block = false;
     std::string line;
     while (std::getline(file, line)) {
       std::string cleaned = trim(line);
+      size_t comment = cleaned.find("//");
+      if (comment != std::string::npos) {
+        cleaned = trim(cleaned.substr(0, comment));
+      }
       if (cleaned.empty() || cleaned.rfind("//", 0) == 0) {
         continue;
       }
-      if (cleaned == "require (") {
-        in_require_block = true;
+      if (cleaned == "dependencies {") {
+        in_dependencies_block = true;
         continue;
       }
-      if (in_require_block && cleaned == ")") {
-        in_require_block = false;
+      if (in_dependencies_block && cleaned == "}") {
+        in_dependencies_block = false;
         continue;
       }
-
-      if (cleaned.rfind("require ", 0) == 0) {
-        cleaned = trim(cleaned.substr(8));
-      } else if (!in_require_block) {
+      if (!in_dependencies_block) {
         continue;
       }
 
-      std::vector<std::string> words = split_words(cleaned);
-      if (!words.empty()) {
-        requirements.push_back({words[0], words.size() > 1 ? words[1] : ""});
+      size_t equals = cleaned.find('=');
+      if (equals == std::string::npos) {
+        continue;
+      }
+      std::string module = trim(cleaned.substr(0, equals));
+      std::string version = trim(cleaned.substr(equals + 1));
+      if (module.size() >= 2 && module.front() == '"' && module.back() == '"') {
+        module = module.substr(1, module.size() - 2);
+      }
+      if (version.size() >= 2 && version.front() == '"' && version.back() == '"') {
+        version = version.substr(1, version.size() - 2);
+      }
+      if (!module.empty()) {
+        requirements.push_back({module, version});
       }
     }
     return requirements;
+  }
+
+  static std::string read_module_name(const std::string &root) {
+    std::ifstream file(std::filesystem::path(root) / "pgt.mod");
+    if (!file) {
+      return "";
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
+      std::string cleaned = trim(line);
+      size_t comment = cleaned.find("//");
+      if (comment != std::string::npos) {
+        cleaned = trim(cleaned.substr(0, comment));
+      }
+      if (cleaned.rfind("module ", 0) == 0) {
+        return trim(cleaned.substr(7));
+      }
+    }
+    return "";
+  }
+
+  static std::string read_module_version(const std::string &root) {
+    std::ifstream file(std::filesystem::path(root) / "pgt.mod");
+    if (!file) {
+      return "";
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
+      std::string cleaned = trim(line);
+      size_t comment = cleaned.find("//");
+      if (comment != std::string::npos) {
+        cleaned = trim(cleaned.substr(0, comment));
+      }
+      if (cleaned.rfind("version ", 0) == 0) {
+        return trim(cleaned.substr(8));
+      }
+    }
+    return "";
   }
 
   static bool import_matches_module(const std::string &import_path,
@@ -301,6 +353,19 @@ public:
     return std::filesystem::path(directory).filename().string();
   }
 
+  bool has_module_manifest() const {
+    return file_exists(
+        (std::filesystem::path(project_root) / "pgt.mod").string());
+  }
+
+  std::string project_module_name() const {
+    return read_module_name(project_root);
+  }
+
+  std::string project_module_version() const {
+    return read_module_version(project_root);
+  }
+
   ResolvedImport resolve_import_path(const std::string &base_dir,
                                      const std::string &import_path) const {
     std::vector<std::string> file_candidates;
@@ -324,12 +389,16 @@ public:
       add_import_candidates(file_candidates, base_dir, import_path);
       add_directory_candidate(directory_candidates, base_dir, import_path);
     } else {
-      add_import_candidates(file_candidates, base_dir, import_path);
-      add_import_candidates(file_candidates, project_root, import_path);
-      add_import_candidates(file_candidates, ".", import_path);
-      add_directory_candidate(directory_candidates, base_dir, import_path);
-      add_directory_candidate(directory_candidates, project_root, import_path);
-      add_directory_candidate(directory_candidates, ".", import_path);
+      std::string project_module = read_module_name(project_root);
+      if (import_matches_module(import_path, project_module)) {
+        std::string suffix =
+            import_suffix_for_module(import_path, project_module);
+        std::filesystem::path local_path =
+            suffix.empty() ? std::filesystem::path(project_root)
+                           : std::filesystem::path(project_root) / suffix;
+        add_import_candidates(file_candidates, "", local_path.string());
+        add_directory_candidate(directory_candidates, "", local_path.string());
+      }
 
       for (const auto &requirement : read_module_requirements(project_root)) {
         if (!import_matches_module(import_path, requirement.path)) {

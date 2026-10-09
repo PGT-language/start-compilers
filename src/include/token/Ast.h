@@ -85,9 +85,8 @@ struct ReturnStmt : AstNode {
   std::shared_ptr<AstNode> expr;
 };
 
-struct ImportStmt : AstNode {
-  std::string file_path;
-  std::vector<std::string> import_names;
+struct UseStmt : AstNode {
+  std::string module_path;
 };
 
 struct IfStmt : AstNode {

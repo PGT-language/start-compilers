@@ -377,11 +377,11 @@ std::string orm_init_source(const InitOptions &options) {
   source << "package init\n"
          << "\n";
   if (model_database) {
-    source << "from \"../" << package_name << "\" import " << class_name
-           << "\n";
+    source << "#use \"" << options.project_name << "/models/" << package_name
+           << "\"\n";
   }
   if (options.create_auth && (!model_database || package_name != "user")) {
-    source << "from \"../user\" import User\n";
+    source << "#use \"" << options.project_name << "/models/user/user\"\n";
   }
   source << "\n"
          << "function(migrate) {\n";
@@ -444,10 +444,10 @@ std::string auth_user_model_source() {
          "}";
 }
 
-std::string auth_source() {
+std::string auth_source(const InitOptions &options) {
   return "package auth\n"
          "\n"
-         "from \"models/init\" import save_user\n"
+         "#use \"" + options.project_name + "/models/init\"\n"
          "\n"
          "function(register_page) {\n"
          "    return read::file(\"templates/register.html\")\n"
@@ -1118,16 +1118,15 @@ std::string init_source(const InitOptions &options) {
 
   bool has_imports = false;
   if (options.create_logging) {
-    source << "from \"components/logging\" import ";
-    source << (options.log_output == "file" ? "to_file" : "to_console");
-    source << ", " << options.log_level << "\n";
+    source << "#use \"" << options.project_name
+           << "/components/logging\"\n";
     has_imports = true;
   }
   if (options.use_database) {
-    source << "from \"models/init\" import migrate\n";
+    source << "#use \"" << options.project_name << "/models/init\"\n";
     has_imports = true;
   } else if (options.create_auth) {
-    source << "from \"models/init\" import migrate\n";
+    source << "#use \"" << options.project_name << "/models/init\"\n";
     has_imports = true;
   }
   if (has_imports) {
@@ -1160,7 +1159,7 @@ std::string api_source(const InitOptions &options) {
          << "\n";
 
   if (model_database && options.create_api) {
-    source << "from \"models/init\" import save\n"
+    source << "#use \"" << options.project_name << "/models/init\"\n"
            << "\n";
   }
 
@@ -1216,21 +1215,12 @@ std::string routes_source(const InitOptions &options) {
   std::ostringstream source;
   source << "package routes\n"
          << "\n"
-         << "from \"api\" import index";
-  if (options.create_api) {
-    source << ", api";
-  }
-  if (options.create_static) {
-    source << ", index_css, root_css, main_css, index_js";
-  }
-  source << "\n";
+         << "#use \"" << options.project_name << "/api\"\n";
   if (options.create_api_spec) {
-    source << "from \"openapi\" import docs, openapi_yaml\n";
+    source << "#use \"" << options.project_name << "/openapi\"\n";
   }
   if (options.create_auth) {
-    source << "from \"auth\" import register_page, login_page, register_css, "
-              "register_js, login_css, login_js, register_user, login_user, "
-              "verify_token\n";
+    source << "#use \"" << options.project_name << "/auth\"\n";
   }
   source << "\n"
          << "function(register) {\n"
@@ -1265,12 +1255,12 @@ std::string routes_source(const InitOptions &options) {
   return source.str();
 }
 
-std::string main_source() {
+std::string main_source(const InitOptions &options) {
   std::ostringstream source;
   source << "package main\n"
          << "\n"
-         << "from \"init\" import setup\n"
-         << "from \"routes\" import register\n"
+         << "#use \"" << options.project_name << "/init\"\n"
+         << "#use \"" << options.project_name << "/routes\"\n"
          << "\n"
          << "function(main) {\n"
          << "    setup()\n"
@@ -1287,8 +1277,10 @@ std::string pgt_mod_source(const InitOptions &options) {
   std::ostringstream source;
   source << "module " << options.project_name << "\n"
          << "\n"
-         << "require (\n"
-         << ")\n";
+         << "version 0.1\n"
+         << "\n"
+         << "dependencies {\n"
+         << "}\n";
   return source.str();
 }
 
@@ -1516,7 +1508,7 @@ bool create_backend_project(const InitOptions &options) {
   try {
     std::filesystem::create_directories(project_dir);
 
-    if (!write_file(project_dir / "main.pgt", main_source()))
+    if (!write_file(project_dir / "main.pgt", main_source(options)))
       return false;
     if (!write_file(project_dir / "pgt.mod", pgt_mod_source(options)))
       return false;
@@ -1531,7 +1523,7 @@ bool create_backend_project(const InitOptions &options) {
       return false;
 
     if (options.create_auth) {
-      if (!write_file(project_dir / "auth" / "auth.pgt", auth_source()))
+      if (!write_file(project_dir / "auth" / "auth.pgt", auth_source(options)))
         return false;
       if (!write_file(project_dir / "models" / "user" / "user.pgt",
                       auth_user_model_source()))
